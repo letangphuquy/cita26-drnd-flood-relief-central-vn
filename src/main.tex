@@ -1,0 +1,354 @@
+% LLNCS macro package for Springer Computer Science proceedings;
+% This is samplepaper.tex, a sample chapter demonstrating the
+% Version 2.20 of 2017/10/04
+%
+\documentclass{llncs}
+
+%
+% \usepackage{graphicx}
+% Used for displaying a sample figure. If possible, figure files should
+% be included in EPS format.
+%
+% If you use the hyperref package, please uncomment the following line
+% to display URLs in blue roman font according to Springer's eBook style:
+% \renewcommand\UrlFont{\color{blue}\rmfamily}
+\usepackage[utf8]{inputenc}
+\usepackage{indentfirst}
+\usepackage{hyperref}
+\usepackage{graphicx}
+\usepackage{lmodern}  % Use a scalable font (lmodern)
+\usepackage{float}
+\usepackage{multirow,tabularx}
+\usepackage{seqsplit}
+\usepackage{amsmath}
+\usepackage{regexpatch}
+% \usepackage{amsthm}
+\usepackage{array} % table
+\usepackage{multirow} % dung cho table
+\usepackage{arydshln} % Gói hỗ trợ đường nét đứt trong bảng
+\usepackage{longtable}
+\usepackage{tabularx}
+\usepackage{booktabs}
+\usepackage{adjustbox}
+\usepackage{multirow}
+\usepackage{algorithm,tabularx} 
+\usepackage{algpseudocode}
+\usepackage{indentfirst}
+\usepackage{etoolbox} % Ensure etoolbox package is included
+
+\usepackage{cite}
+\newcommand{\quo}[1]{``#1''}
+\newcommand{\mycomment}[1]{}
+
+
+\newcommand{\Indent}{\hspace{1.5em}} % Define indentation
+\newcommand{\EndIndent}{} % No special ending required
+\makeatletter
+\newcommand{\printfnsymbol}[1]{%
+  \textsuperscript{\@fnsymbol{#1}}%
+}
+% \usepackage{vntex}
+% \usepackage[utf8]{inputenc}
+% \bibliographystyle{splncs04}
+
+
+\begin{document}
+%
+% \title{Developing a Multi-Objective Evolutionary Algorithm for Disaster Relief Hub Network Design}
+\title{Modeling the disaster relief hub network design problem: A case of Central Vietnam}
+%
+\titlerunning{MOEA for Disaster Relief HLP}
+% If the paper title is too long for the running head, you can set
+% an abbreviated paper title here
+%
+\author{
+    Le Tang Phu Quy\inst{1} \and
+    Quang-Vu Nguyen \inst{1}\and
+    Sunarin Chanta \inst{2}
+}
+
+    %
+\authorrunning{Le Tang Phu Quy et al.}
+    % First names are abbreviated in the running head.
+    % If there are more than two authors, 'et al.' is used.
+    %
+\institute{
+    The University of Danang, Vietnam - Korea University of Information and Communication Technology  
+    \and King Mongkut's University of Technology North Bangkok \\
+    \email{
+        quyltp.22git@vku.udn.vn,
+        nqvu@vku.udn.vn,
+        sunarin.c@itm.kmutnb.ac.th
+    }
+}
+%
+\maketitle              % typeset the header of the contribution
+%
+\begin{abstract}
+% TO-DO: This needs to be rewritten.
+Disaster in Vietnam (typhoons, floods, ...) is severe and cause many damage to people and assets.
+An important phase in search and rescue (SAR) operations is to establish a reliable and optimal humanitarian logistics network.
+However, there is very little previous work addressed this problem of establishing an optimal network structure considering the harsh environmental constraints of reality (there maybe many impassable roads, or the movement costs could be very high and the routes are not stable), especially in the context of Vietnam. We aim to help the situation by contribute useful solutions.
+First, we modeled the problem as an multi-objective incomplete hub network design problem. Next, to develop an efficient MOEA algorithm, we define corresponding encoding and decoding scheme and integrate it into the NSGA-II framework. The performance of the algorithm is assessed extensively through the standard benchmark datasets TR, AP and CAB. The results show that the proposed algorithm statistically outperforms standard baselines. The solutions found by our algorithm on the Vietnam case study are then analyzed to interpret its implication for decision makers. 
+
+\keywords{Humanitarian Logistics \and Disaster relief \and Hub location problem \and Multi-objective Evolutionary Algorithm.}
+\end{abstract}
+
+\section{Introduction}
+\subsection{Problem}
+
+Natural disasters are becoming increasingly frequent and violent, continuously exposing supply chain weaknesses and causing massive economic losses \cite{ASEAN2021, CDP2025}.
+As a highly vulnerable coastal country, Vietnam has witnessed unprecedented extreme weather events.
+In 2025 alone, a relentless sequence of typhoons and record-breaking floods in Central Vietnam resulted in massive fatalities and an estimated 98.7 trillion VND in economic losses \cite{VOV2025, HanoiTimes2025}.
+
+\mycomment{
+Natural disasters are becoming more frequent and violent. Extreme floods in 2025 caused over 1,100 fatalities across Southeast Asia \cite{CDP2025}. These disasters expose supply chain weaknesses and cause massive economic losses \cite{ASEAN2021}. As a coastal country, Vietnam is vulnerable to typhoons and heavy floods. Climate change has made the weather events become more extreme. The year 2025 witnesses a relentless sequence of 15 typhoons and 6 tropical depressions for Vietnam, resulting in a total economic loss estimated at nearly 98.7 trillion VND (approximately 4 billion USD) and leaving 468 people dead or missing by year-end \cite{VOV2025, HanoiTimes2025}. Multiple meteorological records were broken. Central Vietnam and Nghe An provinces faced a record flood peak of 12,800 m3/s at the Ban Ve reservoir. At the Bach Ma peak, daily rainfall reached 1,740 mm, marking the highest level ever recorded in Vietnam's meteorological history. Additionally, rainfall in Dak Lak and the South Central region reached 1,900 mm, causing river levels to surpass the historical flood marks previously set in 1986 and 1993 \cite{VOV2025}.
+}
+
+There were many great challenges in humanitarian operations during this period, one of them being the severe disruption of national logistics infrastructure. The North-South Railway -- backbone of Vietnam's transport network was paralyzed due to track erosion and submersion, forcing the cancellation of 170 trains \cite{HanoiTimes2025}. Simultaneously, key arteries such as the National Highway 1 and routes in the Central Highlands were severed by landslides, isolating communities for days \cite{ReliefWeb2025}. These events demonstrate that during a major catastrophe, the assumption of a fully connected transport network is fundamentally flawed. The physical network becomes \quo{incomplete}, characterized by broken links and isolated nodes. 
+Another challenge is resource scarcity resulting from poor planning and uncertain supply and demand. Disaster management involves four phases: mitigation, preparedness, response, and recovery \cite{altay2006or}. Disaster Relief Network Design (DRND) bridges the preparedness and response phases by optimizing facility locations and relief routing.
+% Another great challenge is the lack of resources due to improper planning in the preparedness phase. Furthermore, both the demand and the supply are unknown in advance. According to the CITATION, there are four phases in disaster management: mitigation, preparedness, response, and recovery. The task of locating the rescue centers and designing a network to efficiently evacuate victims, or route the relief items to the affected areas, is termed Disaster Relief Network Design (DRND), and it is an important bridge between the Preparedness and Response phases.
+
+\subsection{Related works -- AI-generated, has not re-written}
+
+\textbf{Related Works (Current effort to resolve the disaster management problem (DRND))}
+
+\textbf{Research Gaps}
+
+\mycomment{
+Natural disasters cause significant loss of life and financial instability, necessitating efficient preparedness and response planning. Humanitarian Logistics (HL) has emerged as a critical discipline to mitigate these impacts through the strategic design of relief networks. \cite{Tomasini2009} provided a foundational distinction between commercial and humanitarian supply chains, emphasizing that HL must prioritize agility and adaptability over pure cost minimization. Building on this, \cite{kovacs2007humanitarian} established a framework defining the actors, phases, and specific logistical processes in disaster relief, distinguishing between the preparation, immediate response, and reconstruction phases. \cite{Kovacs2018} further expanded this domain by compiling a comprehensive handbook that addresses cross-functional perspectives, offering a wide-ranging survey of best practices and theoretical advancements in the field.
+
+Effective disaster management requires coordination across various stakeholders. \cite{Cozzolino2012} explored cross-sector cooperation, analyzing how partnerships between humanitarian organizations and logistics service providers can enhance performance through resource sharing. In the context of non-governmental organizations (NGOs), \cite{lu2021ngo} investigated disaster relief networks in China for small and medium-scale hazards, identifying that a combined hierarchical and networked structure ensures sustainability. Regarding research methodology, \cite{kovacs2019roadmap} proposed a roadmap for improving research quality in humanitarian operations, advocating for rigorous problem structuring and the incorporation of real-world contextual factors. Furthermore, \cite{kovacs2021lessons} examined lessons learned from recent supply chain disruptions, such as pandemics, suggesting that the adaptability inherent in HL can offer valuable insights for managing global supply chain crises.
+
+The strategic design of relief networks, particularly facility location, is a dominant theme in the literature. \cite{anaya2014relief} conducted a systematic review of relief distribution networks, classifying optimization models based on their objective functions and constraints. \cite{Timperio2017} developed a decision support framework using a fuzzy analytical hierarchy process (AHP) and GIS to select optimal locations for distribution centers, validating the approach with a case study in Indonesia. In urban settings, \cite{zhen2015disaster} addressed the facility network design in metropolises, employing a Lagrangian relaxation method to optimize the location of shelters and medical centers simultaneously. \cite{kilci2015locating} focused specifically on temporary shelter areas, utilizing a mixed-integer model to maximize utilization and accessibility following earthquakes in Turkey. Furthermore, \cite{holguin2013appropriate} argued for the incorporation of welfare economic principles, suggesting that objective functions should minimize social costs, including the deprivation cost suffered by victims due to delivery delays.
+
+Transportation planning is integral to network efficacy. \cite{babaei2017emergency} formulated the emergency transportation network design problem to identify critical routes that facilitate rapid response while considering link reliability. Specific attention has also been given to hazardous materials, which often complicate relief efforts. \cite{verter2001gis} proposed a GIS-based framework for assessing transport risk in multiple origin-destination settings, while \cite{kara2004designing} focused on designing road networks that minimize population exposure to hazardous transport risks. In the context of hub networks, \cite{calik2009tabu} investigated the hub covering problem over incomplete networks, proposing a tabu-search heuristic to determine hub locations and links that satisfy time-bound constraints.
+
+Recent research has shifted towards addressing the inherent uncertainty in disaster scenarios. \cite{donmez2021humanitarian} provided a critical review of facility location under uncertainty, highlighting the transition from deterministic models to stochastic and robust approaches. \cite{abazari2021prepositioning} developed a multi-objective Mixed-Integer Non-Linear Programming (MINLP) model for prepositioning relief items, accounting for uncertain parameters and the perishability of goods. Similarly, \cite{Hasani2019} proposed a scenario-based robust model for an integrated relief network in Iran, utilizing inventory grouping to minimize risk and total costs.
+
+Robustness is further explored by \cite{Yahyaei2019}, who integrated shelter and supply facility locations into a robust reliable network design, considering the risk of facility disruptions and using investment strategies to mitigate these risks. \cite{sun2022novel} introduced a scenario-based robust bi-objective optimization model that minimizes deprivation costs and operation costs, specifically accounting for the disruption of temporary medical centers. Finally, addressing multi-modal transport, \cite{Li2023} designed a hub-and-spoke network for emergency relief under the COVID-19 pandemic, applying a meta-heuristic approach to balance transportation time and cost in a customized Grey Wolf Optimizer.
+
+Despite these advancements, existing literature often treats network links as reliable or assumes complete hub connectivity. There is a lack of integrated models that simultaneously address \textbf{incomplete hub networks}, \textbf{infrastructure disruptions}, and \textbf{interval uncertainty} within a multi-modal context. Furthermore, few studies apply efficient Multi-Objective Evolutionary Algorithms (MOEAs) to real-world flood scenarios in Central Vietnam.
+}
+
+To bridge these gaps, this study proposes a novel approach with the following contributions:
+\begin{enumerate}
+    \item We develop a \textbf{Multi-modal Hub-and-Spoke network model} that explicitly considers infrastructure disruption, resulting in an incomplete hub network structure that reflects realistic disaster conditions.
+    \item We formulate a \textbf{Robust multi-objective model} utilizing interval uncertainty to handle the unpredictability of demand and supply parameters effectively.
+    \item We apply efficient \textbf{MOEAs, specifically NSGA-II}, to solve the proposed model, demonstrating its practical applicability through a case study of the Central Vietnamese Floods.
+\end{enumerate}
+
+\mycomment{
+\subsection{My Draft}
+\textbf{I rethought carefully. I'd develop a more manageable and approachable model}.
+\begin{figure}
+    \centering
+    \includegraphics[width=0.5\linewidth]{model-illustration-sketch.png}
+    \caption{Illustration of the model}
+    \label{fig:placeholder}
+\end{figure}
+\begin{figure}
+    \centering
+    \includegraphics[width=0.5\linewidth]{model-illus-ai.png}
+    \caption{AI-generated illustration}
+    \label{fig:placeholder}
+\end{figure}
+}
+
+\section{Problem Description and Mathematical Model}
+
+% TO-DO: Draw a figure for the model and insert it here
+
+To design an efficient disaster relief network (DRND), specifically adjusted for flood disaster response in Central Vietnam, we framed the problem as a multi-objective incomplete hub location network design problem (MO-IHLNDP). This model is the capacitated, single-allocation variant of the HLP. 
+
+The main components of our network are origins, hubs, and demands. In our practical settings, hubs refer to the rescue stations. There are two kinds of hubs, corresponding to two kinds of strategies. The first type is established in advance of the disasters, strategically positioned, and inventoried with amenities. The second type is opened dynamically for disaster response and has high approachability to affected areas. Lastly, during the disaster response, we gradually discover the victim groups, which are referred to as \textbf{demands}. Besides the government's planned forces, some volunteers spontaneously offer to help; these are referred to as \textbf{origins}.
+
+From a practical point of view, DRND involves multiple critical uncertainty factors. 
+Firstly, the disruption of transportation infrastructure (e.g., damaged roads and buildings) can easily disable pre-programmed plans, urging the need for a dynamic solution \cite{Yahyaei2019}. 
+Secondly, the exact locations of the demands, the total number of victims, and the availability of supply origins are highly uncertain during the rescue process \cite{tofighi2016humanitarian}. 
+
+\mycomment{
+From a practical point of view, we can observe many uncertainty factors involved. 
+Firstly, traffic infrastructure such as roads or buildings may be damaged and unavailable. 
+The disruption of the transportation network may disable many programmed plans, urging the need for a dynamic solution \cite{Yahyaei2019}. 
+Secondly, we cannot know in advance the exact positions of demands and may not identify all the victims during the rescue process. 
+Furthermore, the exact number of people who need help, as well as the availability of origins, is highly uncertain \cite{tofighi2016humanitarian}.
+}
+
+To account for these uncertainties, we employ a two-stage stochastic programming approach utilizing multiple scenarios. 
+In each scenario, a specific risk factor is assigned to each area. We also assume that search and rescue (SAR) operations rely heavily on dynamic external supply sources, as pre-positioned hubs may not fully satisfy the uncertain demands under extreme scenarios.
+
+Finally, the model places a strong emphasis on \textit{social equity} by integrating the deprivation cost \cite{holguin2013appropriate}. To obtain a robust approximation of the rescue time from an established hub to its assigned demand points without causing computational intractability, we utilize Daganzo's continuous approximation formula \cite{daganzo2005logistics}, a technique widely adopted in routing problems.
+
+% To account for this, we use a two-stage stochastic programming approach, in which multiple scenarios are considered. In each scenario, a risk factor is assigned to each area. We also assume that the search and rescue (SAR) operations rely on a large proportion of supply coming from external sources, as it is not always the case that the pre-positioned hubs can satisfy all the uncertain demands under extreme scenarios.
+
+% The model also puts \textit{social equity} as one of the main objectives to be optimized by considering the deprivation cost \cite{holguin2013appropriate}. Furthermore, to obtain a robust approximation of the rescue time from an established hub to its assigned demand points, we utilized Daganzo's continuous approximation formula \cite{daganzo2005logistics}, which is widely adopted in the Vehicle Routing Problem.
+
+\subsection{Sets and Indices}
+\noindent
+\begin{tabular}{l p{0.85\textwidth}}
+$\mathcal{H}, \mathcal{I}, \mathcal{J}$ & Set of candidate hubs ($k, h$), demand nodes ($i$), and  origins ($j$) \\
+$\mathcal{S}, \mathcal{M}$ & Set of disaster scenarios ($s$) and transportation modes ($m$) \\
+$\mathcal{V}$ & Set of all nodes ($u,v$) representing the area in question, $\mathcal{V} = \mathcal{H} \cup \mathcal{I} \cup \mathcal{J}$ \\
+\end{tabular}
+
+\subsection{Parameters}
+
+\noindent \textbf{First-Phase Parameters (Strategic Planning)} \\
+\begin{tabular}{l p{0.85\textwidth}}
+$F_k$ & Fixed cost to establish hub $k$ of the first type (before the disaster) \\
+$c_k, \kappa_k$ & Unit holding cost and capacity limit for inventory at hub $k$ \\
+$\alpha, \chi, M$ & Discount factor for economies of scale, max acceptable risk threshold, and Big-M constant \\
+$C_{uvm}, \tau_{uvm}$ & Unit transportation cost and estimated travel time from node $u$ to $v$ via mode $m$ \\
+$C_m, Q_m$ & Unit local routing cost and transportation capacity for vehicle mode $m$ \\
+$\gamma$ & Conversion factor (average amount of relief items required per evacuated person) \\
+\end{tabular}
+
+% \vspace{0.2cm}
+\noindent \textbf{Second-Phase Parameters (Disaster Response, Scenario $s$)} \\
+\begin{tabular}{l p{0.85\textwidth}}
+$\pi_s$ & Probability of scenario $s$ \\
+$F_{ks}^{a}$ & Fixed cost to establish hub $k$ of the second type (reactive) in scenario $s$ \\
+$\tau_{ks}$ & Processing time for each rescue round trip at hub $k$ in scenario $s$ \\
+$a_{uvms}$ & Accessibility of arc $(u,v)$ via mode $m$ in scenario $s$ (1 if traversable, 0 otherwise) \\
+$r_{us}, \lambda_{is}$ & Risk index of node $u$, and deprivation sensitivity coefficient for demand $i$ in scenario $s$ \\
+$D_{is}, O_{js}$ & Demand (number of people to evacuate) at $i$, and relief items provided at origin $j$ in scenario $s$ \\
+$\Theta_{kis}$ & Pre-computed CA routing cost to execute the evacuation from grid $i$ to hub $k$ in scenario $s$ \\
+$\Phi, \eta, A_i$ & Daganzo's circuity factor, average group size per distress location, and area of grid cell $i$ \\
+\end{tabular}
+
+\subsection{Decision Variables}
+\noindent
+\begin{tabular}{l p{0.85\textwidth}}
+$x_{k} \in \{0,1\}$ & 1 if hub $k$ is established as the first type (planned), 0 otherwise \\
+$y_{ks} \in \{0,1\}$ & 1 if hub $k$ is established as the second type (reactive) in scenario $s$, 0 otherwise \\
+$z_{iks} \in \{0,1\}$ & 1 if demand $i$ is assigned to be evacuated to hub $k$ in scenario $s$, 0 otherwise \\
+$z_{jks} \in \{0,1\}$ & 1 if origin $j$ supplies hub $k$ in scenario $s$, 0 otherwise \\
+$q_{k} \ge 0$ & Amount of relief items inventoried at hub $k$ \\
+$f_{khms} \ge 0$ & Lateral trans-shipment flow volume from hub $k$ to hub $h$ via mode $m$ in scenario $s$ \\
+\end{tabular}
+
+\subsection{Objectives}
+\textbf{Objective 1: Minimize Total Expected Logistics Cost ($Z_1$)}
+
+\begin{equation} \label{eq:obj1}
+\begin{aligned}
+    \text{Min } Z_1 = & \underbrace{\sum_{k \in \mathcal{H}} F_k x_k + \sum_{k \in \mathcal{H}} c_k q_k}_{\text{Pre-disaster strategic costs}} \\
+    & + \sum_{s \in \mathcal{S}} \pi_s \Bigg[ \underbrace{\sum_{k \in \mathcal{H}} F_{ks}^a y_{ks}}_{\text{Reactive setup}} 
+    + \underbrace{\sum_{j \in \mathcal{J}} \sum_{k \in \mathcal{H}} \left( \min_{m \in \mathcal{M} \mid a_{jkms}=1} C_{jkm} \right) O_{js} z_{jks}}_{\text{Origin to Hub supply flow}} \\
+    % + \underbrace{\sum_{j \in \mathcal{J}} \sum_{k \in \mathcal{H}} \sum_{m \in \mathcal{M}} C_{jkm} O_{js} z_{jks}}_{\text{Origin to Hub supply flow}} \\
+    & + \underbrace{\sum_{k \in \mathcal{H}} \sum_{h \in \mathcal{H}} \sum_{m \in \mathcal{M}} \alpha C_{khm} f_{khms}}_{\text{Inter-hub lateral trans-shipment}} 
+    + \underbrace{\sum_{k \in \mathcal{H}} \sum_{i \in \mathcal{I}} \Theta_{kis} z_{iks}}_{\text{Grid-based Last-Mile CA}} 
+    \Bigg]
+\end{aligned}
+\end{equation}
+
+Objective $Z_1$ minimizes the total expected logistics cost, balancing pre-disaster investments against reactive setups and transportation costs. To have an accurate estimation of last-mile evacuation cost while keeping the model simple, we adopted Daganzo's Continuous Approximation \cite{daganzo2005logistics}. The region of interest is partitioned via spatial discretization, and the demands are aggregated on a grid basis. The routing cost $\Theta_{kis}$ is pre-computed as a parameter:
+\begin{equation*} \label{eq:daganzo_theta}
+    \Theta_{kis} = \min_{m \in \mathcal{M}} \left( 2 \cdot C_{kim} \cdot \lceil D_{is}/Q_m \rceil + C_{m} \cdot \Phi \sqrt{\lceil D_{is}/\eta \rceil \cdot A_i} \right)
+\end{equation*}
+
+\textbf{ Objective 2: Minimize Expected Maximum Deprivation Cost ($Z_2$)}
+
+% Formula: max (s over S) (sum i over I) IS CHANGED TO avg (s over S) (max i over I)
+% \begin{equation} \label{eq:obj2}
+% \text{Min } Z_2 = \max_{s \in \mathcal{S}} \left( \sum_{i \in \mathcal{I}} D_{is} \cdot \left( e^{\lambda_{is} \cdot \Omega_{is}} - 1 \right) \right)
+% \end{equation}
+
+\begin{equation} \label{eq:obj2}
+    \text{Min } Z_2 = \sum_{s \in \mathcal{S}} \pi_s \left( \max_{i \in \mathcal{I}} \left[ D_{is} \cdot \left( e^{\lambda_{is} \cdot \Omega_{is}} - 1 \right) \right] \right)
+\end{equation}
+
+The second objective ensures social equity by minimizing the expected maximum deprivation cost across all scenarios. Based on Holguín-Veras et al. \cite{holguin2013appropriate}, $Z_2$ adopts an exponential function to penalize long waiting times ($\Omega_{is}$) for victims. Furthermore, it forces the model to distribute resources evenly, ensuring overall low delay time for everyone.
+
+\begin{equation*} \label{eq:waiting_time}
+\Omega_{is} = \sum_{k \in \mathcal{H}} z_{iks} \left( \tau_{ks} + 2 \cdot \min_{m \in \mathcal{M}} \tau_{kim} \right)
+\end{equation*}
+
+The sensitivity coefficient $\lambda_{is}$ is proportional to the risk index $r_{is}$ ($\lambda_{is} = \lambda_0(1 + r_{is})$), effectively prioritizing vulnerable populations. Although $Z_2$ introduces non-linearity, our meta-heuristic solution approach can directly evaluate it as a fitness function. For linearization into a Mixed-Integer Linear Programming (MILP) form, one can exploit the single-allocation property ($\sum_{k \in \mathcal{H}} z_{iks} = 1$).
+
+\subsection{Constraints}
+
+The complete MO-IHLNDP model is formally stated as follows:
+
+\allowdisplaybreaks
+\begin{align}
+    \text{Minimize } \quad & Z_1, Z_2 \nonumber \\
+    \text{subject to} \quad & \text{Constraints } \eqref{eq:hub_type} - \eqref{eq:nonneg_vars} \nonumber \\
+    x_k + y_{ks} & \le 1 \quad \forall k \in \mathcal{H}, s \in \mathcal{S} \label{eq:hub_type} \\
+    q_k & \le \kappa_k \cdot x_k \quad \forall k \in \mathcal{H} \label{eq:hub_inv_cap} \\
+    r_{ks} \cdot (x_k + y_{ks}) & \le \chi \quad \forall k \in \mathcal{H}, s \in \mathcal{S} \label{eq:hub_safety} \\
+    \sum_{k \in \mathcal{H}} z_{iks} & = 1 \quad \forall i \in \mathcal{I}, s \in \mathcal{S} \label{eq:single_alloc_demand} \\
+    \sum_{k \in \mathcal{H}} z_{jks} & = 1 \quad \forall j \in \mathcal{J}, s \in \mathcal{S} \label{eq:single_alloc_origin} \\
+    z_{iks} & \le x_k + y_{ks} \quad \forall i \in \mathcal{I}, k \in \mathcal{H}, s \in \mathcal{S} \label{eq:valid_assign_demand} \\
+    z_{jks} & \le x_k + y_{ks} \quad \forall j \in \mathcal{J}, k \in \mathcal{H}, s \in \mathcal{S} \label{eq:valid_assign_origin} \\
+    z_{iks} & \le \sum_{m \in \mathcal{M}} a_{ikms} \quad \forall i \in \mathcal{I}, k \in \mathcal{H}, s \in \mathcal{S} \label{eq:path_demand} \\
+    z_{jks} & \le \sum_{m \in \mathcal{M}} a_{jkms} \quad \forall j \in \mathcal{J}, k \in \mathcal{H}, s \in \mathcal{S} \label{eq:path_origin} \\
+    f_{khms} & \le M \cdot a_{khms} \quad \forall k, h \in \mathcal{H}, m \in \mathcal{M}, s \in \mathcal{S} \label{eq:trans_path} \\
+    % \sum_{i \in \mathcal{I}} \gamma D_{is} z_{iks} + \sum_{h \in \mathcal{H}} \sum_{m \in \mathcal{M}} f_{khms} & \le q_k + \sum_{j \in \mathcal{J}} O_{js} z_{jks} + \sum_{h \in \mathcal{H}} \sum_{m \in \mathcal{M}} f_{hkms} \quad \forall k \in \mathcal{H}, s \in \mathcal{S} \label{eq:flow_balance} \\
+    \begin{split}
+        \sum_{i \in \mathcal{I}} \gamma D_{is} z_{iks} + \sum_{h \in \mathcal{H}} \sum_{m \in \mathcal{M}} f_{khms} & \le q_k + \sum_{j \in \mathcal{J}} O_{js} z_{jks} \\
+        & \quad + \sum_{h \in \mathcal{H}} \sum_{m \in \mathcal{M}} f_{hkms} \quad \forall k \in \mathcal{H}, s \in \mathcal{S} 
+    \end{split} \label{eq:flow_balance} \\
+    q_k + \sum_{j \in \mathcal{J}} O_{js} z_{jks} + \sum_{h \in \mathcal{H}} \sum_{m \in \mathcal{M}} f_{hkms} & \le \kappa_k \cdot (x_k + y_{ks}) \quad \forall k \in \mathcal{H}, s \in \mathcal{S} \label{eq:throughput_cap} \\
+    x_k, y_{ks}, z_{iks}, z_{jks} & \in \{0, 1\} \quad \forall i, j, k, s \label{eq:binary_vars} \\
+    q_k, f_{khms} & \ge 0 \quad \forall k, h, m, s \label{eq:nonneg_vars}
+\end{align}
+
+Constraints \eqref{eq:hub_type} define
+the hub establishment. For planned hubs, inventory is bounded by physical capacity \eqref{eq:hub_inv_cap}, while the reactive hubs are required to be placed within safe zones \eqref{eq:hub_safety}.
+Constraints \eqref{eq:single_alloc_demand}-\eqref{eq:path_origin} rigorously enforce the single-allocation property to active hubs via available links. 
+Constraint \eqref{eq:trans_path} restricts flow to be trans-shipped on intact paths. 
+Constraints \eqref{eq:flow_balance} and \eqref{eq:throughput_cap} maintain flow conservation and capacity limits. Specifically, \eqref{eq:flow_balance} ensures that total supply, comprising inventory ($q_k$), external origins ($O_{js}$), and incoming flows -- satisfies both victim demand (converted by $\gamma$) and outgoing trans-shipments.
+Variable domains are defined in \eqref{eq:binary_vars}-\eqref{eq:nonneg_vars}.
+
+\section{Solution approach (Algorithms)} \label{solver}
+
+\mycomment{
+\textbf{Dear Professor Sunarin, shall I present the algorithm I proposed during the internship (named NSMA) here, or} \textit{just need to explain how to apply GA by defining the encoding, the crossover, the mutation operators} (and then just apply in plain NSGA-II)
+}
+
+\subsection{NSGA-II Framework}
+
+\subsection{Chromosome encoding and operators}
+
+\subsection{Local search and heuristics (Should not appear here)}
+
+\section{Preliminary result}
+
+\subsection{Simulation data methodology}
+
+\begin{itemize}
+    \item Adopt the standard benchmark datasets: TR, AP and CAB
+    \item Create a dataset from the map of a few provinces in the Central Region.
+    
+\end{itemize}
+
+\subsection{Experimental settings}
+
+\subsection{Numerical Analysis}
+
+\subsection{Results and findings}
+
+\section{Conclusion and Future Work}
+
+\begin{itemize}
+    \item What did we do (and contribute?)
+    \item What are the limitations?
+    \item Future works
+\end{itemize}
+
+% \begin{credits}
+
+% \subsubsection{\ackname} This work is under the support of Vietnam - Korea University of Information and Communication.
+
+% % \subsubsection{\discintname}
+% % The authors have no competing interests to declare that are
+% % relevant to the content of this article. 
+
+% \end{credits}
+
+\bibliographystyle{splncs04}
+\bibliography{cite-class.bib}
+
+\end{document}

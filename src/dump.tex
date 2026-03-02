@@ -1,0 +1,666 @@
+\subsection{Notations}
+The sets, parameters, and decision variables used in the proposed MO-IHLNDP formulation are summarized in Tables \ref{tab:sets_params} and \ref{tab:variables}.
+
+% --- BẢNG 1: SETS & PARAMETERS ---
+\begin{table}[htbp]
+\centering
+\caption{Sets, indices, and parameters of the proposed model}
+\label{tab:sets_params}
+\begin{tabularx}{\textwidth}{p{2cm} X} % Cột 1 rộng 3.5cm, cột 2 tự động wrap
+\toprule
+\textbf{Notation} & \textbf{Description} \\ \midrule
+\multicolumn{2}{l}{\textit{Sets and Indices}} \\
+$\mathcal{H}, \mathcal{I}, \mathcal{J}$ & Set of candidate hubs ($k, h$), demand nodes ($i$), and supply origins ($j$) \\
+$\mathcal{S}, \mathcal{M}$ & Set of disaster scenarios ($s$) and transportation modes ($m \in \{1,2,3,4\}$) \\
+$\mathcal{V}$ & Set of all nodes ($u,v$) representing the area, $\mathcal{V} = \mathcal{H} \cup \mathcal{I} \cup \mathcal{J}$ \\ \midrule
+\multicolumn{2}{l}{\textit{First-stage Parameters}} \\
+$F_k, F_{ks}^a$ & Fixed cost to establish hub $k$ proactively (first-stage) and reactively in scenario $s$ \\
+$c_k, \kappa_k$ & Unit holding cost and physical capacity limit at hub $k$ \\
+$C_{uvm}, \tau_{uvm}$ & Unit transportation cost and estimated travel time from node $u$ to $v$ via mode $m$ \\
+$\alpha, \chi, M$ & Economies of scale discount factor, max acceptable risk threshold, and Big-M constant \\
+$\gamma$ & Conversion factor (relief items required per evacuated person) \\ \midrule
+\multicolumn{2}{l}{\textit{Second-stage Parameters}} \\
+$\pi_s, r_{us}$ & Probability of occurrence and geographical risk index of node $u$ in scenario $s$ \\
+$a_{uvms}$ & Accessibility of arc $(u,v)$ via mode $m$ in scenario $s$ (1 if traversable, 0 otherwise) \\
+$D_{is}, O_{js}$ & Demand (number of victims to evacuate) at $i$, and relief items supplied at origin $j$ in scenario $s$ \\
+$\lambda_{is}, \tau_{ks}$ & Deprivation sensitivity coefficient at $i$, and processing time per rescue trip at hub $k$ \\ \midrule
+\multicolumn{2}{l}{\textit{Routing (CA) Parameters}} \\
+$\Theta_{kis}$ & Pre-computed CA routing cost from hub $k$ to grid $i$ in scenario $s$ \\
+$C_m, Q_m$ & Unit local routing cost per distance, and transport capacity of mode $m$ \\
+$A_i, \Phi, \eta$ & Area of grid $i$, Daganzo's circuity factor, and average victims per pickup stop \\ \bottomrule
+\end{tabularx}
+\end{table}
+
+% --- BẢNG 2: VARIABLES ---
+\begin{table}[htbp]
+\centering
+\caption{Decision variables}
+\label{tab:variables}
+\begin{tabularx}{\textwidth}{p{2cm} X} % Giữ đồng nhất độ rộng cột với bảng trên
+\toprule
+\textbf{Variable} & \textbf{Description} \\ \midrule
+$x_k \in \{0,1\}$ & 1 if hub $k$ is proactively established (first-stage), 0 otherwise \\
+$y_{ks} \in \{0,1\}$ & 1 if hub $k$ is reactively established in scenario $s$, 0 otherwise \\
+$z_{iks} \in \{0,1\}$ & 1 if demand $i$ is assigned to hub $k$ in scenario $s$, 0 otherwise \\
+$z_{jks} \in \{0,1\}$ & 1 if origin $j$ supplies hub $k$ in scenario $s$, 0 otherwise \\
+$q_k \ge 0$ & Amount of relief items pre-positioned at hub $k$ \\
+$f_{khms} \ge 0$ & Lateral trans-shipment flow from hub $k$ to $h$ via mode $m$ in scenario $s$ \\ \bottomrule
+\end{tabularx}
+\end{table}
+
+\mycomment
+{
+\subsection{DISCARDED Draft}
+\textbf{Reason: this version is heavily referenced from AI, being overly complex while not solving the problem!}
+
+% We formulate the problem as a \quo{Two-Stage Stochastic Location-Inventory-Routing Network Design Problem under Uncertainty and Disruption} (LIRP-UD)
+We formulate the problem as a \textbf{TO-DO NAME} \quo{Two-Stage Multi-Objective Stochastic Hub Location Network Design Problem} (LIRP-UD) on an incomplete multimodal transportation network. The formulation can be categorized as Capacitated, Single Allocation Hub Location Problem. The proposed network structure consists of three echelons, which in order are hubs -- shelters -- demand points. Under this network, people in demand points are evacuated to shelters, and shelters receive supply of relief items from hubs.
+
+The \textbf{hubs} are strategically planned and inventoried with amenities in advance to the disasters. The \textbf{shelters} should have high approachability to affected areas, and are timely opened for disaster response. Some of the shelters are planned and opened beforehand. And lastly, the distress clusters of victim group identified during disaster are referred to as \textbf{demand points}. 
+
+There are many uncertain factors involved in the model. Firstly, roads, buildings and many traffic infrastructures may be damaged and unavailable. The disruption of network may disable many ideal plans. Secondly, we may not identify all the victim, and the amount of people is unknown. To put in another words, the demand is an uncertain variable. 
+
+Inspired from the Hub Location Problem model, we assume that there is a discount factor $\alpha < 1$ of cost for economies of scale. Large transportation volume of relief items between hubs is more efficient and assumed to be more reliable.
+
+The model also put \textit{social equity} as one of the main objective to be optimized. The deprivation cost \cite{holguin2013appropriate} is considered. Furthermore, to have a well approximation of rescue time from an established shelter to the demand points assigned to it, we utilized Daganzo's continuous approximation formula \cite{daganzo2005logistics} as widely adopted in the Vehicle Routing Problem.
+
+\subsection*{Sets and Indices}
+\begin{itemize}
+    \item $\mathcal{K}$: Set of candidate hubs, indexed by $k, l$.
+    \item $\mathcal{J}$: Set of candidate shelters, indexed by $j$.
+    \item $\mathcal{I}$: Set of distress clusters (victim groups), indexed by $i$.
+    \item $\mathcal{V} = \mathcal{K} \cap \mathcal{J} \cap \mathcal{I}$: Set of  geographical nodes representing the area we are interested in, indexed by $u,v$.
+    \item $\mathcal{S}$: Set of disaster scenarios, indexed by $s$.
+    \item $\mathcal{M}$: Set of transportation modes, indexed by $m$. In this work, we explicitly consider four modes ($1$: Road, $2$: Water, $3$: Air, and $4$: Rail). % Specifying index upfront maybe uncessary
+\end{itemize}
+
+\subsection*{Parameters}
+This section define the input of the model. The parameters are divided to two groups, corresponding to two different phases considered in our model. The first phase is the pre-disaster planning phase, and the latter is the disaster response phase.
+
+\textbf{Whether to established hub or shelter at a candidate node.}
+
+\textbf{Assignment of demand points to shelter. Assignment of shelter to hub.}
+
+\textbf{First phase Parameters}
+\begin{itemize}
+    \item $H_k$: Fixed cost to establish hub $k$.
+    \item $G_j$: Fixed cost to establish shelter $j$ prior to disaster occurrence.
+    % NOTE: Inventory SHALL be omitted for simplicity, if that calls.
+    \item $c_k$: Unit cost for holding (pre-positioning) inventory at hub $k$.
+    \item $\kappa^k$: Designed inventory capacity at hub $k$. 
+    \item $\theta_j$: Designed serving capacity of shelter $j$. % Maybe only capacitated on shelter, not on hub.
+    \item $\alpha$: Discount factor for economies of scales by transporting inter-hub.
+    \item $\tau_{uvm}$: Estimated travel time from node $u$ to node $v$ using mode $m$.
+    \item $C_{uvm}$: Unit transportation cost from node $u$ to node $v$ using mode $m$.
+ \end{itemize}
+
+\textbf{Second phase Parameters}
+
+Under this stochastic programming model, multiple scenarios are considered. The constraints and objective values are aggregated from multiple scenario-based simulations. We consider the scenario $s$.
+
+\begin{itemize}
+    \item $\pi_s$: Probability of scenario $s$.
+    \item $a_{uvms} \in \{0,1\}$: Accessibility matrix; $a_{uvms} = 1$ if link $(u,v)$ is traversable by mode $m$ in scenario $s$, $0$ otherwise.
+    \item $\text{d}_{is}$: Demand number of people who need to be evacuated at point $i$ in scenario $s$.
+    \item $G_{js}^{a}$: Cost for emergency activation of shelter $j$ under scenario $s$. ($G_{js}^{a} > G_j$).
+    % \item $D_{is}$: Number of victims in cluster $i$.
+    % \item ??? $\rho$: Consumption rate per victim (kg/person/period).
+    % \item $P^{\text{unserved}}$: Penalty cost per un-evacuated victim.
+    \item $\lambda_{is}$: Deprivation coefficient for demand point $i$.
+    % \item $\Phi$: Daganzo's circuity factor (approx. 0.8 for road networks, Daganzo, 1984).
+    \item $\tau_{js}$: Processing time per each rescue round trip at shelter $j$.
+    % \item $P^{\text{short}}$: Penalty cost per unit of unmet relief demand (kg).
+    \item To consider the network disruption, we introduced the following parameters.
+    \begin{itemize}
+        \item[] $\beta_{js} \in \{0,1\}$: 1 if shelter $j$ survives the disaster; 0 otherwise.
+        \item[] $\eta_{ks} \in [0,1]$: The percentage of inventory remained at hub $k$ after disastrous impact in scenario $s$. 
+    \end{itemize}
+\end{itemize}
+
+\subsection*{Decision Variables}
+
+Most of the variables below are scenario-based. It means that the decisions are made on the per-scenario level.
+
+\begin{itemize}
+    \item $x_{ij} \in \{0,1\}$: $1$ if cluster $i$ is being evacuated to shelter $j$, $0$ otherwise.
+    \item $y_{jk} \in \{0,1\}$: $1$ if shelter $j$ receives supply from hub $k$, $0$ otherwise.
+    \item $z_k \in \{0,1\}$: 1 if hub $k$ is established.
+    \item $q_k \ge 0$: Amount of relief items pre-positioned at hub $k$.
+    \item $p_{j} \in \{0,1\}$: equals to 1 iff shelter $j$ is prepared before disaster.
+    \item $u_{j} \in \{0,1\}$: equals to 1 iff shelter $j$ is activated during disaster.
+    \item $f_{uvm} \ge 0$: Flow of relief items from node $u$ to node $v$ via mode $m$.
+    \item $\delta_{is} \ge 0$: Amount of unmet demand for cluster $i$.
+    % \item $\mu_{is} \in \{0,1\}$: equals to 1 iff cluster $i$ cannot be evacuated (unserved); 0 otherwise.
+\end{itemize}
+
+
+\subsection*{Objectives}
+\textbf{Objective 1: Minimize Total Expected Logistics Cost ($Z_1$)}
+\begin{equation} \label{eq:obj1}
+\begin{aligned}
+    \text{Min } Z_1 = & \underbrace{\sum_{k} H_k z_k + \sum_{k} c_k q_k + \sum_{j}{G_j p_j }}_{\text{Fixed costs for pre-disaster planning}} \\
+    & + \sum_{s} \pi_s \Bigg[ \sum_{j}  G^a_{js} u_j 
+    + \underbrace{\sum_{k,j,m} y_{jk} C_{kjm} f_{kjm}}_{\text{hub to shelter}}
+    + \underbrace{\sum_{j,i,m} x_{ij} C_{jim} f_{jim}}_{\text{shelter to demand (not correct, should sum demand \& CA)}}
+    + \underbrace{\sum_{k,l,m} \alpha C_{klm} f_{klm}}_{\text{inter-hub}} \\
+    & + \underbrace{\sum_{j \in \mathcal{J}} C_{\text{res}} \cdot \left( 2 \cdot d_{j, \text{cen}(I_{js})} \cdot m_{js} + \Phi \sqrt{N_{js} \cdot \sum_{i \in I_{js}} A_{is}} \right)}_{\text{Last-Mile Routing Approximation}} 
+    + \underbrace{\sum_{i \in \mathcal{I}} P^{\text{short}} \cdot \delta_{is}}_{\text{Shortage Penalty}} \Bigg]
+\end{aligned}
+\end{equation}
+
+\noindent \textit{Where $I_{js} = \{i \mid x_{ijs} = 1\}$ is the set of demand clusters assigned to shelter $j$ in scenario $s$, $N_{js} = |I_{js}|$ is the number of such clusters, $m_{js}$ is the calculated number of rescue vehicle trips required, and $C_{\text{res}}$ is the unit operational cost for rescue vehicles.}
+
+\textbf{Objective 2: Minimize Maximum Deprivation Cost ($Z_2$)}
+\begin{equation} \label{eq:obj2}
+    \text{Min } Z_2 = \max_{s \in \mathcal{S}} \left( \sum_{i \in \mathcal{I}} (D_{is} (1-\mu_{is})) \cdot \left( e^{\Gamma_i \cdot \Omega_{is}} - 1 \right) \right)
+\end{equation}
+\noindent Where $\Omega_{is} = \sum_{j} x_{ijs} (\tau_{j}^{\text{setup}} + \tau_{ij}^{\text{travel}})$ represents the total response time.
+
+\textbf{Objective 3: Minimize Total Unmet Demand and Service Failures ($Z_3$)}
+\begin{equation} \label{eq:obj3}
+    \text{Min } Z_3 = \sum_{s} \pi_s \left[ \sum_{i} P^{\text{short}} \delta_{is} + \sum_{i} P^{\text{unserved}} D_{is} \mu_{is} \right]
+\end{equation}
+
+\subsection*{Explanation of Objectives}
+\noindent \textbf{Objective 1 ($Z_1$)} represents the pure financial and logistical efficiency of the network. It sums the deterministic strategic costs (hub establishment, shelter hardening, and inventory holding at hubs) and the expected operational costs across scenarios. The term $\text{ApproxRouteCost}$ utilizes Daganzo's formula (Daganzo, 1984), where $\Phi$ is the circuity factor, to estimate last-mile rescue costs without solving the full Vehicle Routing Problem.
+\textbf{Objective 2 ($Z_2$)} addresses humanitarian equity by minimizing the worst-case deprivation cost (Holguín-Veras et al., 2016). The term $(e^{\Gamma_i \cdot \Omega_{is}} - 1)$ models the non-linear increase in human suffering as waiting time $\Omega_{is}$ increases, scaled by the vulnerability coefficient $\Gamma_i$.
+\textbf{Objective 3 ($Z_3$)} focuses on service reliability, penalizing both the quantity of undelivered relief items ($\delta_{is}$) and the number of victims left unevacuated ($\mu_{is}$) due to capacity or network constraints.
+
+\subsection{Version 3.75}
+
+We formulate the problem as a \textbf{Two-Stage Stochastic Location-Inventory-Routing Network Design Problem} (SM-LIRP) incorporating infrastructure resilience, deprivation costs, and lateral trans-shipment under multi-modal disruption. \textbf{Parameters are deleted}. \textbf{Decision variables are deleted}. \textbf{Assumptions are deleted}
+
+\subsection*{Constraints}
+
+\begin{align}
+    q_k & \le \text{cap}_k^{\text{inv}} y_k & \forall k \label{eq:hub_inv_cap} \\
+    \sum_{j,m} f_{kjsm} + \sum_{l \neq k, m} f_{klsm}^{\text{trans}} & \le q_k \eta_{ks} + \sum_{l \neq k, m} f_{lksm}^{\text{trans}} & \forall k, s \label{eq:hub_flow} \\
+    \sum_{k,m} f_{kjsm} & \ge \sum_{i} \text{dem}_{is} x_{ijs} - \sum_{i} \delta_{is} & \forall j, s \label{eq:shelter_demand} \\
+    \sum_{j} x_{ijs} + \mu_{is} & = 1 & \forall i, s \label{eq:assign_logic} \\
+    x_{ijs} & \le u_{js} \beta_{js} & \forall i, j, s \label{eq:assign_safe} \\
+    \delta_{is} & \le \text{dem}_{is} (1-\mu_{is}) & \forall i, s \label{eq:shortage_bound} \\
+    f_{kjsm} & \le M \cdot a_{kjms} & \forall k, j, m, s \label{eq:link_avail}
+\end{align}
+
+\noindent \textbf{Constraint Interpretation:}
+Eq. (\ref{eq:hub_inv_cap}) limits pre-positioned inventory to the capacity of established hubs.
+Eq. (\ref{eq:hub_flow}) ensures flow conservation at hubs, where available inventory is reduced by the disruption factor $\eta_{ks}$.
+Eq. (\ref{eq:shelter_demand}) requires that inflows to a shelter meet the demand of assigned victims, minus any shortage.
+Eq. (\ref{eq:assign_logic}) enforces that every victim cluster is either assigned to a shelter or classified as unserved.
+Eq. (\ref{eq:assign_safe}) prevents assignment to shelters that are either not activated or destroyed.
+Eq. (\ref{eq:shortage_bound}) caps the unmet demand variable to the total demand of the cluster.
+Eq. (\ref{eq:link_avail}) ensures flows only occur on links that are accessible by the chosen mode in the given scenario.
+
+}
+
+\subsection{Version 3.5}
+We formulate the problem as a \textbf{Two-Stage Stochastic Location-Inventory-Routing Network Design Problem} (SM-LIRP) incorporating infrastructure resilience, deprivation costs, and lateral trans-shipment.
+
+\subsection{Sets and Indices}
+\begin{itemize}
+    \item $\mathcal{K}$: Set of candidate major hubs, indexed by $k, l$.
+    \item $\mathcal{J}$: Set of candidate shelters, indexed by $j$.
+    \item $\mathcal{I}$: Set of distress clusters (victim groups), indexed by $i$.
+    \item $\mathcal{S}$: Set of disaster scenarios, indexed by $s$.
+\end{itemize}
+
+\subsection{Parameters}
+\textbf{Strategic Parameters (Phase 1):}
+\begin{itemize}
+    \item $F_k^{\text{hub}}$: Fixed cost to establish major hub $k$.
+    \item $F_j^{\text{prep}}$: Fixed cost to prepare/harden shelter $j$.
+    \item $h_j$: Unit holding cost for inventory at shelter $j$.
+    \item $\text{cap}_j^{\text{inv}}$: Inventory capacity at shelter $j$.
+    \item $\text{cap}_k^{\text{hub}}$: Maximum throughput/storage capacity at major hub $k$.
+\end{itemize}
+
+\textbf{Operational Parameters (Phase 2, Scenario $s$):}
+\begin{itemize}
+    \item $\pi_s$: Probability of scenario $s$.
+    \item $F_j^{\text{emerg}}$: Emergency activation cost for shelter $j$ ($F_j^{\text{emerg}} > F_j^{\text{prep}}$).
+    \item $D_{is}$: Number of victims in cluster $i$.
+    \item $\text{dem}_{is}$: Relief demand (kg) for cluster $i$ ($D_{is} \times \text{rate}$).
+    \item $\beta_{js} \in \{0,1\}$: 1 if shelter $j$ survives; 0 otherwise.
+    \item $\gamma_{ks} \in \{0,1\}$: 1 if hub $k$ is operational; 0 otherwise.
+    \item $\alpha_{u,v,m,s} \in \{0,1\}$: Accessibility of link $(u,v)$ by mode $m$.
+    \item $\alpha_{\text{disc}}$: Economies of scale discount factor for inter-hub transport.
+    \item $P^{\text{short}}$: Penalty cost per unit of unmet relief demand (kg).
+    \item $P^{\text{unserved}}$: Penalty cost per un-evacuated victim.
+    \item $\Gamma_i$: Deprivation sensitivity coefficient for cluster $i$.
+    \item $\tau_{ij}^{\text{travel}}$: Estimated travel time from shelter $j$ to cluster $i$ (boat mode).
+    \item $\tau_{j}^{\text{setup}}$: Setup/Processing time at shelter $j$.
+\end{itemize}
+
+\subsection{Decision Variables}
+\textbf{First-Stage (Strategic):}
+\begin{itemize}
+    \item $y_k \in \{0,1\}$: Establish hub $k$.
+    \item $z_j \in \{0,1\}$: Prepare shelter $j$.
+    \item $q_j \ge 0$: Pre-positioned inventory at shelter $j$.
+\end{itemize}
+
+\textbf{Second-Stage (Operational, Scenario $s$):}
+\begin{itemize}
+    \item $u_{js} \in \{0,1\}$: Activate shelter $j$.
+    \item $x_{ijs} \in \{0,1\}$: Assign cluster $i$ to shelter $j$.
+    \item $f_{kjs} \ge 0$: Relief flow from hub $k$ to shelter $j$.
+    \item $f_{kls}^{\text{trans}} \ge 0$: Relief flow from hub $k$ to hub $l$.
+    \item $\delta_{is} \ge 0$: Unmet demand amount for cluster $i$.
+    \item $\mu_{is} \in \{0,1\}$: 1 if cluster $i$ cannot be evacuated (unserved); 0 otherwise.
+\end{itemize}
+
+\subsection{Model Assumptions}
+(1) The network employs a three-echelon structure with lateral trans-shipment allowed only between major hubs.
+(2) Pre-positioned inventory is lost if the respective shelter fails ($\beta_{js}=0$).
+(3) Economies of scale in inter-hub transport are approximated via a linear discount factor.
+(4) Last-mile routing costs are estimated using Daganzo's continuous approximation.
+(5) Unserved victims and unmet demand are permitted but heavily penalized to prevent model infeasibility under extreme disruption.
+
+\subsection{Objectives}
+
+\textbf{Objective 1: Minimize Total Expected Cost ($Z_1$)}
+This objective balances strategic investments against expected operational, routing, and penalty costs.
+
+\begin{equation} \label{eq:obj1}
+\begin{aligned}
+    \text{Min } Z_1 = & \underbrace{\sum_{k} F_k^{\text{hub}} y_k + \sum_{j} (F_j^{\text{prep}} z_j + h_j q_j)}_{\text{Strategic Investment}} \\
+    & + \sum_{s} \pi_s \Bigg[ \sum_{j} F_j^{\text{emerg}} u_{js}(1 - z_j) 
+    + \sum_{j,k} C_{kj}^{\text{sup}} f_{kjs} 
+    + \sum_{k,l} \alpha_{\text{disc}} C_{kl}^{\text{trans}} f_{kls}^{\text{trans}} \\
+    & + \sum_{j} C_{\text{res}} \cdot \text{ApproxRouteCost}(j,s) 
+    + \underbrace{\sum_{i} (P^{\text{short}} \delta_{is} + P^{\text{unserved}} D_{is} \mu_{is})}_{\text{Penalty for System Failure}} \Bigg]
+\end{aligned}
+\end{equation}
+
+\textbf{Objective 2: Minimize Maximum Deprivation Cost ($Z_2$)}
+This objective minimizes the worst-case humanitarian suffering. Crucially, the waiting time $\Omega_{is}$ is now explicitly linked to the assignment variable $x_{ijs}$.
+
+\begin{equation} \label{eq:obj2}
+    \text{Min } Z_2 = \max_{s \in \mathcal{S}} \left( \sum_{i \in \mathcal{I}} (D_{is} (1-\mu_{is})) \cdot \left( e^{\Gamma_i \cdot \Omega_{is}} - 1 \right) \right)
+\end{equation}
+\noindent Where $\Omega_{is} = \sum_{j} x_{ijs} (\tau_{j}^{\text{setup}} + \tau_{ij}^{\text{travel}})$ represents the system response time.
+
+\subsection{Constraints}
+
+\begin{align}
+    \sum_{j} f_{kjs} + \sum_{l \neq k} f_{kls}^{\text{trans}} & \le \text{cap}_k^{\text{hub}} y_k \gamma_{ks} + \sum_{l \neq k} f_{lks}^{\text{trans}} & \forall k, s \label{eq:hub_balance} \\
+    q_j \beta_{js} + \sum_{k} f_{kjs} & \ge \sum_{i} \text{dem}_{is} x_{ijs} - \sum_{i} \delta_{is} & \forall j, s \label{eq:shelter_balance} \\
+    \sum_{j} x_{ijs} + \mu_{is} & = 1 & \forall i, s \label{eq:assign_feasibility} \\
+    x_{ijs} & \le u_{js} \beta_{js} & \forall i, j, s \label{eq:safe_assign} \\
+    \delta_{is} & \le \text{dem}_{is} (1-\mu_{is}) & \forall i, s \label{eq:shortage_logic} \\
+    q_j & \le \text{cap}_j^{\text{inv}} z_j & \forall j \label{eq:prep_cap} \\
+    f_{kjs} & \le M \cdot \alpha_{kj, \text{truck}, s} & \forall k, j, s \label{eq:link_avail}
+\end{align}
+
+\noindent \textbf{Constraint Interpretation:}
+Eq. (\ref{eq:hub_balance}) enforces flow conservation at major hubs: total outflow (to shelters and other hubs) cannot exceed the hub's capacity plus inflow from other hubs.
+Eq. (\ref{eq:shelter_balance}) ensures supply at shelters (surviving inventory + shipments) meets the demand of assigned victims, accounting for shortages.
+Eq. (\ref{eq:assign_feasibility}) is the revised assignment constraint allowing for unserved victims ($\mu_{is}$) to prevent infeasibility if all shelters fail.
+Eq. (\ref{eq:safe_assign}) permits assignment only to activated and surviving shelters.
+Eq. (\ref{eq:shortage_logic}) ensures shortages are only calculated for victims who are actually assigned to a shelter.
+Eq. (\ref{eq:prep_cap}) limits pre-positioned inventory to prepared shelters.
+Eq. (\ref{eq:link_avail}) restricts flows to traversable links.
+
+\subsection{Version 3}
+We formulate the problem as a \textbf{Two-Stage Stochastic Location-Inventory-Routing Network Design Problem} (SM-LIRP) considering infrastructure disruption, unmet demand, and economies of scale.
+
+\subsection{Sets and Indices}
+\begin{itemize}
+    \item $\mathcal{K}$: Set of potential major hubs, indexed by $k$.
+    \item $\mathcal{J}$: Set of potential shelters, indexed by $j$.
+    \item $\mathcal{I}$: Set of distress clusters (victim groups), indexed by $i$.
+    \item $\mathcal{S}$: Set of disaster scenarios, indexed by $s$.
+    \item $\mathcal{M}$: Set of transportation modes ($\mathcal{M}_{\text{sup}}$ for hub-to-shelter, $\mathcal{M}_{\text{res}}$ for shelter-to-victim).
+\end{itemize}
+
+\subsection{Parameters}
+\textbf{Strategic Parameters (Phase 1):}
+\begin{itemize}
+    \item $F_k^{\text{hub}}$: Fixed cost to establish major hub $k$.
+    \item $F_j^{\text{prep}}$: Fixed cost to prepare/harden shelter $j$ in Phase 1.
+    \item $h_j$: Unit holding cost for pre-positioned inventory at shelter $j$.
+    \item $\text{cap}_j^{\text{inv}}$: Maximum inventory capacity at shelter $j$.
+    \item $\text{cap}_k^{\text{hub}}$: Maximum storage capacity at major hub $k$.
+\end{itemize}
+
+\textbf{Operational Parameters (Phase 2, Scenario $s$):}
+\begin{itemize}
+    \item $\pi_s$: Probability of scenario $s$.
+    \item $F_j^{\text{emerg}}$: Fixed cost to activate shelter $j$ in Phase 2 (if not prepared in Phase 1), with $F_j^{\text{emerg}} > F_j^{\text{prep}}$.
+    \item $D_{is}$: Number of victims in cluster $i$ under scenario $s$.
+    \item $\text{dem}_{is}$: Relief item demand (kg) for cluster $i$ under scenario $s$.
+    \item $\beta_{js} \in \{0,1\}$: Reliability parameter; 1 if shelter $j$ survives in scenario $s$, 0 otherwise.
+    \item $\gamma_{ks} \in \{0,1\}$: Reliability parameter; 1 if major hub $k$ is operational in scenario $s$, 0 otherwise.
+    \item $\alpha_{u,v,m,s} \in \{0,1\}$: Accessibility parameter (1 if link $(u,v)$ is traversable by mode $m$).
+    \item $\alpha_{\text{disc}}$: Economies of scale discount factor for inter-hub transportation ($0 < \alpha_{\text{disc}} < 1$).
+    \item $P^{\text{short}}$: Penalty cost per unit of unmet demand.
+    \item $\Gamma_i$: Deprivation sensitivity coefficient for cluster $i$.
+    \item $\Phi$: Daganzo's circuity factor for routing approximation.
+\end{itemize}
+
+\subsection{Decision Variables}
+\textbf{First-Stage Variables (Pre-disaster):}
+\begin{itemize}
+    \item $y_k \in \{0,1\}$: 1 if major hub $k$ is established.
+    \item $z_j \in \{0,1\}$: 1 if shelter $j$ is selected for preparation.
+    \item $q_j \ge 0$: Amount of relief items pre-positioned at shelter $j$.
+\end{itemize}
+
+\textbf{Second-Stage Variables (Post-disaster, Scenario $s$):}
+\begin{itemize}
+    \item $u_{js} \in \{0,1\}$: 1 if shelter $j$ is activated in scenario $s$.
+    \item $x_{ijs} \in \{0,1\}$: 1 if cluster $i$ is assigned to shelter $j$.
+    \item $f_{kjs} \ge 0$: Amount of relief items shipped from hub $k$ to shelter $j$.
+    \item $f_{kls}^{\text{trans}} \ge 0$: Amount of relief items trans-shipped between hub $k$ and hub $l$.
+    \item $n_{kjs} \in \mathbb{Z}^+$: Number of supply trips from hub $k$ to shelter $j$.
+    \item $n_{kls}^{\text{trans}} \in \mathbb{Z}^+$: Number of trans-shipment trips between hub $k$ and hub $l$.
+    \item $\delta_{is} \ge 0$: Amount of unmet demand for cluster $i$.
+\end{itemize}
+
+\subsection{Model Assumptions}
+The model is constructed under the following assumptions: (1) the transportation network is incomplete and multimodal, where link availability is scenario-dependent; (2) if a shelter becomes unavailable (destroyed/flooded) during a scenario, all pre-positioned inventory within it is lost; (3) the relief structure follows a three-echelon hierarchy (Hubs-Shelters-Victims) but allows lateral trans-shipment between major hubs; (4) last-mile routing costs are estimated using continuous approximation techniques to reduce computational complexity; (5) unfulfilled demand is permitted but heavily penalized to ensure model feasibility under extreme scarcity.
+
+\subsection{Objectives}
+
+\textbf{Objective 1: Minimize Total Expected Logistics \& Shortage Cost ($Z_1$)}
+\begin{equation} \label{eq:obj1}
+\begin{aligned}
+    \text{Min } Z_1 = & \underbrace{\sum_{k \in \mathcal{K}} F_k^{\text{hub}} y_k + \sum_{j \in \mathcal{J}} (F_j^{\text{prep}} z_j + h_j q_j)}_{\text{Strategic Costs}} \\
+    & + \sum_{s \in \mathcal{S}} \pi_s \Bigg[ \sum_{j \in \mathcal{J}} F_j^{\text{emerg}} u_{js}(1 - z_j) 
+    + \sum_{j,k} C_{kj}^{\text{sup}} n_{kjs} 
+    + \sum_{k,l} \alpha_{\text{disc}} \cdot C_{kl}^{\text{trans}} \cdot n_{kls}^{\text{trans}} \\
+    & + \underbrace{\sum_{j \in \mathcal{J}} C_{\text{res}} \left( 2 \cdot d_{j, \text{cen}(I_{js})} \cdot m_{js} + \Phi \sqrt{N_{js} \cdot \sum_{i \in I_{js}} A_{is}} \right)}_{\text{Routing Approx.}} 
+    + \underbrace{\sum_{i \in \mathcal{I}} P^{\text{short}} \cdot \delta_{is}}_{\text{Shortage Penalty}} \Bigg]
+\end{aligned}
+\end{equation}
+
+\textbf{Objective 2: Minimize Maximum Deprivation Cost ($Z_2$)}
+\begin{equation} \label{eq:obj2}
+    \text{Min } Z_2 = \max_{s \in \mathcal{S}} \left( \sum_{i \in \mathcal{I}} (D_{is} - \delta_{is}/\rho) \cdot \left( e^{\Gamma_i \cdot \Omega_{is}} - 1 \right) \right)
+\end{equation}
+
+\noindent The first objective function (\ref{eq:obj1}) minimizes the total system cost, comprising two parts: the deterministic strategic costs for establishing hubs and pre-positioning inventory in Phase 1, and the expected operational costs in Phase 2. The operational component accounts for emergency activation, regular supply transport, inter-hub trans-shipment (benefiting from economies of scale $\alpha_{\text{disc}}$), last-mile rescue routing approximated via Daganzo's formula, and the penalty cost for any unmet demand. The second objective (\ref{eq:obj2}) addresses humanitarian equity by minimizing the maximum deprivation cost across all scenarios, calculated as an exponential function of waiting time $\Omega_{is}$ for the successfully served population.
+
+\subsection{Constraints}
+
+\begin{align}
+    \sum_{j \in \mathcal{J}} f_{kjs} + \sum_{l \in \mathcal{K}} f_{kls}^{\text{trans}} & \le \text{cap}_k^{\text{hub}} \cdot y_k \cdot \gamma_{ks} & \forall k, s \label{eq:hub_cap} \\
+    q_j \beta_{js} + \sum_{k \in \mathcal{K}} f_{kjs} + \sum_{k \in \mathcal{K}} f_{jks}^{\text{trans\_in}} & \ge \sum_{i \in \mathcal{I}} \text{dem}_{is} x_{ijs} - \sum_{i \in \mathcal{I}} \delta_{is} & \forall j, s \label{eq:demand_bal} \\
+    \delta_{is} & \le \text{dem}_{is} & \forall i, s \label{eq:shortage_bound} \\
+    x_{ijs} & \le u_{js} \cdot \beta_{js} & \forall i, j, s \label{eq:shelter_active} \\
+    q_j & \le \text{cap}_j^{\text{inv}} \cdot z_j & \forall j \label{eq:inv_cap} \\
+    \sum_{j \in \mathcal{J}} x_{ijs} & = 1 & \forall i, s \label{eq:single_assign} \\
+    f_{kjs} & \le Q_{\text{truck}} \cdot n_{kjs} & \forall k, j, s \label{eq:vehicle_cap} \\
+    n_{kjs} & \le M \cdot \alpha_{kj, \text{truck}, s} & \forall k, j, s \label{eq:incomplete_net}
+\end{align}
+
+\noindent Constraint (\ref{eq:hub_cap}) ensures that relief flows only originate from established hubs that remain operational in the given scenario.
+Constraint (\ref{eq:demand_bal}) enforces the balance between supply (surviving inventory plus shipments) and demand, allowing for shortages via the variable $\delta_{is}$.
+Constraint (\ref{eq:shortage_bound}) restricts the unmet demand to not exceed the total demand of a cluster.
+Constraint (\ref{eq:shelter_active}) guarantees that victims are assigned only to shelters that are activated and safe.
+Constraint (\ref{eq:inv_cap}) limits pre-positioned inventory to the capacity of prepared shelters.
+Constraint (\ref{eq:single_assign}) enforces the single assignment property for evacuation.
+Constraint (\ref{eq:vehicle_cap}) determines the number of trips required based on vehicle capacity.
+Constraint (\ref{eq:incomplete_net}) prohibits transportation on links disrupted by the disaster.
+
+\subsection{Version 2}
+
+\subsection*{Sets and Indices}
+\begin{itemize}
+    \item $\mathcal{K}$: Set of potential major hubs, indexed by $k$.
+    \item $\mathcal{J}$: Set of potential shelters, indexed by $j$.
+    \item $\mathcal{I}$: Set of distress clusters (victim groups), indexed by $i$.
+    \item $\mathcal{S}$: Set of disaster scenarios, indexed by $s$.
+    \item $\mathcal{M}$: Set of transportation modes, in which 
+    \begin{itemize}
+        \item $\mathcal{M}_{supply} \subset \mathcal{M}$ contains transportation modes for hub-to-shelter
+        \item $\mathcal{M}_{rescue} \subset \mathcal{M} $ for shelter-to-victim transportation modes.
+    \end{itemize}
+\end{itemize}
+
+\subsection*{Parameters}
+\noindent \textbf{Strategic Parameters (Phase 1):}
+\begin{itemize}
+    \item $F_k^{Hub}$: Fixed cost to establish major hub $k$.
+    \item $F_j^{Prep}$: Fixed cost to prepare/harden shelter $j$ in Phase 1.
+    \item $h_j$: Unit holding cost for pre-positioned inventory at shelter $j$.
+    \item $Cap_j^{Inv}$: Maximum inventory capacity at shelter $j$.
+\end{itemize}
+
+\noindent \textbf{Operational Parameters (Phase 2, Scenario $s$):}
+\begin{itemize}
+    \item $\pi_s$: Probability of scenario $s$.
+    \item $F_j^{Emerg}$: Fixed cost to activate shelter $j$ in Phase 2 (if not prepared in Phase 1). Note: $F_j^{Emerg} > F_j^{Prep}$.
+    \item $D_{is}$: Number of victims in cluster $i$ under scenario $s$.
+    \item $Dem_{is}$: Relief item demand (kg) for cluster $i$ under scenario $s$ ($Dem_{is} = D_{is} \times \text{consumption\_rate}$).
+    \item $\beta_{js} \in \{0,1\}$: Reliability parameter; 1 if shelter $j$ survives in scenario $s$, 0 otherwise.
+    \item $\alpha_{u,v,m,s} \in \{0,1\}$: Accessibility parameter (1 if link $(u,v)$ is traversable by mode $m$).
+    \item $Q_{m}$: Capacity of vehicle mode $m$.
+    \item $\Gamma_i$: Deprivation sensitivity coefficient for cluster $i$.
+    \item $\Phi$: Daganzo's circuity factor (approx. 0.8 for road networks).
+    \item $A_{is}$: Area of cluster $i$ (for routing approximation).
+\end{itemize}
+
+\subsection*{Decision Variables}
+\noindent \textbf{First-Stage Variables (Pre-disaster):}
+\begin{itemize}
+    \item $y_k \in \{0,1\}$: 1 if major hub $k$ is established.
+    \item $z_j \in \{0,1\}$: 1 if shelter $j$ is selected for preparation (Phase 1).
+    \item $q_j \ge 0$: Amount of relief items pre-positioned at shelter $j$.
+\end{itemize}
+
+\noindent \textbf{Second-Stage Variables (Post-disaster, Scenario $s$):}
+\begin{itemize}
+    \item $u_{js} \in \{0,1\}$: 1 if shelter $j$ is activated in scenario $s$.
+    \item $x_{ijs} \in \{0,1\}$: 1 if cluster $i$ is assigned to shelter $j$ in scenario $s$.
+    \item $f_{kjs} \ge 0$: Amount of relief items shipped from hub $k$ to shelter $j$.
+    \item $n_{kjs} \in \mathbb{Z}^+$: Number of supply trips from hub $k$ to shelter $j$.
+\end{itemize}
+
+\subsection*{Objective Functions}
+
+\noindent \textbf{Objective 1: Minimize Total Expected Logistics Cost ($Z_1$)}
+\begin{equation}
+\begin{aligned}
+    \text{Min } Z_1 = & \underbrace{\sum_{k \in \mathcal{K}} F_k^{Hub} y_k + \sum_{j \in \mathcal{J}} (F_j^{Prep} z_j + h_j q_j)}_{\text{Phase 1: Strategic \& Pre-positioning Cost}} \\
+    & + \sum_{s \in \mathcal{S}} \pi_s \Bigg[ \underbrace{\sum_{j \in \mathcal{J}} F_j^{Emerg} u_{js}(1 - z_j)}_{\text{Phase 2: Emergency Setup Cost}} 
+    + \sum_{j \in \mathcal{J}} \sum_{k \in \mathcal{K}} C_{kj}^{sup} n_{kjs} \\
+    & + \underbrace{\sum_{j \in \mathcal{J}} C_{rescue} \left( 2 \cdot d_{j, \text{centroid}(I_{js})} \cdot m_{js} + \Phi \sqrt{N_{js} \cdot \sum_{i \in I_{js}} A_{is}} \right)}_{\text{Phase 2: Routing Cost (Daganzo Approximation)}} \Bigg]
+\end{aligned}
+\end{equation}
+\noindent \textit{Where $m_{js}$ is the number of rescue trips calculated heuristically based on assigned demand.}
+
+\noindent \textbf{Objective 2: Minimize Maximum Deprivation Cost ($Z_2$)}
+\begin{equation}
+    \text{Min } Z_2 = \max_{s \in \mathcal{S}} \left( \sum_{i \in \mathcal{I}} D_{is} \left( e^{\Gamma_i \cdot \Omega_{is}} - 1 \right) \right)
+\end{equation}
+\noindent \textit{Where $\Omega_{is}$ is the estimated arrival time derived from the Daganzo routing approximation.}
+
+\subsection*{Constraints}
+
+\noindent \textbf{1. Shelter Reliability and Activation Logic:}
+A shelter can only be used if it is activated in Phase 2 and has not been destroyed by the disaster.
+\begin{equation}
+    x_{ijs} \le u_{js} \cdot \beta_{js} \quad \forall i, j, s
+\end{equation}
+Inventory pre-positioning is only possible if the shelter was prepared in Phase 1.
+\begin{equation}
+    q_j \le Cap_j^{Inv} \cdot z_j \quad \forall j
+\end{equation}
+
+\noindent \textbf{2. Inventory Balance (Pre-positioning + Resupply):}
+The total relief items available at shelter $j$ (pre-positioned + shipped) must meet the demand of assigned victims.
+\begin{equation}
+    \underbrace{q_j \cdot \beta_{js}}_{\text{Surviving Stock}} + \sum_{k \in \mathcal{K}} f_{kjs} \ge \sum_{i \in \mathcal{I}} Dem_{is} \cdot x_{ijs} \quad \forall j, s
+\end{equation}
+
+\noindent \textbf{3. Single Assignment (Evacuation):}
+\begin{equation}
+    \sum_{j \in \mathcal{J}} x_{ijs} = 1 \quad \forall i, s
+\end{equation}
+
+\noindent \textbf{4. Supply Transportation Capacity:}
+\begin{equation}
+    \sum_{j \in \mathcal{J}} f_{kjs} \le Cap_k^{Hub} \cdot y_k \quad \forall k, s
+\end{equation}
+\begin{equation}
+    f_{kjs} \le Q_{truck} \cdot n_{kjs} \quad \forall k, j, s
+\end{equation}
+
+\noindent \textbf{5. Incomplete Network Restrictions:}
+\begin{equation}
+    n_{kjs} \le M \cdot \alpha_{kj, \text{truck}, s} \quad \forall k, j, s
+\end{equation}
+\begin{equation}
+    x_{ijs} \le \alpha_{ij, \text{boat}, s} \quad \forall i, j, s
+\end{equation}
+
+The constraints are formulated to capture the operational disruptions and resource scarcity inherent in disaster relief.
+Constraints (1) enforce facility reliability and operational status; a victim cluster can only be assigned to a shelter if the facility is activated ($u_{js}=1$) and, crucially, has structurally survived the disaster impact ($ \beta_{js}=1$). This prevents the unrealistic allocation of evacuees to compromised infrastructure.
+Constraints (2) govern the inventory balance under scarcity. The total available relief items—comprising pre-positioned stock surviving the disaster and new shipments—must satisfy the demand. The inclusion of the shortage variable $\delta_{is}$ converts this into a soft constraint, acknowledging that in extreme scenarios (e.g., historical floods), full demand satisfaction might be mathematically impossible. This mechanism prevents the model from becoming infeasible, instead allowing it to minimize unmet demand via penalties in $Z_1$.
+Constraints (3) impose a single-assignment policy, ensuring each distress cluster evacuates to exactly one shelter. This rationale stems from the practical necessity to maintain family/community unity and simplify administrative coordination during chaotic evacuations.
+Constraints (4) represent physical capacity limits, ensuring flows do not exceed fleet capabilities or hub storage.
+Finally, Constraints (5) embed the incomplete network characteristics. By linking flow variables to the dynamic accessibility parameter $\alpha_{u,v,m,s}$, these constraints strictly prohibit transportation on links disrupted by floodwaters, forcing the model to identify viable alternative paths or modes.
+
+The rationale behind integrating structural disruption parameters ($\beta, \alpha$) and soft demand constraints ($\delta$) is to bridge the gap between classical Hub Location optimization and the chaotic reality of humanitarian logistics. Classical models often assume a static, complete network with sufficient supply, which fails in the context of events like the Central Vietnam floods. By explicitly modeling infrastructure failure and allowing for controlled shortages, our formulation shifts the focus from finding a theoretical "optimal" cost to finding a robust and executable relief plan that minimizes human suffering (deprivation cost) even when the physical network is partially collapsed.
+
+\subsection{Version 1}
+We model the disaster relief network as a three-echelon multimodal network comprising candidate major hubs (first echelon), candidate shelters (second echelon), and distress clusters (third echelon). The problem is formulated as a \textbf{Two-Stage Stochastic Multi-Objective Location-Evacuation-Routing Problem (SM-LERP)}. 
+
+In the first stage (pre-disaster), strategic decisions regarding the location of major hubs and the designation of potential shelters are made. In the second stage (post-disaster), operational decisions—including victim-to-shelter assignment, evacuation routing (via rescue boats), and relief supply distribution (via trucks)—are executed under scenario-based uncertainty.
+
+\subsection*{Sets and Indices}
+\begin{itemize}
+    \item $\mathcal{K}$: Set of candidate major hubs, indexed by $k$.
+    \item $\mathcal{J}$: Set of candidate shelters (e.g., schools, public centers), indexed by $j$.
+    \item $\mathcal{I}$: Set of distress clusters (victim groups), indexed by $i$.
+    \item $\mathcal{S}$: Set of potential disaster scenarios, indexed by $s$.
+    \item $\mathcal{M}$: Set of transportation modes, $\mathcal{M} = \{ \text{truck, boat} \}$.
+\end{itemize}
+
+\subsection*{Parameters}
+
+\textbf{Strategic and Capability Parameters:}
+\begin{itemize}
+    \item $F_k^{Hub}, F_j^{She}$: Fixed establishment cost for major hub $k$ and shelter $j$.
+    \item $Cap_k^{Hub}, Cap_j^{She}$: Maximum storage capacity of hub $k$ and accommodation capacity of shelter $j$ (in persons).
+    \item $Q_{truck}, Q_{boat}$: Carrying capacity of supply trucks and rescue boats, respectively.
+    \item $\rho$: Consumption rate of relief items per person per period.
+\end{itemize}
+
+\textbf{Stochastic Parameters (Scenario $s \in \mathcal{S}$):}
+\begin{itemize}
+    \item $\pi_s$: Probability of occurrence of scenario $s$.
+    \item $D_{is}$: Number of victims to be evacuated at cluster $i$ under scenario $s$.
+    \item $\beta_{js} \in \{0,1\}$: Reliability parameter; equals 1 if shelter $j$ remains functional in scenario $s$, 0 otherwise.
+    \item $\alpha_{u,v,m,s} \in \{0,1\}$: Accessibility parameter; equals 1 if the link $(u,v)$ is traversable by mode $m$ in scenario $s$.
+    \item $C_{u,v,m}$: Unit transportation cost on link $(u,v)$ using mode $m$.
+    \item $\Gamma_i$: Deprivation sensitivity coefficient for victims at cluster $i$.
+\end{itemize}
+
+\textbf{Heuristic Approximation Parameters:}
+\begin{itemize}
+    \item $\tau_{ij}^{trip}$: Approximated round-trip time for a rescue boat to travel from shelter $j$ to cluster $i$ and back (including loading/unloading).
+\end{itemize}
+
+\subsection*{Decision Variables}
+
+\textbf{First-stage Variables (Strategic):}
+\begin{itemize}
+    \item $y_k \in \{0,1\}$: 1 if major hub $k$ is established; 0 otherwise.
+    \item $z_j \in \{0,1\}$: 1 if shelter $j$ is designated; 0 otherwise.
+\end{itemize}
+
+\textbf{Second-stage Variables (Operational):}
+\begin{itemize}
+    \item $x_{ijs} \in \{0,1\}$: 1 if distress cluster $i$ is assigned to shelter $j$ in scenario $s$; 0 otherwise.
+    \item $n_{jks}^{supply} \in \mathbb{Z}^+$: Number of truck trips for supply replenishment from hub $k$ to shelter $j$ in scenario $s$.
+    \item $n_{kls}^{trans} \in \mathbb{Z}^+$: Number of transshipment trips between hub $k$ and hub $l$ in scenario $s$.
+    \item $n_{ijs}^{evac} \in \mathbb{Z}^+$: Number of rescue boat trips required to evacuate cluster $i$ to shelter $j$ in scenario $s$.
+\end{itemize}
+
+\subsection*{Mathematical Model}
+
+We propose a bi-objective formulation to address the trade-off between logistical efficiency and humanitarian equity.
+
+\subsubsection{Objective 1: Minimize Total Expected Logistics Cost ($Z_1$)}
+This objective aggregates the strategic establishment costs and the expected operational costs (evacuation, supply, and transshipment) across all scenarios.
+
+\begin{equation}
+\begin{aligned}
+\min Z_1 = & \left( \sum_{k \in \mathcal{K}} F_k^{Hub} y_k + \sum_{j \in \mathcal{J}} F_j^{She} z_j \right) \\
+& + \sum_{s \in \mathcal{S}} \pi_s \left[ \sum_{i \in \mathcal{I}} \sum_{j \in \mathcal{J}} C_{ij,boat} n_{ijs}^{evac} + \sum_{j \in \mathcal{J}} \sum_{k \in \mathcal{K}} C_{kj,truck} n_{jks}^{supply} + \sum_{k \in \mathcal{K}} \sum_{l \in \mathcal{K}} C_{kl,truck} n_{kls}^{trans} \right]
+\end{aligned}
+\end{equation}
+
+\subsubsection{Objective 2: Minimize Maximum Deprivation Cost ($Z_2$)}
+To ensure equity and prioritize the most critical victims, we employ a Minimax approach based on the \textbf{Deprivation Cost} function, as defined by Holguín-Veras et al. (2013). This penalizes non-linear suffering caused by waiting times for evacuation.
+
+\begin{equation}
+\min Z_2 = \max_{s \in \mathcal{S}} \left( \sum_{i \in \mathcal{I}} D_{is} \left( e^{\Gamma_i \cdot \Omega_{is}} - 1 \right) \right)
+\end{equation}
+
+\textit{Remark:} $\Omega_{is}$ represents the estimated waiting time for victims at cluster $i$ in scenario $s$. In our heuristic framework, this is approximated as: $\Omega_{is} \approx \sum_{j \in \mathcal{J}} x_{ijs} \cdot (n_{ijs}^{evac} \cdot \tau_{ij}^{trip})$.
+
+\subsubsection{Constraints}
+
+\textbf{(1) Shelter Reliability and Activation:}
+Victims can only be assigned to a shelter that is both strategically designated and operationally functional in the given scenario.
+\begin{equation}
+x_{ijs} \le z_j \cdot \beta_{js}, \quad \forall i \in \mathcal{I}, j \in \mathcal{J}, s \in \mathcal{S}
+\end{equation}
+
+\textbf{(2) Single Assignment:}
+Each distress cluster must be evacuated to exactly one shelter to maintain family unity and coordination.
+\begin{equation}
+\sum_{j \in \mathcal{J}} x_{ijs} = 1, \quad \forall i \in \mathcal{I}, s \in \mathcal{S}
+\end{equation}
+
+\textbf{(3) Shelter Accommodation Capacity:}
+The total number of evacuees assigned to a shelter must not exceed its capacity.
+\begin{equation}
+\sum_{i \in \mathcal{I}} D_{is} x_{ijs} \le Cap_j^{She} z_j \beta_{js}, \quad \forall j \in \mathcal{J}, s \in \mathcal{S}
+\end{equation}
+
+\textbf{(4) Supply-Demand Balance:}
+Relief supplies transported to a shelter (from hubs and transshipments) must satisfy the consumption needs of the evacuees.
+\begin{equation}
+Q_{truck} \left( \sum_{k \in \mathcal{K}} n_{jks}^{supply} + \sum_{l \in \mathcal{K}} n_{jls}^{trans\_in} \right) \ge \rho \sum_{i \in \mathcal{I}} D_{is} x_{ijs}, \quad \forall j \in \mathcal{J}, s \in \mathcal{S}
+\end{equation}
+
+\textbf{(5) Incomplete Network Constraints:}
+Transportation flows are strictly prohibited on links disrupted by floodwaters (where $\alpha = 0$).
+\begin{equation}
+n_{ijs}^{evac} \le M \cdot \alpha_{ij,boat,s}, \quad \forall i, j, s
+\end{equation}
+\begin{equation}
+n_{jks}^{supply} \le M \cdot \alpha_{jk,truck,s}, \quad \forall j, k, s
+\end{equation}
+
+\textbf{(6) Evacuation Trip Calculation (Integer Constraint):}
+The number of boat trips is determined by the demand and vehicle capacity, ensuring a discrete number of rescue missions.
+\begin{equation}
+n_{ijs}^{evac} \ge \frac{D_{is} \cdot x_{ijs}}{Q_{boat}}, \quad \forall i, j, s
+\end{equation}
+
+\textbf{(7) Domain Constraints:}
+\begin{equation}
+y_k, z_j, x_{ijs} \in \{0,1\}; \quad n_{jks}^{supply}, n_{kls}^{trans}, n_{ijs}^{evac} \in \mathbb{Z}^+
+\end{equation}
+
+\section{References (for Deprivation Cost)}
+\begin{itemize}
+    \item Holguín-Veras, J., Pérez, N., Jaller, M., Van Wassenhove, L. N., \& Alevras, T. (2013). On the appropriate objective function for post-disaster humanitarian logistics. \textit{Journal of Operations Management}, 31(5), 262-280.
+    \item Pérez-Rodríguez, N., \& Holguín-Veras, J. (2016). Inventory-allocation models for humanitarian logistics with deprivation costs. \textit{Transportation Research Part C: Emerging Technologies}, 70, 150-165.
+\end{itemize}
+
+\mycomment{
+\subsection{Discarded Formulation}
+We model the disaster relief network as a three-echelon multimodal network comprising candidate major hubs (first echelon), candidate shelters (second echelon), and distress clusters (third echelon). The problem is formulated as a Two-Stage Stochastic Multi-Objective Location-Evacuation-Routing Problem (SM-LERP). In the first stage (pre-disaster), strategic decisions regarding the location of major hubs and the designation of potential shelters are made. In the second stage (post-disaster), operational decisions—including victim-to-shelter assignment, evacuation routing (via rescue boats), and relief supply distribution (via trucks)—are executed under scenario-based uncertainty.
+
+3.1. Sets and Indices
+$\mathcal{K}$: Set of candidate major hubs, indexed by $k$.$\mathcal{J}$: Set of candidate shelters (e.g., schools, public centers), indexed by $j$.$\mathcal{I}$: Set of distress clusters (victim groups), indexed by $i$.$\mathcal{S}$: Set of potential disaster scenarios, indexed by $s$.$\mathcal{M}$: Set of transportation modes, $\mathcal{M} = \{ \text{truck}, \text{boat} \}$.3.2. ParametersStrategic and Capability Parameters:$F_k^{Hub}, F_j^{She}$: Fixed establishment cost for major hub $k$ and shelter $j$.$Cap_k^{Hub}, Cap_j^{She}$: Maximum storage capacity of hub $k$ and accommodation capacity of shelter $j$ (in persons).$Q_{truck}, Q_{boat}$: Carrying capacity of supply trucks and rescue boats, respectively.$\rho$: Consumption rate of relief items per person per period.Stochastic Parameters (Scenario $s \in \mathcal{S}$):$\pi_s$: Probability of occurrence of scenario $s$.$D_{is}$: Number of victims to be evacuated at cluster $i$ under scenario $s$.$\beta_{js} \in \{0,1\}$: Reliability parameter; equals 1 if shelter $j$ remains functional in scenario $s$, 0 otherwise.$\alpha_{u,v,m,s} \in \{0,1\}$: Accessibility parameter; equals 1 if the link $(u,v)$ is traversable by mode $m$ in scenario $s$.$C_{u,v,m}$: Unit transportation cost on link $(u,v)$ using mode $m$.$\Gamma_i$: Deprivation sensitivity coefficient for victims at cluster $i$.Heuristic Approximation Parameters:$\tau_{ij}^{trip}$: Approximated round-trip time for a rescue boat to travel from shelter $j$ to cluster $i$ and back (including loading/unloading).3.3. Decision VariablesFirst-stage Variables (Strategic):$y_k \in \{0,1\}$: 1 if major hub $k$ is established; 0 otherwise.$z_j \in \{0,1\}$: 1 if shelter $j$ is designated; 0 otherwise.Second-stage Variables (Operational):$x_{ijs} \in \{0,1\}$: 1 if distress cluster $i$ is assigned to shelter $j$ in scenario $s$; 0 otherwise.$n_{jks}^{supply} \in \mathbb{Z}^+$: Number of truck trips for supply replenishment from hub $k$ to shelter $j$ in scenario $s$.$n_{kls}^{trans} \in \mathbb{Z}^+$: Number of transshipment trips between hub $k$ and hub $l$ in scenario $s$.$n_{ijs}^{evac} \in \mathbb{Z}^+$: Number of rescue boat trips required to evacuate cluster $i$ to shelter $j$ in scenario $s$.3.4. Mathematical ModelWe propose a bi-objective formulation to address the trade-off between logistical efficiency and humanitarian equity.Objective 1: Minimize Total Expected Logistics Cost ($Z_1$)This objective aggregates the strategic establishment costs and the expected operational costs (evacuation, supply, and transshipment) across all scenarios.$$\begin{aligned}
+\text{Min } Z_1 = & \left( \sum_{k \in \mathcal{K}} F_k^{Hub} y_k + \sum_{j \in \mathcal{J}} F_j^{She} z_j \right) \\
+& + \sum_{s \in \mathcal{S}} \pi_s \left[ \sum_{i \in \mathcal{I}} \sum_{j \in \mathcal{J}} C_{ij,boat} n_{ijs}^{evac} + \sum_{j \in \mathcal{J}} \sum_{k \in \mathcal{K}} C_{kj,truck} n_{jks}^{supply} + \sum_{k \in \mathcal{K}} \sum_{l \in \mathcal{K}} C_{kl,truck} n_{kls}^{trans} \right]
+\end{aligned}$$Objective 2: Minimize Maximum Deprivation Cost ($Z_2$)To ensure equity and prioritize the most critical victims, we employ a Minimax Regret approach using a non-linear deprivation cost function. This penalizes long waiting times for evacuation.$$\text{Min } Z_2 = \max_{s \in \mathcal{S}} \left( \sum_{i \in \mathcal{I}} D_{is} \left( e^{\Gamma_i \cdot \Omega_{is}} - 1 \right) \right)$$Remark: $\Omega_{is}$ represents the estimated waiting time for victims at cluster $i$ in scenario $s$. In our heuristic framework, this is approximated as a function of the number of trips and travel time: $\Omega_{is} \approx \sum_{j} x_{ijs} \cdot (n_{ijs}^{evac} \cdot \tau_{ij}^{trip})$.Subject to:(1) Shelter Reliability and Activation:Victims can only be assigned to a shelter that is both strategically designated and operationally functional in the given scenario.$$x_{ijs} \le z_j \cdot \beta_{js}, \quad \forall i \in \mathcal{I}, j \in \mathcal{J}, s \in \mathcal{S}$$(2) Single Assignment:Each distress cluster must be evacuated to exactly one shelter to maintain family unity and coordination.$$\sum_{j \in \mathcal{J}} x_{ijs} = 1, \quad \forall i \in \mathcal{I}, s \in \mathcal{S}$$(3) Shelter Accommodation Capacity:The total number of evacuees assigned to a shelter must not exceed its capacity.$$\sum_{i \in \mathcal{I}} D_{is} x_{ijs} \le Cap_j^{She} z_j \beta_{js}, \quad \forall j \in \mathcal{J}, s \in \mathcal{S}$$(4) Supply-Demand Balance:Relief supplies transported to a shelter (from hubs and transshipments) must satisfy the consumption needs of the evacuees.$$Q_{truck} \left( \sum_{k \in \mathcal{K}} n_{jks}^{supply} + \sum_{l \in \mathcal{K}} n_{jls}^{trans\_in} \right) \ge \rho \sum_{i \in \mathcal{I}} D_{is} x_{ijs}, \quad \forall j \in \mathcal{J}, s \in \mathcal{S}$$(5) Incomplete Network Constraints:Transportation flows are strictly prohibited on links disrupted by floodwaters (where $\alpha = 0$).$$n_{ijs}^{evac} \le M \cdot \alpha_{ij,boat,s}, \quad \forall i, j, s$$$$n_{jks}^{supply} \le M \cdot \alpha_{jk,truck,s}, \quad \forall j, k, s$$(6) Evacuation Trip Calculation (Integer Constraint):The number of boat trips is determined by the demand and vehicle capacity.$$n_{ijs}^{evac} \ge \frac{D_{is} \cdot x_{ijs}}{Q_{boat}}, \quad \forall i, j, s$$(7) Domain Constraints:$$y_k, z_j, x_{ijs} \in \{0,1\}; \quad n_{jks}^{supply}, n_{kls}^{trans}, n_{ijs}^{evac} \in \mathbb{Z}^+$$3.5. Solution Approach Justification (Dành cho phần Methodology)Note to the reader: Since Objective 2 involves a non-linear deprivation cost function and the problem includes integer constraints under stochastic scenarios, the model falls into the class of Non-Linear Integer Programming (NLIP), which is NP-Hard. Exact solvers are computationally prohibitive for real-world instances. Therefore, we adopt the NSGA-II meta-heuristic. The strategic variables ($y, z$) are encoded in the chromosome, while the operational variables ($x, n$) and the objective values are computed using a Greedy Constructive Heuristic with Continuous Approximation for routing costs during the fitness evaluation process. This hybrid approach ensures both computational efficiency and practical solution quality.
+}
