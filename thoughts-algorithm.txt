@@ -1,0 +1,44 @@
+*** Phương pháp tạo sinh dữ liệu:
+A. Tạo bản đồ:
+- Dựa trên tọa độ thực tế 
+- Dựa trên phương pháp trong bài báo ... để xây dựng ra tập hub candidates (sức chứa lớn, thông thoáng, cao ráo và an toàn, chắc chắn)
+- Rời rạc hóa bản đồ theo không gian, từ đó tạo ra các nodes, tạo ra planar graph (adjacency matrix)
+
+B. Sinh accessibility matrix và risk index
+- Mô phỏng thực tế theo topology: Sample ra ngẫu nhiên một vài điểm là tâm thảm họa. Những điểm xung quanh đó có cường độ thảm họa giảm dần. Việc đứt gãy hạ tầng và đường xấu hơn, v.v. ... được adjusted hợp lý theo kịch bản.
+- Risk index được sinh đặc thù theo từng vùng. Có những vùng an toàn thì biên độ hẹp hơn và risk tối đa cũng thấp hơn --> Generate Interval từ dữ liệu bản đồ.
+
+C. Sinh demand và Origin, từ đó tính được Daganzo's CA formula for last-mile routing
+
+*** Thuật toán
+1. Penalty handling và infeasible solutions?
+	(sử dụng infeasibility handler của NSGA-II)
+2. Encoding scheme (Chromosome)
+Với mỗi scenario, solver được chạy lại từ đầu -> 
+--> Bản chất vấn đề: Độ "thông minh" và bền vững của một nghiệm chỉ phân biệt với nhau được ở pha chiến lược (nhưng phải qua đủ |S| kịch bản thì mới đánh giá được):
+- Chọn chỗ cho hub (x_k) và 
+- Chọn lượng tồn kho (q_k).
+
+Strict enforcement: avoid data leakage, tức là decision variables x_k và q_k phải được xác định, trước khi quyết định cho các biến second-stage
+
+Xét second-stage. Để tính hàm mục tiêu, mỗi cá thể (solution encoding) được đánh giá qua đầy đủ |S| kịch bản. Solver chạy theo từng scenario nên coi như tham số đã "biết trước".
+
+Biến y_{ks} --> Binary string độ dài |H|
+Biến z_{iks} --> Allocation vector độ dài |I|
+Biến z_{jks} --> alloc. vector độ dài |J|
+Biến f -- Giá trị flow được sinh bằng Greedy heuristic
+
+(biến f thể hiện cho chiến thuật goods-sharing)
+
+Giải thuật tạo ra có cần phải mang tính chất two-stage không? (Có)
+--> Ý tưởng! Chỉ encode first-stage DV, kèm theo chiến lược heuristics(*). Khi evaluation (per-scenario) sẽ sinh ra toàn bộ second-stage DV và tính toán objective values.
+
+Đề xuất chromosome:
+- $x_k$
+- $q_k$ (float vector, cho biết ratio của tổng Demand* được allocate vào đó). constraint: tổng q <= 1. Lưu ý (*). Dù ta không biết được Demand trước chính xác, nhưng ta có thể giả định là có thể forecast trước, cho nên tổng được biết là một con số ngẫu nhiên được sample từ 0.2 đến 0.7, với phân bố lệch phải (đa phần là các giá trị thấp như 0.3, 0.4)
+- Chiến lược heuristics: Maybe weight-based PBGA (priority-based) một heuristics để gán score để xác định thứ tự nodes được xét?
+Weight vector gồm risk-index, distance to nearest type-1 hub, Demand Urgency, Origin scarcity, (bạn đề xuất thêm)
+
+Bạn đề xuất Crossover và Mutation phù hợp.
+
+
