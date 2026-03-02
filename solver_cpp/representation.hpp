@@ -1,0 +1,88 @@
+// representation.hpp — 3-segment chromosome for PB-NSGA-II
+// Chromosome = [X (binary hub) | R (inventory ratio) | W (heuristic weights)]
+// Phenotype evaluation is delegated to decoder.hpp
+#pragma once
+
+#include "model.hpp"
+#include "template.hpp"
+
+
+// ---------------------------------------------------------------------------
+// Individual (chromosome + phenotype + NSGA-II bookkeeping)
+// ---------------------------------------------------------------------------
+struct Individual {
+  // ── Genotype (Stage-1 decisions + heuristic weights) ──────────────────
+  vector<int> X; // [num_H] binary: x_k ∈ {0,1}
+  vector<double>
+      R; // [num_H] inventory ratio: R_k ∈ [0,1] → q_k = R_k * kappa_k * x_k
+  vector<double> W; // [4]   heuristic weights w1..w4 ∈ [0,1]
+                    // W[0]: demand urgency weight (λ·D)
+                    // W[1]: distance penalty when assigning demand to hub
+                    // W[2]: residual capacity reward
+                    // W[3]: reactive hub activation threshold weight
+
+  // ── Phenotype (computed by decoder) ──────────────────────────────────
+  double Z1 = 0, Z2 = 0; // objective values (minimise both)
+  double CV = 0;         // constraint violation ≥ 0
+
+  // ── NSGA-II bookkeeping ────────────────────────────────────────────────
+  int rank = 0;
+  double crowding = 0.0;
+
+  // ── Constructor ────────────────────────────────────────────────────────
+  Individual() = default;
+  explicit Individual(int num_H) : X(num_H, 0), R(num_H, 0.0), W(4, 0.5) {}
+
+  // ── Dominance (standard Pareto, no CV) ────────────────────────────────
+  bool dominates(const Individual &o) const {
+    bool any_better = false;
+    if (Z1 > o.Z1 || Z2 > o.Z2)
+      return false;
+    if (Z1 < o.Z1 || Z2 < o.Z2)
+      any_better = true;
+    return any_better;
+  }
+  // Constrained dominance (Deb 2002): feasible > infeasible, then by CV, then
+  // by Pareto
+  bool constrained_dominates(const Individual &o) const {
+    bool f1 = (CV == 0), f2 = (o.CV == 0);
+    if (f1 && !f2)
+      return true;
+    if (!f1 && f2)
+      return false;
+    if (!f1 && !f2)
+      return CV < o.CV;
+    return dominates(o);
+  }
+
+  // ── Utility ────────────────────────────────────────────────────────────
+  vector<int> open_hubs() const {
+    vector<int> res;
+    for (int k = 0; k < (int)X.size(); k++)
+      if (X[k])
+        res.push_back(k);
+    return res;
+  }
+  bool is_hub_open(int ki) const { return X[ki] == 1; }
+};
+
+// ---------------------------------------------------------------------------
+// Random initialisation
+// ---------------------------------------------------------------------------
+Individual random_individual(const DRNDInstance &inst) {
+  Individual ind(inst.num_H);
+  // X: randomly open some hubs (at least 1, at most 60%)
+  int n_open = (int)rand_int(1, std::max(1, inst.num_H * 3 / 5));
+  vector<int> perm(inst.num_H);
+  std::iota(all(perm), 0);
+  shuffle_vec(perm);
+  for (int i = 0; i < n_open; i++)
+    ind.X[perm[i]] = 1;
+  // R: uniform [0,1] for each hub
+  for (int k = 0; k < inst.num_H; k++)
+    ind.R[k] = rand01();
+  // W: uniform [0,1]
+  for (int w = 0; w < 4; w++)
+    ind.W[w] = rand01();
+  return ind;
+}
