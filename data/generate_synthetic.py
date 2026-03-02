@@ -303,11 +303,25 @@ def terrain_factor(lon):
 # mode=2: Air    — helicopter, very fast, very expensive, always available
 NUM_MODES = 3
 
-# Mode-specific parameters (per unit km)
+# ── Transport Mode Parameters ────────────────────────────────────────────────
+# Calibrated for flood disaster context in Central Vietnam.
+#
+# | Mode | Vehicle        | Speed  | Unit Cost | Capacity | Disruption      |
+# |------|----------------|--------|-----------|----------|-----------------|
+# |  0   | Truck convoy   | 35km/h | $2.0/km   | 60 pers  | HIGH (floods)   |
+# |  1   | Motorboat      | 25km/h | $5.0/km   | 25 pers  | LOW (resilient) |
+# |  2   | Helicopter     | 150km/h| $40.0/km  | 10 pers  | NONE (always)   |
+#
+# Rationale:
+#   Road: primary mode, disrupted when β-fraction of links flood (scenario-dependent)
+#   Water: slower but inherently resilient in flood scenarios; boats navigate floodwater;
+#          moderate cost due to fuel + operator; capacity limited by boat size
+#   Air:   helicopter is extremely expensive but always available; small capacity (Bell-412 type)
+#          per-km cost ~20× road; used as emergency backup
 MODE_PARAMS = {
-    0: {"name": "road",  "speed_kmh": 40.0,  "unit_cost": 5.0,   "vehicle_cap": 50},   # truck
-    1: {"name": "water", "speed_kmh": 15.0,  "unit_cost": 12.0,  "vehicle_cap": 30},   # boat
-    2: {"name": "air",   "speed_kmh": 180.0, "unit_cost": 80.0,  "vehicle_cap": 15},   # helicopter
+    0: {"name": "road",  "speed_kmh": 35.0,  "unit_cost": 2.0,  "vehicle_cap": 60},   # truck
+    1: {"name": "water", "speed_kmh": 25.0,  "unit_cost": 5.0,  "vehicle_cap": 25},   # motorboat
+    2: {"name": "air",   "speed_kmh": 150.0, "unit_cost": 40.0, "vehicle_cap": 10},   # helicopter
 }
 # Daganzo local routing params
 DAGANZO_PHI = 0.57    # circuity factor (CA formula constant)
@@ -429,13 +443,16 @@ def generate_scenarios(coords, demand_indices, hub_indices, origin_indices,
             noise = random.gauss(0, 0.05 * d_base)
             demand[i] = max(10.0, d_base + noise)
 
-        # Supply O[j][s] for origin nodes (relief items in kg)
+        # Supply O[j][s] for origin nodes (relief items in kg).
+        # CRITICAL: collective supply must be ≥ total demand in kg to ensure feasibility.
+        # total demand = GAMMA × Σ D_{is}  (converting persons to kg of relief items)
+        # We set collective supply = 1.5-2.5× total demand (buffer for transshipment loss, etc.)
+        total_demand_kg = GAMMA_CONV * sum(demand.values())
+        total_supply_target = total_demand_kg * random.uniform(1.5, 2.5)
         supply = {}
         for j in origin_indices:
-            # Origins far away from epicenters have more reliable supply
-            avg_origin_risk = sum(risk[j] for j in origin_indices) / len(origin_indices)
-            supply_base = random.uniform(5000, 20000) * (1.0 - 0.4 * avg_origin_risk / sev_mult)
-            supply[j] = max(1000.0, supply_base)
+            frac = random.uniform(0.8, 1.2)
+            supply[j] = max(5000.0, total_supply_target / len(origin_indices) * frac)
 
         # Hub reactive setup cost F_a[k][s] — proportional to risk (harder scenario = pricier emergency setup)
         hub_reactive_cost = {k: random.uniform(30000, 80000) * (1 + risk[k]) for k in hub_indices}
@@ -560,14 +577,13 @@ def build_instance(size="small"):
 
     # Step 3: Hub parameters
     print("  Generating hub parameters ...")
-    hub_capacity  = {}
+    hub_capacity  = {}   # filled AFTER scenarios are generated (need actual demand)
     hub_fixed_cost = {}
     hub_hold_cost  = {}
     for k in hub_indices:
-        alt_factor = terrain_factor(coords[k][1])  # higher terrain → more capacity
-        hub_capacity[k]   = random.randint(3000, 8000) + int(2000 * alt_factor)
-        hub_fixed_cost[k] = random.uniform(80000, 200000) * alt_factor
-        hub_hold_cost[k]  = random.uniform(0.5, 2.0)
+        alt_factor = terrain_factor(coords[k][1])
+        hub_fixed_cost[k] = random.uniform(50000, 200000) * alt_factor
+        hub_hold_cost[k]  = random.uniform(0.2, 1.0)  # $/kg held
 
     # Step 4: Base population per demand node (persons)
     # Coastal/urban nodes have higher population; mountain areas less
@@ -595,6 +611,25 @@ def build_instance(size="small"):
     # Step 7: Daganzo Theta matrix
     print("  Pre-computing Daganzo CA Theta matrix ...")
     Theta = compute_theta_matrix(coords, C_all, hub_indices, demand_indices, scenarios, area_km2)
+
+    # ── Hub capacity (computed POST-scenario using actual max demand) ──────
+    # This is the CRITICAL fix: capacity must scale with ACTUAL scenario demand,
+    # not a random pre-estimate. We use the worst (extreme) scenario demand to
+    # set a generous per-hub capacity so q_k encoding has room to be feasible.
+    max_total_demand_kg = max(
+        GAMMA_CONV * sum(sc["demand"].get(str(i), 0) for i in demand_indices)
+        for sc in scenarios
+    )
+    print(f"  Max total demand (worst scenario): {max_total_demand_kg:,.0f} kg")
+    for k in hub_indices:
+        alt_factor = terrain_factor(coords[k][1])
+        # Each hub capacity = (max_demand / n_hubs) × [3, 6] × terrain_factor
+        # With redundancy [3,6], total kappa = max_demand × [3,6] → always feasible
+        hub_capacity[k] = int(
+            max_total_demand_kg / len(hub_indices) * random.uniform(3.0, 6.0) * alt_factor
+        )
+    total_kappa = sum(hub_capacity.values())
+    print(f"  Total kappa: {total_kappa:,.0f} kg  (ratio vs max demand: {total_kappa/max(1,max_total_demand_kg):.2f}x)")
 
     # Step 8: Deprivation sensitivity lambda[i][s]
     # lambda_is = lambda0 * (1 + r_is), lambda0 = 0.8 (calibrated)

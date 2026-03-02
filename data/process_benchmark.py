@@ -50,12 +50,13 @@ SCENARIO_PARAMS = [
 ]
 SCENARIO_SEV = [1.0, 1.6, 2.5]
 
-MODE_CAP = [50, 30, 15]   # vehicle capacity per mode (road, water, air)
-MODE_COST_UNIT = [1.0, 2.5, 16.0]  # cost per km per mode (relative)
-# Air always accessible; water always accessible; road disrupted
-WATER_SPEED = 15.0  # km/h
-AIR_SPEED   = 180.0  # km/h
-ROAD_SPEED  = 40.0   # km/h
+# Transport mode parameters (consistent with generate_synthetic.py)
+MODE_CAP  = [60, 25, 10]        # vehicle capacity per mode (road, water, air)
+MODE_COST = [2.0, 5.0, 40.0]   # cost per km per mode
+# Mode 0: road  — fast, disrupted;  Mode 1: water — resilient;  Mode 2: air — always
+WATER_SPEED = 25.0  # km/h
+AIR_SPEED   = 150.0  # km/h
+ROAD_SPEED  = 35.0   # km/h
 
 # ---------------------------------------------------------------------------
 # Euclidean distance (for AP/CAB which use Euclidean coordinate space)
@@ -115,9 +116,16 @@ def generate_drnd_params(n, C_raw, W_raw, coords_raw, hub_frac=0.2, origin_frac=
     demand_indices = [i for i in range(n) if i not in hub_indices and i not in origin_indices]
 
     # ── Multi-mode cost and time matrices ────────────────────────────────
-    # Mode 0: road — use C_raw directly (Euclidean×1 or road km)
-    # Mode 1: water — 2.5× road cost, 15km/h vs 40km/h
-    # Mode 2: air — 16× road cost, 180km/h vs 40km/h (Euclidean straight-line)
+    # AP/TR benchmark Euclidean coordinates are NOT in km.
+    # Raw max distance can be 8000+ units → travel times 200+ hours → expm1 overflow.
+    # Normalize so that the maximum pairwise distance = MAX_KM_SCALE km.
+    MAX_KM_SCALE = 500.0  # network spans at most ~500km (Vietnam/Turkey scale)
+    max_raw_dist = max(
+        (C_raw[i][j] for i in range(n) for j in range(n) if i != j),
+        default=1.0
+    )
+    dist_scale = MAX_KM_SCALE / max(1.0, max_raw_dist)
+
     C_all = [[[0.0]*n for _ in range(n)] for _ in range(NUM_MODES)]
     T_all = [[[0.0]*n for _ in range(n)] for _ in range(NUM_MODES)]
 
@@ -125,26 +133,29 @@ def generate_drnd_params(n, C_raw, W_raw, coords_raw, hub_frac=0.2, origin_frac=
         for j in range(n):
             if i == j:
                 continue
-            d = C_raw[i][j]
-            C_all[0][i][j] = d * MODE_COST_UNIT[0]
-            C_all[1][i][j] = d * MODE_COST_UNIT[1]
-            C_all[2][i][j] = d * MODE_COST_UNIT[2]
-            # Time in hours (d in km or Euclidean unit normalized)
-            T_all[0][i][j] = d / ROAD_SPEED
-            T_all[1][i][j] = d / WATER_SPEED
-            T_all[2][i][j] = d / AIR_SPEED
+            d_km = C_raw[i][j] * dist_scale  # normalized km
+            C_all[0][i][j] = d_km * MODE_COST[0]
+            C_all[1][i][j] = d_km * MODE_COST[1]
+            C_all[2][i][j] = d_km * MODE_COST[2]
+            # Time in hours (normalized km ÷ realistic speed)
+            T_all[0][i][j] = d_km / ROAD_SPEED
+            T_all[1][i][j] = d_km / WATER_SPEED
+            T_all[2][i][j] = d_km / AIR_SPEED
 
     # ── Hub parameters ───────────────────────────────────────────────────
     avg_C = sum(C_raw[i][j] for i in range(n) for j in range(n) if i != j) / max(1, n*(n-1))
-    hub_capacity   = {k: random.randint(3000, 8000) for k in hub_indices}
-    hub_fixed_cost = {k: avg_C * random.uniform(50, 200) for k in hub_indices}
-    hub_hold_cost  = {k: random.uniform(0.5, 2.0) for k in hub_indices}
-
     # ── Base population ───────────────────────────────────────────────────
     # Proxy: nodes with more incoming flow have higher "population"
     in_flow = [sum(W_raw[j][i] for j in range(n)) for i in range(n)]
     max_flow = max(in_flow) if max(in_flow) > 0 else 1.0
     base_population = {i: max(100, int(5000 * in_flow[i] / max_flow)) for i in demand_indices}
+    # Hub capacity in KG — proportional to total flow-estimated demand × gamma
+    # Estimate avg person-based demand for benchmark: use in-flow as proxy
+    est_total_persons = sum(max(1.0, in_flow[i] / max(1.0, max_flow)) * 2000 for i in demand_indices)
+    est_total_kg = GAMMA_CONV * est_total_persons * 2.5  # worst-case severity
+    hub_capacity   = {k: int(est_total_kg / max(1, len(hub_indices)) * random.uniform(2.5, 5.0)) for k in hub_indices}
+    hub_fixed_cost = {k: avg_C * random.uniform(50, 200) for k in hub_indices}
+    hub_hold_cost  = {k: random.uniform(0.2, 1.0) for k in hub_indices}
 
     # ── Area per demand node (km²) ────────────────────────────────────────
     area_km2 = {i: random.uniform(10, 40) for i in demand_indices}
@@ -194,10 +205,13 @@ def generate_drnd_params(n, C_raw, W_raw, coords_raw, hub_frac=0.2, origin_frac=
             noise  = random.gauss(0, 0.05 * d_base)
             demand[i] = max(10.0, d_base + noise)
 
-        # Supply
+        # Supply: cover 1.5-2.5× total demand in kg
+        total_demand_kg = GAMMA_CONV * sum(demand.values())
+        total_supply_target = total_demand_kg * random.uniform(1.5, 2.5)
         supply = {}
         for j in origin_indices:
-            supply[j] = max(1000.0, random.uniform(5000, 20000) * (1 - 0.3 * sev / 2.5))
+            frac = random.uniform(0.8, 1.2)
+            supply[j] = max(5000.0, total_supply_target / max(1, len(origin_indices)) * frac)
 
         hub_reactive_cost = {k: random.uniform(30000, 80000) * (1 + risk[k]) for k in hub_indices}
         hub_process_time  = {k: random.uniform(0.5, 2.0) * (1 + risk[k]) for k in hub_indices}

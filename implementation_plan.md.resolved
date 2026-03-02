@@ -1,0 +1,46 @@
+# Kế hoạch triển khai (Implementation Plan)
+
+Dựa trên yêu cầu của project về bài toán Multi-Objective Incomplete Hub Location Network Design Problem (MO-IHLNDP) ứng dụng cho lũ lụt Miền Trung.
+
+## 1. Phương pháp luận & Sinh dữ liệu
+
+Chúng ta sẽ sử dụng kết hợp **Python** cho tiền xử lý tập dữ liệu, vẽ đồ thị phân tích và **C++** cho core thuật toán để đảm bảo hiệu suất tốt nhất.
+
+### 1.1 Khởi tạo dữ liệu Benchmark (TR, AP)
+*   Sử dụng tập dữ liệu có sẵn tại thư mục `dataset/` (bao gồm AP, CAB, và Turkish network).
+*   Sinh ngẫu nhiên các kịch bản $s \in \mathcal{S}$ và cập nhật/thêm các ma trận accessibility $a_{uvms}$ để tạo thành mạng lưới "Incomplete". Tiền xử lý dữ liệu và ghi ra định dạng input mảng ([.txt](file:///e:/Computer%20Science/Research/project-sos%20%28Quang-Vu%20Nguyen%29/CITA_paper/dataset/phub4.txt) hoặc `.json`) cho chương trình C++. **Lưu ý: Luôn sử dụng fixed `random.seed` để đảm bảo tính tái lập (reproducibility) của dữ liệu nghiệm thu.**
+*   **Script dự kiến:** `data/process_benchmark.py`
+
+### 1.2 Khởi tạo Synthetic Dataset (Miền Trung, VN)
+*   **Vị trí:** Lấy toạ độ các điểm thực tế khu vực ngập lụt miền Trung (tất cả các nodes nằm trong một bán kính khoảng 200km, ví dụ ở dải tần hẹp hoặc quanh vùng Sông Vu Gia - Thu Bồn, đảm bảo lưới kích thước vừa phải).
+*   **API:** Sử dụng **OSRM Open API** kết hợp phương pháp Spatial Discretization lấy được ma trận thời gian và khoảng cách đường bộ ($C_{uvm}, \tau_{uvm}$) lưu ra file tham số cho solver C++. 
+*   **Tham số ngẫu nhiên ngầm định (có set seed):** 
+    *   *S1 (Mild):* $a=1$ (95% connections), $r \in [0.1, 0.3]$.
+    *   *S2 (Severe):* 30% links disrupted, $r \in [0.4, 0.7]$.
+    *   *S3 (Extreme):* 60% links disrupted, $r \in [0.8, 1.0]$.
+*   **Ghi chú:** Sẽ có thêm một tệp dữ liệu cấp cao (high-resolution) để minh hoạ scale bài toán.
+*   **Script dự kiến:** `data/generate_synthetic.py`
+    
+## 2. Lập trình thuật toán NSMA (Solver) bằng C++
+
+Kế thừa mã nguồn quy mô lớn từ `intern/project-hlp-rail`. Do thuật toán NSMA đã được bạn phát triển rất kỹ bằng C++ (hỗ trợ Tournament, Nondominated Sorting, Crowding Distance) nhưng cho bài toán 3 mục tiêu đường sắt, chúng ta sẽ **tái cấu trúc và điều chỉnh (refactor)** thành solver cho bài toán MO-IHLNDP 2 mục tiêu.
+
+*   **Cấu trúc thư mục thuật toán dự kiến (`src/solver_cpp`):**
+    *   `input.hpp` / `model.hpp`: Đọc file tham số do Python sinh ra, định nghĩa Class Parameter, Network, Scenario.
+    *   `representation.hpp`: Thay đổi cấu trúc Chromosome (Mảng nhị phân cho Phase 1, và mảng integer 1D cho phân bổ Demands Phase 2 theo format một phân tử trỏ tới 1 hub).
+    *   `fitness.hpp`: Lập trình hàm đánh giá tính $Z_1$ (Chi phí Logistics) kết hợp Greedy flow, và tính $Z_2$ (Expected Max Deprivation Cost).
+    *   `localsearch.cpp`: Viết lại hàm Local Search theo phương pháp tính denta tiết kiệm vi mô ($\Delta Z_1, \Delta Z_2$). Cho MVP, sẽ cung cấp code có thể bật/tắt (hoặc build ra 2 phiên bản .exe khác nhau): v1 là NSGA-II thuần tuý (không có Local Search), và v2 là NSMA tích hợp Local Search.
+    *   `nsma.cpp`: / `nsga.cpp`: Hàm `main` gọi các thành phần của framework mã nguồn cũ, biên dịch ra 2 file thực thi.
+
+## 3. Khung Thí Nghiệm & Metrics
+Có một pipeline điều phối tổng (ví dụ `pipeline.bat` hoặc file `.py`):
+1.  Python chạy Data Generation $\rightarrow$ Sinh folders input.
+2.  Python tự động trigger các vòng lặp chạy C++ cho từng Config (`nsma.exe <config>`). C++ in kết quả tập nghiệm Pareto ra các `.txt` file.
+3.  Python (`visualize_results.py` hoặc sửa từ tool cũ) đọc kết quả $\rightarrow$ Vẽ đồ thị Pareto, chọn điểm Knee-point và vẽ Map Topology bằng Folium/NetworkX.
+
+## 4. Viết Paper (LaTeX)
+*   **Tiếp cận Iterative:** Sẽ không tự ý viết ồ ạt. Bài báo sẽ được viết và kiểm duyệt lặp từng phần, đoạn nhỏ dưới sự điều phối của User.
+*   Cập nhật `main.tex`: 
+    *   Viết trơn tru mô tả thuật toán NSMA và Crossover, Mutation, Decoding.
+    *   Phân tích đánh giá từ hình vẽ (Managerial insights).
+
