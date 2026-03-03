@@ -36,6 +36,7 @@ def hypervolume_2d(pareto, ref_point):
     """
     2D hypervolume indicator.
     ref_point = (ref_z1, ref_z2) — must dominate all solutions.
+    Assumes pareto points are already normalized.
     """
     if not pareto:
         return 0.0
@@ -50,6 +51,26 @@ def hypervolume_2d(pareto, ref_point):
             hv += width * height
         prev_z2 = min(prev_z2, z2)
     return hv
+
+
+def normalize_pareto(pts_list):
+    """
+    Normalize Z1, Z2 to [0,1] across ALL points in pts_list (list of runs).
+    Returns (normalized_pts_list, (z1_min, z1_max, z2_min, z2_max)).
+    This makes HV dimensionless and comparable across instances.
+    """
+    all_pts = [p for run in pts_list for p in run]
+    if not all_pts:
+        return pts_list, (0, 1, 0, 1)
+    z1_min = min(p[0] for p in all_pts)
+    z1_max = max(p[0] for p in all_pts)
+    z2_min = min(p[1] for p in all_pts)
+    z2_max = max(p[1] for p in all_pts)
+    rz1 = max(z1_max - z1_min, 1e-9)
+    rz2 = max(z2_max - z2_min, 1e-9)
+    norm = lambda p: ((p[0] - z1_min) / rz1, (p[1] - z2_min) / rz2)
+    return [[norm(p) for p in run] for run in pts_list], (z1_min, z1_max, z2_min, z2_max)
+
 
 
 def igd_plus(approx_front, true_front):
@@ -175,32 +196,32 @@ def analyze_folder(results_dir):
             pts, _ = load_pareto(os.path.join(results_dir, fname))
             pts_list.append(pts)
 
-        all_pts = [p for run in pts_list for p in run]
-        combined = dominant_pareto(pts_list) if pts_list else []
+        # Normalize Z1,Z2 to [0,1] before HV computation (R1.5)
+        norm_pts_list, bounds = normalize_pareto(pts_list)
+        combined_raw = dominant_pareto(pts_list) if any(pts_list) else []
+        combined_norm = dominant_pareto(norm_pts_list) if any(norm_pts_list) else []
 
-        # Reference point = 1.2× the max values
-        if all_pts:
-            ref = (max(p[0] for p in all_pts) * 1.2,
-                   max(p[1] for p in all_pts) * 1.2)
-            hv = hypervolume_2d(combined, ref)
-        else:
-            hv = 0.0
+        # Normalized ref = (1.1, 1.1) — 10% beyond max in normalized space
+        ref_norm = (1.0, 1.0)
+        hv = hypervolume_2d(combined_norm, ref_norm)
 
         bench_summary[grp] = {
-            "pareto_size": len(combined),
+            "pareto_size": len(combined_raw),
             "hypervolume": hv,
+            "z1_range": (bounds[0], bounds[1]),
+            "z2_range": (bounds[2], bounds[3]),
         }
         summary_rows.append({
             "experiment": f"Benchmark ({grp})",
             "files": len(files),
-            "pareto_size": len(combined),
-            "hypervolume": f"{hv:.4e}",
+            "pareto_size": len(combined_raw),
+            "hypervolume_norm": f"{hv:.6f}",
         })
-        print(f"  [{grp}] Pareto pts: {len(combined)}, HV: {hv:.3e}")
+        print(f"  [{grp}] Pareto pts: {len(combined_raw)}, HV(norm): {hv:.6f}  Z1=[{bounds[0]:.2e},{bounds[1]:.2e}] Z2=[{bounds[2]:.2e},{bounds[3]:.2e}]")
 
-        if combined:
+        if combined_raw:
             plot_pareto_front(
-                {grp: combined},
+                {grp: combined_raw},
                 os.path.join(fig_dir, f"{grp}_pareto.pdf"),
                 title=f"Pareto Front — {grp} Benchmark"
             )
@@ -216,38 +237,38 @@ def analyze_folder(results_dir):
             runs_pts[f"Seed {seed}"] = pts
 
         all_pts_flat = [p for run in runs_pts.values() for p in run]
-        combined = dominant_pareto(list(runs_pts.values())) if all_pts_flat else []
+        combined_raw = dominant_pareto(list(runs_pts.values())) if all_pts_flat else []
 
-        if all_pts_flat:
-            ref = (max(p[0] for p in all_pts_flat) * 1.2,
-                   max(p[1] for p in all_pts_flat) * 1.2)
-            hv_combined = hypervolume_2d(combined, ref)
-            hv_per_run = {k: hypervolume_2d(v, ref) for k, v in runs_pts.items()}
-        else:
-            hv_combined = 0.0; hv_per_run = {}
+        # Normalize Z1,Z2 to [0,1] before HV (R1.5)
+        norm_runs_pts_list, bounds = normalize_pareto(list(runs_pts.values()))
+        norm_runs_pts = {k: norm_runs_pts_list[i] for i, k in enumerate(runs_pts)}
+        combined_norm = dominant_pareto(list(norm_runs_pts.values())) if all_pts_flat else []
 
-        # IGD+ across seeds (reference = combined Pareto)
-        igd_per_run = {}
-        for k, pts in runs_pts.items():
-            igd_per_run[k] = igd_plus(pts, combined)
+        ref_norm = (1.0, 1.0)
+        hv_combined = hypervolume_2d(combined_norm, ref_norm)
+        hv_per_run = {k: hypervolume_2d(v, ref_norm) for k, v in norm_runs_pts.items()}
+
+        # IGD+ across seeds (reference = normalized combined Pareto)
+        igd_per_run = {k: igd_plus(v, combined_norm) for k, v in norm_runs_pts.items()}
 
         summary_rows.append({
             "experiment": f"Case Study ({grp})",
             "files": len(files),
-            "pareto_size": len(combined),
-            "hypervolume": f"{hv_combined:.4e}",
+            "pareto_size": len(combined_raw),
+            "hypervolume_norm": f"{hv_combined:.6f}",
         })
-        print(f"  [{grp}] Combined Pareto: {len(combined)} pts, HV: {hv_combined:.3e}")
+        print(f"  [{grp}] Combined Pareto: {len(combined_raw)} pts, HV(norm): {hv_combined:.6f}")
         for k in runs_pts:
-            print(f"    {k}: HV={hv_per_run.get(k,0):.3e}, IGD+={igd_per_run.get(k,0):.4f}")
+            print(f"    {k}: HV(norm)={hv_per_run.get(k,0):.6f}, IGD+={igd_per_run.get(k,0):.4f}")
 
-        if combined or runs_pts:
-            plot_dict = {"Combined": combined, **runs_pts} if combined else runs_pts
+        if combined_raw or runs_pts:
+            plot_dict = {"Combined": combined_raw, **runs_pts} if combined_raw else runs_pts
             plot_pareto_front(
                 plot_dict,
                 os.path.join(fig_dir, f"{grp}_pareto.pdf"),
                 title=f"Pareto Front — Central Vietnam ({grp})"
             )
+
 
     # ── Save summary CSV ───────────────────────────────────────────────────
     csv_path = os.path.join(results_dir, "summary.csv")
