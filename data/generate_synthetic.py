@@ -95,7 +95,7 @@ ALL_REAL_NODES = [
     (16.6321, 107.7821, "Phu_Vang_District",       "demand"),
     (16.5543, 107.9321, "Quang_Dien_District",     "demand"),
     (16.4872, 108.1012, "Phong_Dien_District",     "demand"),
-    (16.3141, 108.2621, "Hue_City_South",          "demand"),
+    (16.4631, 108.2621, "Hue_City_South",          "demand"),
     (16.4631, 107.4321, "Khe_Tre_Commune",         "demand"),
     (15.7143, 107.8101, "Tra_Don_Commune",         "demand"),
     (15.5832, 107.9431, "Tra_Nam_Commune",         "demand"),
