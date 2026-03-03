@@ -91,8 +91,8 @@ crossover(const Individual &p1, const Individual &p2, const NSGAConfig &cfg) {
       c2.A[i] = p1.A[i];
     }
   }
-  // W segment: SBX (now 3 weights)
-  for (int w = 0; w < 3; w++) {
+  // W segment: SBX (all weights)
+  for (int w = 0; w < (int)p1.W.size(); w++) {
     auto [w1, w2] = sbx_gene(p1.W[w], p2.W[w], cfg.sbx_eta);
     c1.W[w] = w1;
     c2.W[w] = w2;
@@ -118,7 +118,7 @@ crossover(const Individual &p1, const Individual &p2, const NSGAConfig &cfg) {
 void mutate(Individual &ind, const NSGAConfig &cfg) {
   int num_H = (int)ind.X.size();
   int num_I = (int)ind.A.size();
-  int gene_count = num_H + num_H + num_I + 3; // X + R + A + W
+  int gene_count = num_H + num_H + num_I + (int)ind.W.size(); // X + R + A + W
   double pm = cfg.pm_base / gene_count;
 
   // X: bit-flip
@@ -146,8 +146,8 @@ void mutate(Individual &ind, const NSGAConfig &cfg) {
     if (rand01() < pm)
       ind.A[i] = (int)rand_int(0, num_H - 1);
   }
-  // W: polynomial mutation (3 weights)
-  for (int w = 0; w < 3; w++) {
+  // W: polynomial mutation (all weights)
+  for (int w = 0; w < (int)ind.W.size(); w++) {
     if (rand01() < pm)
       ind.W[w] = poly_mutate(ind.W[w], cfg.pm_eta);
   }
@@ -238,9 +238,30 @@ const Individual &tournament(const vector<Individual> &pop) {
   return constrained_better(pop[a], pop[b]) ? pop[a] : pop[b];
 }
 
+// ── Hamming diversity (Fix D) ────────────────────────────────────────────────
+// For each individual, compute its minimum Hamming distance in X-space to
+// any other individual in the pool. Used as a tiebreaker in elitist selection
+// to prefer genotypically isolated solutions. O(N^2 * |H|).
+void compute_hamming_diversity(vector<Individual> &pop) {
+  int N     = (int)pop.size();
+  int num_H = (N > 0) ? (int)pop[0].X.size() : 0;
+  for (int i = 0; i < N; i++) {
+    int min_h = num_H; // worst case: all bits differ
+    for (int j = 0; j < N; j++) {
+      if (i == j) continue;
+      int h = 0;
+      for (int k = 0; k < num_H; k++)
+        h += (pop[i].X[k] != pop[j].X[k]);
+      if (h < min_h) min_h = h;
+    }
+    pop[i].hamming_diversity = min_h;
+  }
+}
+
 // ── Elitist survival selection
 // ────────────────────────────────────────────────
 void elitist_select(vector<Individual> &combined, int target_size) {
+  compute_hamming_diversity(combined); // Fix D: needed before tiebreaker sort
   auto fronts = fast_nondominated_sort(combined);
   vector<Individual> new_pop;
   for (auto &front_idx : fronts) {
@@ -250,8 +271,13 @@ void elitist_select(vector<Individual> &combined, int target_size) {
         new_pop.push_back(combined[i]);
     } else {
       int remaining = target_size - (int)new_pop.size();
+      // Tiebreaker order: rank → crowding distance → Hamming diversity
       std::sort(all(front_idx), [&](int a, int b) {
-        return constrained_better(combined[a], combined[b]);
+        const Individual &ia = combined[a], &ib = combined[b];
+        if (ia.rank != ib.rank) return ia.rank < ib.rank;
+        if (std::abs(ia.crowding - ib.crowding) > 1e-9)
+          return ia.crowding > ib.crowding;
+        return ia.hamming_diversity > ib.hamming_diversity;
       });
       for (int i = 0; i < remaining; i++)
         new_pop.push_back(combined[front_idx[i]]);
@@ -348,25 +374,9 @@ vector<Individual> run_nsga2(const DRNDInstance &inst, const NSGAConfig &cfg) {
             if (!any)
               nbr.X[(int)rand_int(0, num_H - 1)] = 1;
           } else {
-            // Reassign A[i] to a nearby hub (by increasing distance)
+            // Perturb rotation offset A[ii] by ±1 step (wraps in {0..|H|-1})
             int ii = (int)rand_int(0, num_I - 1);
-            // Build list of hubs sorted by distance to demand node ii
-            vector<pair<double, int>> dist_hub;
-            int di = inst.demand_idx[ii];
-            for (int ki = 0; ki < num_H; ki++) {
-              int hi = inst.hub_idx[ki];
-              double dx = inst.lon[di] - inst.lon[hi];
-              double dy = inst.lat[di] - inst.lat[hi];
-              dist_hub.push_back({dx * dx + dy * dy, ki});
-            }
-            std::sort(all(dist_hub));
-            // Pick the next-closest hub (not the current preference)
-            for (auto &[d, ki] : dist_hub) {
-              if (ki != nbr.A[ii]) {
-                nbr.A[ii] = ki;
-                break;
-              }
-            }
+            nbr.A[ii] = ((nbr.A[ii] + (rand01() < 0.5 ? 1 : -1) + num_H) % num_H);
           }
           decode(nbr, inst);
           // Accept if nbr is non-dominated by sol (Pareto-improving)

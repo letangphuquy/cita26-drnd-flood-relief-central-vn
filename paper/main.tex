@@ -250,46 +250,98 @@ Variable domains are defined in \eqref{eq:binary_vars}-\eqref{eq:nonneg_vars}.
 
 \section{Proposed Algorithm: PB-NSGA-II}
 
-The MO-IHLNDP is NP-hard due to its combinatorial structure and non-linear $Z_2$. Exact solvers are intractable beyond small instances. We therefore propose the \textbf{Priority-Based NSGA-II (PB-NSGA-II)}. It integrates a custom decoding heuristic into the NSGA-II framework \cite{deb2002fast}. 
-
-The key design principle is \emph{implicit encoding}. Only first-stage strategic variables are encoded in the chromosome. All second-stage variables are reconstructed deterministically by the decoder for each scenario $s \in \mathcal{S}$. This drastically reduces the search space from $O(|\mathcal{S}| \times |\mathcal{V}|)$ to $O(|\mathcal{H}|)$.
+The MO-IHLNDP is NP-hard due to its combinatorial structure and the nonlinear deprivation cost $Z_2$. Exact methods are intractable beyond small instances. In this work, we propose the \textbf{Priority-Based NSGA-II (PB-NSGA-II)}, which integrates a custom decoding heuristic into the NSGA-II framework \cite{deb2002fast}. The key design principle is \emph{implicit encoding}: only first-stage strategic decisions are carried in the chromosome, and all second-stage variables are reconstructed by the decoder for each scenario $s \in \mathcal{S}$. This reduces the effective search space from $O(|\mathcal{S}| \times |\mathcal{V}|)$ to $O(|\mathcal{H}|)$.
 
 \subsection{Chromosome Encoding}
 
+Each chromosome $\mathbf{C} = (\mathbf{X}, \mathbf{R}, \mathbf{A}, \mathbf{W})$ encodes four segments (Table~\ref{tab:chromosome}).
 
-Each chromosome $\mathbf{C} = (\mathbf{X}, \mathbf{R}, \mathbf{W})$ encodes three segments:
-\begin{itemize}
-    \item $\mathbf{X} \in \{0,1\}^{|\mathcal{H}|}$: binary hub activation vector. $X_k=1$ if and only if hub $k$ is planned before the disaster.
-    \item $\mathbf{R} \in [0,1]^{|\mathcal{H}|}$: inventory ratio vector. The absolute pre-positioned inventory is decoded as:
-    \begin{equation*}
-        q_k = R_k \cdot \frac{\hat{D}}{n_{\text{open}}}, \quad n_{\text{open}} = \textstyle\sum_{k} X_k,
-    \end{equation*}
-    where $\hat{D} = \gamma \cdot \max_{s}\sum_{i} D_{is}$ is the worst-case total demand in kg. This encoding ensures complete coverage. When $R_k = 1$ for all open hubs, the combined inventory exactly covers the worst-case demand. Capacity $\kappa_k$ acts as a soft upper bound.
-    \item $\mathbf{W} = (w_1, w_2, w_3) \in [0,1]^3$: heuristic weight vector. It governs the priority scoring during decoding.
-\end{itemize}
+\begin{table}[ht]
+\centering
+\caption{Chromosome segment definitions.}
+\label{tab:chromosome}
+\begin{tabular}{clll}
+\toprule
+Segment & Type & Size & Semantics \\
+\midrule
+$\mathbf{X}$ & Binary & $|\mathcal{H}|$ & $X_k = 1$: open planned hub $k$ before the disaster \\
+$\mathbf{R}$ & $[0,1]$ & $|\mathcal{H}|$ & Inventory fill fraction: $q_k = R_k \cdot \kappa_k$ \\
+$\mathbf{A}$ & $\{0,\ldots,|\mathcal{H}|-1\}$ & $|\mathcal{I}|$ & Rotation offset into distance-sorted hub list for demand $i$ \\
+$\mathbf{W}$ & $[0,1]^6$ & $6$ & Heuristic weights governing decoder behaviour \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The $\mathbf{R}$ segment is decoupled from $\mathbf{X}$: each $q_k = R_k \cdot \kappa_k$ depends only on the hub's physical capacity $\kappa_k$, independent of how many hubs are open. The $\mathbf{A}$ segment encodes a rotation offset per demand node that governs hub trial order during assignment (see Section~\ref{sec:decoder}). The six heuristic weights $\mathbf{W}$ are described in Table~\ref{tab:weights}.
+
+\begin{table}[ht]
+\centering
+\caption{Heuristic weight semantics.}
+\label{tab:weights}
+\begin{tabular}{clll}
+\toprule
+Index & Name & Used in & High value means \\
+\midrule
+$w_0$ & Demand urgency   & Demand sorting & Prioritise high $\lambda \cdot D$ demands first \\
+$w_1$ & Hub speed        & Hub scoring    & Prefer faster-to-reach hubs \\
+$w_2$ & Hub capacity     & Hub scoring    & Prefer hubs with more residual inventory \\
+$w_3$ & Demand isolation & Demand sorting & Prioritise demands with fewer reachable hubs \\
+$w_4$ & Hub type bonus   & Hub scoring    & Prefer planned over reactive hubs \\
+$w_5$ & Reactive eagerness & Reactive check & Conservative reactive opening (0 = aggressive) \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \subsection{Priority-Based Decoding Heuristic}
+\label{sec:decoder}
 
+The decoder is invoked once per chromosome per scenario $s$. We pre-compute, for each demand node $i$, the list of all hubs sorted by increasing Euclidean distance: $\text{order}[i] = (k_{(1)}, k_{(2)}, \ldots, k_{(|\mathcal{H}|)})$.
 
-The decoder is invoked for each scenario $s$. It proceeds through four steps:
+\textbf{Step 1 -- Hub Activation.} Planned hubs with $X_k = 1$ and risk $r_{ks} \le \chi$ are activated. If none qualify, the safest planned hub is forced active as a fallback.
 
-\textbf{Step 1 -- Hub Activation.} Planned hubs ($X_k=1$) with risk $r_{ks} \le \chi$ are activated. If no planned hub is safe, the hub with the lowest risk is activated reactively. Additional reactive hubs ($y_{ks}=1$) may be activated later for unserviceable demand nodes.
+\textbf{Step 2 -- Inventory Allocation.} Each active hub $k$ receives inventory $q_k = R_k \cdot \kappa_k$.
 
-\textbf{Step 2 -- Priority-Based Demand Assignment.} Each demand node $i$ is assigned a priority score:
+\textbf{Step 3 -- Demand Priority Scoring.} For each demand node $i$, three raw components are computed and independently normalised to $[0,1]$ across the demand set:
+\begin{equation}
+    \text{urgency}_i = \lambda_{is} \cdot D_{is}, \quad
+    \text{isolation}_i = \frac{1}{|\{k \in \mathcal{H}_{\text{act}} : \exists m,\; a_{ikms}=1\}|}, \quad
+    \text{dist}_i = \min_{\substack{k \in \mathcal{H}_{\text{act}},\, m:\\ a_{ikms}=1}} \tau_{ikm}.
+    \label{eq:raw_components}
+\end{equation}
+The composite priority score incorporates Gaussian noise $\varepsilon_i \sim \mathcal{N}(0, \sigma)$ to prevent phenotype collapse across generations:
+\begin{equation}
+    \text{Score}_i = w_0 \cdot \widetilde{\text{urgency}}_i + w_3 \cdot \widetilde{\text{isolation}}_i - w_1 \cdot \widetilde{\text{dist}}_i + \varepsilon_i.
+    \label{eq:demand_score}
+\end{equation}
+Demands are sorted in descending order by $\text{Score}_i$.
+
+\textbf{Step 4 -- Tiered Hub Selection.} For each demand $i$ (in priority order), a hub is selected via a two-pass rotation procedure anchored at offset $A_i$:
+
+\textit{Pass 1 (best-in-window).} Let $K = 3$. Examine the first $K$ candidates in the rotation:
 \begin{equation*}
-    \text{Score}_i = w_1 \cdot (\lambda_{is} \cdot D_{is}) - w_2 \cdot \min_{k \in \text{active}} \tau_{ikm^*},
+    \text{candidate}_j = \text{order}[i][(A_i + j) \bmod |\mathcal{H}|], \quad j = 0, \ldots, K-1.
 \end{equation*}
-where $m^* = \arg\min_m \tau_{ikm}$ subject to $a_{ikms}=1$. Demands are sorted descendingly. They are assigned greedily to the highest-scoring active hub reachable via at least one mode. If no active hub can reach demand $i$, a reactive hub is opened from among safe candidates. Failing that, a constraint violation (CV) penalty of $\gamma D_{is}$ is incurred.
+Among candidates that are active, reachable ($a_{ikms}=1$ for some $m$), and have positive residual inventory, select the hub maximising:
+\begin{equation}
+    \text{HubScore}(k) = \frac{w_1}{\tau_{ikm^*} + \varepsilon} + w_2 \cdot \text{residual}_k + w_4 \cdot \mathbf{1}[X_k = 1].
+    \label{eq:hub_score}
+\end{equation}
 
-\textbf{Step 3 -- Origin Assignment and Flow Balancing.} Each origin $j$ is routed to the nearest active hub. A greedy trans-shipment loop then iteratively routes relief from surplus hubs to deficit hubs. It uses the cheapest available mode and incorporates the economies-of-scale discount $\alpha$. Remaining deficits contribute proportionally to the CV score.
+\textit{Pass 2 (fallback).} If Pass~1 yields no eligible hub, scan the remaining candidates ($j = K, \ldots, |\mathcal{H}|-1$) and assign the first active, reachable hub regardless of residual capacity (this may incur a constraint violation).
 
-\textbf{Step 4 -- Objective Evaluation.} $Z_1$ and $Z_2$ are accumulated as weighted expectations over scenarios using Equations (\ref{eq:obj1}) and (\ref{eq:obj2}). The deprivation waiting time is $\Omega_{is} = \tau_{ks} + 2\tau_{ikm^*}$. It is capped to prevent numerical overflow.
+\textit{Reactive check.} After selecting hub $k^*$ with travel time $\tau^*$, inspect all inactive safe hubs $k'$. If $\tau_{ik'} < (1 - w_5) \cdot \tau^*$, open $k'$ reactively (incurring fixed cost $F^a_{k's}$) and reassign demand $i$. If no hub is reachable at all, a reactive hub is opened as a last resort; failing that, a constraint violation penalty $\gamma D_{is}$ is incurred.
+
+\textbf{Step 5 -- Origin Routing and Trans-shipment.} Each origin $j$ is assigned to the nearest active hub. A greedy trans-shipment loop then routes surplus relief from over-stocked hubs to deficit hubs, using the cheapest available mode and applying the volume discount $\alpha$.
+
+\textbf{Step 6 -- Objective Evaluation.} $Z_1$ and $Z_2$ are accumulated as probability-weighted expectations over all scenarios $s \in \mathcal{S}$ using Equations~\eqref{eq:obj1}--\eqref{eq:obj2}.
 
 \subsection{Genetic Operators and Selection}
 
-The mixed-type chromosome requires mode-specific operators. \emph{Selection} uses a binary tournament on rank and crowding distance. \emph{Crossover} ($p_c = 0.9$) utilizes Uniform Crossover for $\mathbf{X}$ and Simulated Binary Crossover (SBX, $\eta_c = 20$) for $\mathbf{R}$ and $\mathbf{W}$. \emph{Mutation} ($p_m \propto 1/|\mathbf{C}|$) applies Bit-flip for $\mathbf{X}$ and Polynomial mutation ($\eta_m = 20$) for $\mathbf{R}$ and $\mathbf{W}$. 
+The mixed-type chromosome requires mode-specific operators applied per segment. \emph{Selection} uses binary tournament on Pareto rank with crowding distance as a tiebreaker. \emph{Crossover} ($p_c = 0.9$) applies Uniform Crossover to $\mathbf{X}$ and $\mathbf{A}$, and Simulated Binary Crossover (SBX, $\eta_c = 20$) to $\mathbf{R}$ and $\mathbf{W}$. \emph{Mutation} ($p_m = 1/|\mathbf{C}|$, where $|\mathbf{C}| = 2|\mathcal{H}| + |\mathcal{I}| + 6$) applies Bit-flip to $\mathbf{X}$, random-reset to $\mathbf{A}$, and Polynomial mutation ($\eta_m = 20$) to $\mathbf{R}$ and $\mathbf{W}$.
 
-Constraint handling follows the constrained-dominance principle. Infeasible solutions (CV $> 0$) are always dominated by feasible ones. Among infeasible solutions, a lower CV dominates. The Pareto archive uses fast non-dominated sorting with crowding distance tie-breaking.
+Constraint handling follows the constrained-dominance principle \cite{deb2002fast}: feasible solutions ($\text{CV} = 0$) always dominate infeasible ones; among infeasible solutions, lower CV dominates.
+
+\textbf{Elitist selection with Hamming diversity.} At each generation, the combined parent--offspring pool of $2N$ individuals is trimmed to $N$ via fast non-dominated sorting. When a partial Pareto front must be split, tiebreaking proceeds as: (1) Pareto rank, (2) crowding distance, (3) minimum Hamming distance to the nearest neighbour in $\mathbf{X}$-space. This third criterion preserves genotypic diversity in hub configuration space and counters premature convergence. Hamming distances are recomputed each generation over the $2N$ pool in $O(N^2 |\mathcal{H}|)$ time.
 
 \section{Computational Experiments}
 
@@ -297,7 +349,7 @@ Constraint handling follows the constrained-dominance principle. Infeasible solu
 
 \textbf{Implementation.} PB-NSGA-II is implemented in C++17. Data generation and result analysis are performed in Python 3. All experiments run on a standard workstation (Intel Core i7, 16 GB RAM).
 
-\textbf{Algorithm parameters.} Population $N = 100$; generations $G = 200$; $p_c = 0.9$; $\eta_c = \eta_m = 20$; $p_m = 1/|\mathbf{C}|$. The safety threshold is $\chi = 0.7$; discount $\alpha = 0.6$; $\gamma = 3.0$ kg/person; $\lambda_0 = 0.8$.
+\textbf{Algorithm parameters.} Population $N = 100$; generations $G = 200$; $p_c = 0.9$; $\eta_c = \eta_m = 20$; $p_m = 1/|\mathbf{C}|$ where $|\mathbf{C}| = 2|\mathcal{H}| + |\mathcal{I}| + 6$; decoder noise $\sigma = 0.05$; Pass~1 window $K = 3$. The safety threshold is $\chi = 0.7$; discount $\alpha = 0.6$; $\gamma = 3.0$ kg/person; $\lambda_0 = 0.8$.
 
 \textbf{Performance metric.} We use the \textbf{Hypervolume (HV)} indicator. The reference point is set to $1.1 \times \max(Z_1, Z_2)$ of the combined Pareto front. A larger HV indicates better coverage and spread of the Pareto front.
 

@@ -1,10 +1,10 @@
 experiment,files,pareto_size,hypervolume_norm
-Benchmark (AP10),1,100,0.540061
-Benchmark (AP100),1,25,0.492673
-Benchmark (AP20),1,100,0.000000
+Benchmark (AP10),1,5,0.069802
+Benchmark (AP100),1,19,0.668677
+Benchmark (AP20),1,9,0.716973
 Benchmark (AP25),1,100,1.000000
-Benchmark (AP40),1,100,0.069570
-Benchmark (AP50),1,100,0.101313
-Benchmark (TR81),1,2,0.000000
-Case Study (CV_large),1,100,0.340726
-Case Study (CV_small),3,152,0.977591
+Benchmark (AP40),1,2,0.000000
+Benchmark (AP50),1,4,0.130838
+Benchmark (TR81),1,8,0.944277
+Case Study (CV_large),1,11,0.933427
+Case Study (CV_small),5,12,0.998567
