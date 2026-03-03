@@ -21,6 +21,8 @@ struct NSGAConfig {
   double pm_eta = 20.0;  // polynomial mutation index
   int log_every = 10;    // generations between progress logs
   int seed_iter = 0;     // for set_rolling_seed
+  bool use_local_search = false; // true  → PB-NSMA; false → plain NSGA-II
+  int ls_iters = 5;              // local search perturbations per generation
 };
 
 // ── Constrained comparison (crowded comparison with CV) ─────────────────────
@@ -67,6 +69,7 @@ pair<Individual, Individual>
 crossover(const Individual &p1, const Individual &p2, const NSGAConfig &cfg) {
   Individual c1 = p1, c2 = p2;
   int num_H = (int)p1.X.size();
+  int num_I = (int)p1.A.size();
 
   // X segment: uniform crossover
   for (int k = 0; k < num_H; k++) {
@@ -81,8 +84,15 @@ crossover(const Individual &p1, const Individual &p2, const NSGAConfig &cfg) {
     c1.R[k] = r1;
     c2.R[k] = r2;
   }
-  // W segment: SBX
-  for (int w = 0; w < 4; w++) {
+  // A segment: uniform crossover (swap preferred hub index)
+  for (int i = 0; i < num_I; i++) {
+    if (rand01() < 0.5) {
+      c1.A[i] = p2.A[i];
+      c2.A[i] = p1.A[i];
+    }
+  }
+  // W segment: SBX (now 3 weights)
+  for (int w = 0; w < 3; w++) {
     auto [w1, w2] = sbx_gene(p1.W[w], p2.W[w], cfg.sbx_eta);
     c1.W[w] = w1;
     c2.W[w] = w2;
@@ -107,7 +117,8 @@ crossover(const Individual &p1, const Individual &p2, const NSGAConfig &cfg) {
 // ──────────────────────────────────────────────────────────────────
 void mutate(Individual &ind, const NSGAConfig &cfg) {
   int num_H = (int)ind.X.size();
-  int gene_count = num_H + num_H + 4;
+  int num_I = (int)ind.A.size();
+  int gene_count = num_H + num_H + num_I + 3; // X + R + A + W
   double pm = cfg.pm_base / gene_count;
 
   // X: bit-flip
@@ -130,8 +141,13 @@ void mutate(Individual &ind, const NSGAConfig &cfg) {
     if (rand01() < pm)
       ind.R[k] = poly_mutate(ind.R[k], cfg.pm_eta);
   }
-  // W: polynomial mutation
-  for (int w = 0; w < 4; w++) {
+  // A: random replacement (reassign to a random hub)
+  for (int i = 0; i < num_I; i++) {
+    if (rand01() < pm)
+      ind.A[i] = (int)rand_int(0, num_H - 1);
+  }
+  // W: polynomial mutation (3 weights)
+  for (int w = 0; w < 3; w++) {
     if (rand01() < pm)
       ind.W[w] = poly_mutate(ind.W[w], cfg.pm_eta);
   }
@@ -245,23 +261,26 @@ void elitist_select(vector<Individual> &combined, int target_size) {
   combined = std::move(new_pop);
 }
 
-// ── Main NSGA-II loop
-// ─────────────────────────────────────────────────────────
+// ── Main loop (NSGA-II or PB-NSMA depending on cfg.use_local_search)
+// ───────────────────────────────────────────────────────
 vector<Individual> run_nsga2(const DRNDInstance &inst, const NSGAConfig &cfg) {
   set_rolling_seed(cfg.seed_iter);
   int POP = cfg.pop_size;
+  const char *algo_name = cfg.use_local_search ? "PB-NSMA" : "NSGA-II";
 
   // Initial population
   vector<Individual> pop;
   pop.reserve(POP);
-  cerr << "[NSGA-II] Initialising population (N=" << POP << ")...\n";
+  cerr << "[" << algo_name << "] Initialising population (N=" << POP
+       << ")...\n";
   while ((int)pop.size() < POP) {
     Individual ind = random_individual(inst);
     decode(ind, inst);
     pop.push_back(ind);
   }
   elitist_select(pop, POP);
-  cerr << "[NSGA-II] Init done. Starting " << cfg.num_gen << " generations.\n";
+  cerr << "[" << algo_name << "] Init done. Starting " << cfg.num_gen
+       << " generations.\n";
 
   TimeVar t_start = time_now();
 
@@ -300,6 +319,68 @@ vector<Individual> run_nsga2(const DRNDInstance &inst, const NSGAConfig &cfg) {
       pop.push_back(o);
     elitist_select(pop, POP);
 
+    // ── NSMA-style Local Search (active only when use_local_search = true) ──
+    // Perturb each Pareto-front (rank-1) solution with n_ls random moves;
+    // accept the neighbour if it is not dominated by the original (Pareto-
+    // improving). Accepted neighbours are added and the population is
+    // re-pruned to maintain size POP.
+    if (cfg.use_local_search) {
+      vector<Individual> ls_children;
+      for (auto &sol : pop) {
+        if (sol.rank != 1)
+          continue;
+        for (int t = 0; t < cfg.ls_iters; t++) {
+          Individual nbr = sol;
+          int num_H = (int)nbr.X.size();
+          int num_I = (int)nbr.A.size();
+          // Perturbation: 50% chance flip a random X bit, 50% reassign a random
+          // A
+          if (rand01() < 0.5) {
+            int k = (int)rand_int(0, num_H - 1);
+            nbr.X[k] ^= 1;
+            // repair: ensure at least 1 open
+            bool any = false;
+            for (int kk = 0; kk < num_H; kk++)
+              if (nbr.X[kk]) {
+                any = true;
+                break;
+              }
+            if (!any)
+              nbr.X[(int)rand_int(0, num_H - 1)] = 1;
+          } else {
+            // Reassign A[i] to a nearby hub (by increasing distance)
+            int ii = (int)rand_int(0, num_I - 1);
+            // Build list of hubs sorted by distance to demand node ii
+            vector<pair<double, int>> dist_hub;
+            int di = inst.demand_idx[ii];
+            for (int ki = 0; ki < num_H; ki++) {
+              int hi = inst.hub_idx[ki];
+              double dx = inst.lon[di] - inst.lon[hi];
+              double dy = inst.lat[di] - inst.lat[hi];
+              dist_hub.push_back({dx * dx + dy * dy, ki});
+            }
+            std::sort(all(dist_hub));
+            // Pick the next-closest hub (not the current preference)
+            for (auto &[d, ki] : dist_hub) {
+              if (ki != nbr.A[ii]) {
+                nbr.A[ii] = ki;
+                break;
+              }
+            }
+          }
+          decode(nbr, inst);
+          // Accept if nbr is non-dominated by sol (Pareto-improving)
+          if (!sol.constrained_dominates(nbr))
+            ls_children.push_back(nbr);
+        }
+      }
+      if (!ls_children.empty()) {
+        for (auto &c : ls_children)
+          pop.push_back(c);
+        elitist_select(pop, POP);
+      }
+    }
+
     // Logging
     if (gen % cfg.log_every == 0 || gen == cfg.num_gen) {
       int r1_count = 0;
@@ -323,7 +404,7 @@ vector<Individual> run_nsga2(const DRNDInstance &inst, const NSGAConfig &cfg) {
     }
   }
 
-  cerr << "[NSGA-II] Done. Total time: " << std::fixed
+  cerr << "[" << algo_name << "] Done. Total time: " << std::fixed
        << duration_ms(time_now() - t_start) / 1000.0 << "s\n";
   return pop;
 }

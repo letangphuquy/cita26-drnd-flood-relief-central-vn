@@ -1,11 +1,11 @@
-// representation.hpp — 3-segment chromosome for PB-NSGA-II
-// Chromosome = [X (binary hub) | R (inventory ratio) | W (heuristic weights)]
-// Phenotype evaluation is delegated to decoder.hpp
+// representation.hpp — 4-segment chromosome for PB-NSMA
+// Chromosome = [X (binary hub) | R (inventory ratio) | A (demand hub
+// preference) | W (heuristic weights)] Phenotype evaluation is delegated to
+// decoder.hpp
 #pragma once
 
 #include "model.hpp"
 #include "template.hpp"
-
 
 // ---------------------------------------------------------------------------
 // Individual (chromosome + phenotype + NSGA-II bookkeeping)
@@ -14,12 +14,16 @@ struct Individual {
   // ── Genotype (Stage-1 decisions + heuristic weights) ──────────────────
   vector<int> X; // [num_H] binary: x_k ∈ {0,1}
   vector<double>
-      R; // [num_H] inventory ratio: R_k ∈ [0,1] → q_k = R_k * kappa_k * x_k
-  vector<double> W; // [4]   heuristic weights w1..w4 ∈ [0,1]
-                    // W[0]: demand urgency weight (λ·D)
-                    // W[1]: distance penalty when assigning demand to hub
-                    // W[2]: residual capacity reward
-                    // W[3]: reactive hub activation threshold weight
+      R; // [num_H] inventory ratio: R_k ∈ [0,1] → q_k = R_k * kappa_k
+  vector<int>
+      A; // [num_I] demand allocation preference: A_i ∈ {0..num_H-1}
+         //   A_i = preferred hub index for demand node i.
+         //   Decoder uses A_i as first candidate; if infeasible, falls
+         //   back to remaining hubs ordered by increasing distance to i.
+  vector<double> W; // [3]   heuristic weights w1..w3 ∈ [0,1]
+                    // W[0]: demand urgency weight (λ·D) in priority score
+                    // W[1]: inverse-distance weight when scoring hubs
+                    // W[2]: residual capacity reward weight
 
   // ── Phenotype (computed by decoder) ──────────────────────────────────
   double Z1 = 0, Z2 = 0; // objective values (minimise both)
@@ -31,7 +35,8 @@ struct Individual {
 
   // ── Constructor ────────────────────────────────────────────────────────
   Individual() = default;
-  explicit Individual(int num_H) : X(num_H, 0), R(num_H, 0.0), W(4, 0.5) {}
+  explicit Individual(int num_H, int num_I)
+      : X(num_H, 0), R(num_H, 0.0), A(num_I, 0), W(3, 0.5) {}
 
   // ── Dominance (standard Pareto, no CV) ────────────────────────────────
   bool dominates(const Individual &o) const {
@@ -70,7 +75,7 @@ struct Individual {
 // Random initialisation
 // ---------------------------------------------------------------------------
 Individual random_individual(const DRNDInstance &inst) {
-  Individual ind(inst.num_H);
+  Individual ind(inst.num_H, inst.num_I);
   // X: randomly open some hubs (at least 1, at most 60%)
   int n_open = (int)rand_int(1, std::max(1, inst.num_H * 3 / 5));
   vector<int> perm(inst.num_H);
@@ -81,8 +86,11 @@ Individual random_individual(const DRNDInstance &inst) {
   // R: uniform [0,1] for each hub
   for (int k = 0; k < inst.num_H; k++)
     ind.R[k] = rand01();
+  // A: random hub preference for each demand node
+  for (int i = 0; i < inst.num_I; i++)
+    ind.A[i] = (int)rand_int(0, inst.num_H - 1);
   // W: uniform [0,1]
-  for (int w = 0; w < 4; w++)
+  for (int w = 0; w < 3; w++)
     ind.W[w] = rand01();
   return ind;
 }

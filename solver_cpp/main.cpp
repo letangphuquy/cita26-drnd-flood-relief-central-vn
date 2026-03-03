@@ -1,4 +1,4 @@
-// main.cpp — PB-NSGA-II solver entry point
+// main.cpp — PB-NSMA / NSGA-II solver entry point
 // Usage: solver.exe <instance.json> [options]
 //
 // Options:
@@ -6,9 +6,11 @@
 //   --gen  <N>    number of generations (default: 200)
 //   --seed <N>    rolling seed iteration (default: 0)
 //   --out  <path> output JSON path (default: stdout)
+//   --algo <name> algorithm: nsma (PB-NSMA) or nsga2 (default: nsga2)
+//   --ls   <N>    local search iters per generation (default: 5, NSMA only)
 //
 // Output JSON:
-//   { "pareto_front": [ {Z1, Z2, CV, X, R, W}, ... ] }
+//   { "pareto_front": [ {Z1, Z2, CV, X, R, A, W}, ... ] }
 //
 // Compile (Windows/MSYS2 or Linux):
 //   g++ -O2 -std=c++17 main.cpp -o solver
@@ -30,12 +32,14 @@ struct Args {
   int num_gen = 200;
   int seed_iter = 0;
   int log_every = 10;
+  bool use_local_search = false; // --algo nsma
+  int ls_iters = 5;              // --ls N
 };
 
 Args parse_args(int argc, char *argv[]) {
   if (argc < 2) {
     cerr << "Usage: solver <instance.json> [--pop N] [--gen N] [--seed N] "
-            "[--out output.json]\n";
+            "[--out output.json] [--algo nsma|nsga2] [--ls N]\n";
     exit(1);
   }
   Args a;
@@ -52,6 +56,11 @@ Args parse_args(int argc, char *argv[]) {
       a.output_path = argv[++i];
     else if (flag == "--log" && i + 1 < argc)
       a.log_every = std::stoi(argv[++i]);
+    else if (flag == "--algo" && i + 1 < argc) {
+      string algo = argv[++i];
+      a.use_local_search = (algo == "nsma");
+    } else if (flag == "--ls" && i + 1 < argc)
+      a.ls_iters = std::stoi(argv[++i]);
   }
   return a;
 }
@@ -71,11 +80,12 @@ void write_output(const vector<Individual> &pop, std::ostream &out) {
       sol["rank"] = ind.rank;
       sol["X"] = ind.X;
       sol["R"] = ind.R;
+      sol["A"] = ind.A;
       sol["W"] = ind.W;
       j["pareto_front"].push_back(sol);
     }
   }
-  // Also write all feasible solutions (rank ≤ 3) for analysis
+  // Also write all feasible solutions for analysis
   j["all_feasible"] = json::array();
   for (const auto &ind : pop) {
     if (ind.CV == 0) {
@@ -86,6 +96,7 @@ void write_output(const vector<Individual> &pop, std::ostream &out) {
       sol["crowding"] = ind.crowding;
       sol["X"] = ind.X;
       sol["R"] = ind.R;
+      sol["A"] = ind.A;
       sol["W"] = ind.W;
       j["all_feasible"].push_back(sol);
     }
@@ -99,8 +110,10 @@ void write_output(const vector<Individual> &pop, std::ostream &out) {
 int main(int argc, char *argv[]) {
   Args args = parse_args(argc, argv);
 
-  cerr << "=== PB-NSGA-II Solver for MO-IHLNDP ===\n";
+  cerr << "=== PB-NSMA Solver for MO-IHLNDP ===\n";
   cerr << "Instance : " << args.instance_path << "\n";
+  cerr << "Algorithm: " << (args.use_local_search ? "PB-NSMA" : "NSGA-II")
+       << "\n";
   cerr << "Pop size : " << args.pop_size << "\n";
   cerr << "Generations: " << args.num_gen << "\n";
   cerr << "Seed iter: " << args.seed_iter << "\n";
@@ -120,6 +133,8 @@ int main(int argc, char *argv[]) {
   cfg.num_gen = args.num_gen;
   cfg.seed_iter = args.seed_iter;
   cfg.log_every = args.log_every;
+  cfg.use_local_search = args.use_local_search;
+  cfg.ls_iters = args.ls_iters;
 
   auto population = run_nsga2(inst, cfg);
 
