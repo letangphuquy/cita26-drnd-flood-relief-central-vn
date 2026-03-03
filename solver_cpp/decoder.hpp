@@ -41,8 +41,15 @@ void decode(Individual &ind, const DRNDInstance &inst) {
   ind.CV = 0.0;
 
   // ── STEP 1: Decode Stage-1 variables ─────────────────────────────────
-  // q_k encoding: R_k is the RATIO OF TOTAL DEMAND stocked at hub k.
-  // Compute max total demand in kg across scenarios (worst case).
+  // NEW encoding (R1.2 fix): q_k = R_k × kappa_k
+  //   R_k ∈ [0,1] encodes the FRACTION OF HUB CAPACITY to pre-stock.
+  //   Fully decoupled from X: the meaning of R_k is independent of which
+  //   other hubs are open or closed. Semantics: R_k=1 → stock hub to its
+  //   physical limit; R_k=0 → empty hub.
+  //   (Previously q_k = R_k × D̂/n_open was coupled to X via n_open.)
+  //
+  // We also pre-compute D_hat = γ × max_s{Σ D_is} for use in reactive
+  // hub inventory assignment below.
   double max_total_demand_kg = 0.0;
   for (int si = 0; si < num_S; si++) {
     double td = 0.0;
@@ -51,26 +58,16 @@ void decode(Individual &ind, const DRNDInstance &inst) {
     umax(max_total_demand_kg, inst.gamma * td);
   }
 
-  // Count open hubs for proportional distribution
-  int n_open = 0;
-  for (int ki = 0; ki < num_H; ki++)
-    n_open += ind.X[ki];
-  n_open = std::max(1, n_open);
-
   // x_k and q_k (in kg)
   vector<int> x(num_H);
   vector<double> q(num_H, 0.0);
   for (int ki = 0; ki < num_H; ki++) {
     x[ki] = ind.X[ki];
     if (x[ki]) {
-      // q_k = R_k × (max_total_demand_kg / n_open)
-      // This means: if all open hubs set R_k=1, combined inventory = max_demand
-      // × n_open/n_open = max_demand ✓
-      double q_share = max_total_demand_kg / n_open;
-      q[ki] = ind.R[ki] * q_share;
-      // Soft upper-bound by kappa: if kappa < q, cap at kappa (incur no CV
-      // here, this is design space)
-      q[ki] = std::min(q[ki], inst.kappa[ki]);
+      // q_k = R_k × kappa_k  (decoupled, reviewer-corrected encoding)
+      q[ki] = ind.R[ki] * inst.kappa[ki];
+      // kappa already acts as the upper bound by definition — no extra cap
+      // needed
     }
   }
 
@@ -212,12 +209,12 @@ void decode(Individual &ind, const DRNDInstance &inst) {
             }
           if (!reachable)
             continue;
-          // Activate this hub reactively
+          // Activate this hub reactively — q_k = R_k × kappa_k (decoupled)
           y[ki] = true;
-          // Give it its proportional share of max demand
-          double q_reactive = (ind.R[ki] > 0 ? ind.R[ki] : 0.5) *
-                              (max_total_demand_kg / n_open);
-          inventory[ki] = std::min(q_reactive, inst.kappa[ki]);
+          double q_reactive =
+              (ind.R[ki] > 0 ? ind.R[ki] : 0.5) * inst.kappa[ki];
+          inventory[ki] = q_reactive;
+
           Z1_s += sc.hub_reactive_cost[ki];
           best_ki = ki;
           break;
@@ -233,12 +230,10 @@ void decode(Individual &ind, const DRNDInstance &inst) {
         z_ik[ii] = best_ki;
         hub_load[best_ki] += D_kg;
 
-        // Mark reactive hub if not proactive
         if (!x[best_ki] && !y[best_ki]) {
           y[best_ki] = true;
           inventory[best_ki] =
-              std::min(ind.R[best_ki] * (max_total_demand_kg / n_open),
-                       inst.kappa[best_ki]);
+              (ind.R[best_ki] > 0 ? ind.R[best_ki] : 0.5) * inst.kappa[best_ki];
           Z1_s += sc.hub_reactive_cost[best_ki];
         }
 
