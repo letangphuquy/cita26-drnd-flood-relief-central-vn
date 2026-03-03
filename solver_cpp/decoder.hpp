@@ -169,7 +169,33 @@ void decode(Individual &ind, const DRNDInstance &inst) {
 
       int best_ki = -1;
       double best_hub_score = -1e18;
+
+      // Build candidate hub list: A[ii] first (preferred), then remaining
+      // sorted by distance to demand node i (ascending) — per feedback.
+      int pref_ki = (ind.A.empty()) ? -1 : (int)(ind.A[ii] % num_H);
+      // Compute distances from demand i to all hubs for fallback ordering
+      int di = i; // node index of demand
+      vector<pair<double, int>> dist_order;
+      dist_order.reserve(num_H);
       for (int ki = 0; ki < num_H; ki++) {
+        if (ki == pref_ki)
+          continue; // preferred hub tried first separately
+        int hi = inst.hub_idx[ki];
+        double dx = inst.lon[di] - inst.lon[hi];
+        double dy = inst.lat[di] - inst.lat[hi];
+        dist_order.push_back({dx * dx + dy * dy, ki});
+      }
+      std::sort(dist_order.begin(), dist_order.end());
+
+      // Candidate list: [preferred hub] + [rest by distance]
+      vector<int> candidates;
+      candidates.reserve(num_H);
+      if (pref_ki >= 0)
+        candidates.push_back(pref_ki);
+      for (auto &[d, ki] : dist_order)
+        candidates.push_back(ki);
+
+      for (int ki : candidates) {
         if (!active[ki] && !y[ki])
           continue;
         int k = inst.hub_idx[ki];
@@ -178,6 +204,7 @@ void decode(Individual &ind, const DRNDInstance &inst) {
         for (int m = 0; m < num_M; m++) {
           if (sc.acc(m, i, k)) {
             reachable = true;
+
             umin(best_t, inst.C_time[m][i][k]);
           }
         }
