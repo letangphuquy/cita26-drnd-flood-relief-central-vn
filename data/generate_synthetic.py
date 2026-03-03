@@ -59,7 +59,7 @@ ALL_REAL_NODES = [
     # ── Demand nodes (representative flood-prone communes / districts) ──
     (15.8732, 108.3341, "Hoi_An_City",            "demand"),
     (15.9374, 108.3036, "Dien_Ban_District",       "demand"),
-    (15.8598, 108.2073, "Nui_Thanh_District",      "demand"),
+    (15.4300, 108.2073, "Nui_Thanh_District",      "demand"),  # Fixed: was 15.86, near Chu Lai airport
     (15.7562, 108.2461, "Thang_Binh_District",     "demand"),
     (16.0752, 108.1491, "Dai_Loc_District",        "demand"),
     (15.9867, 107.9883, "Dong_Giang_District",     "demand"),
@@ -70,7 +70,7 @@ ALL_REAL_NODES = [
     (15.9421, 108.2631, "Viet_An_Commune",         "demand"),
     (16.0123, 108.0961, "Que_Son_District",        "demand"),
     (16.1543, 108.2871, "Phu_Ninh_District",       "demand"),
-    (15.8001, 108.3612, "Tam_Ky_City",             "demand"),
+    (15.5600, 108.3600, "Tam_Ky_City",             "demand"),  # Fixed: was 15.80, correct city center
     (16.4321, 107.9321, "Huong_Tra_District",      "demand"),
     (16.4612, 107.7832, "Huong_Thuy_District",     "demand"),
     (16.3421, 108.0012, "Nam_Dong_District",       "demand"),
@@ -85,7 +85,7 @@ ALL_REAL_NODES = [
     (15.8721, 108.0841, "Thanh_Khe_District",      "demand"),
     (16.2432, 108.0762, "Hoa_Vang_District",       "demand"),
     (15.7321, 108.1432, "Phu_Yen_Commune",         "demand"),
-    (15.9987, 107.8341, "Bac_Tra_My",              "demand"),
+    (15.3200, 107.8341, "Bac_Tra_My",              "demand"),  # Fixed: was 15.99, hydro dam area
     (15.8453, 107.9872, "Nam_Tra_My",              "demand"),
     (15.6721, 108.0341, "Hiep_Duc_District",       "demand"),
     (15.5631, 108.2541, "Tien_Phuoc_District",     "demand"),
@@ -138,7 +138,7 @@ ALL_REAL_NODES = [
     (15.0001, 107.9231, "Tra_Bong_District",       "demand"),
     (14.9321, 108.1431, "Nghia_Hanh_District",     "demand"),
     (14.8541, 108.3201, "Tu_Nghia_District",       "demand"),
-    (14.7821, 108.4801, "Quang_Ngai_City",         "demand"),
+    (15.1200, 108.4801, "Quang_Ngai_City",         "demand"),  # Fixed: was 14.78 (was in Binh Dinh!)
     (14.9012, 108.5601, "Son_Tinh_District",       "demand"),
     (15.1231, 108.6271, "Binh_Son_District",       "demand"),
     (15.6121, 107.4031, "Khue_Trung_Valley",       "demand"),
@@ -162,7 +162,7 @@ ALL_REAL_NODES = [
     (15.5321, 107.5031, "Ca_Lu_Commune",           "demand"),
     # ── Hub candidates (elevated, safe logistics facilities) ──
     (16.0544, 108.2022, "Da_Nang_Airport_Hub",     "hub"),
-    (15.8000, 108.3300, "Tam_Ky_Logistics_Hub",    "hub"),
+    (15.5600, 108.3300, "Tam_Ky_Logistics_Hub",    "hub"),     # Fixed: aligned with corrected Tam_Ky_City
     (16.4601, 107.5961, "A_Luoi_Relief_Center",    "hub"),
     (15.9700, 107.8600, "Dong_Giang_Rescue_Stn",   "hub"),
     (15.6400, 108.2100, "Thang_Binh_Depot",        "hub"),
@@ -184,7 +184,7 @@ ALL_REAL_NODES = [
     (15.4100, 107.5600, "Son_Ha_Hub",               "hub"),
     # ── Origins (external supply: military, INGOs, port logistics) ──
     (16.1124, 108.1948, "Hai_Van_Pass_North",      "origin"),  # QL1A Pass
-    (15.6800, 108.3100, "Dung_Quat_Port",          "origin"),  # Industrial port
+    (15.4000, 108.3100, "Dung_Quat_Port",          "origin"),  # Fixed: was 15.68, actual Dung Quat port lat
     # Additional origins for LARGE instance
     (15.7500, 108.4700, "Chu_Lai_Airport",         "origin"),  # Military airport
     (16.8800, 107.5500, "Thuan_An_Port",           "origin"),  # Coastal port
@@ -193,7 +193,7 @@ ALL_REAL_NODES = [
     (15.3600, 107.8900, "Tra_Bong_Supply",         "origin"),  # Inland supply
     (16.0100, 108.6400, "Da_Nang_Seaport",         "origin"),  # Main seaport
     (16.9700, 107.7700, "Hue_Train_Station",       "origin"),  # Rail supply
-    (15.1200, 109.0100, "Ly_Son_Island_Supply",    "origin"),  # Island supply
+    (15.3800, 109.1000, "Ly_Son_Island_Supply",    "origin"),  # Fixed: was 15.12/109.01, actual island position
     (16.4900, 108.2300, "Lang_Co_Beach_Base",      "origin"),  # Beach landing
     (14.5700, 108.9800, "Duc_Pho_Harbor",          "origin"),  # Southern harbor
 ]
