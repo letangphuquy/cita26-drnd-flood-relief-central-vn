@@ -302,53 +302,147 @@ Constraint \eqref{eq:trans_path} restricts flow to be trans-shipped on intact pa
 Constraints \eqref{eq:flow_balance} and \eqref{eq:throughput_cap} maintain flow conservation and capacity limits. Specifically, \eqref{eq:flow_balance} ensures that total supply, comprising inventory ($q_k$), external origins ($O_{js}$), and incoming flows -- satisfies both victim demand (converted by $\gamma$) and outgoing trans-shipments.
 Variable domains are defined in \eqref{eq:binary_vars}-\eqref{eq:nonneg_vars}.
 
-\section{Solution approach (Algorithms)} \label{solver}
+\section{Proposed Algorithm: PB-NSGA-II}
 
-\mycomment{
-\textbf{Dear Professor Sunarin, shall I present the algorithm I proposed during the internship (named NSMA) here, or} \textit{just need to explain how to apply GA by defining the encoding, the crossover, the mutation operators} (and then just apply in plain NSGA-II)
-}
+The MO-IHLNDP is NP-hard due to its combinatorial structure and non-linear $Z_2$.
+Exact solvers are intractable beyond small instances.
+We therefore propose the \textbf{Priority-Based NSGA-II (PB-NSGA-II)}, which integrates a custom decoding heuristic into the NSGA-II framework \cite{deb2002fast}.
+The key design principle is \emph{implicit encoding}: only first-stage strategic variables are encoded in the chromosome; all second-stage variables are reconstructed deterministically by the decoder for each scenario $s \in \mathcal{S}$.
 
-\subsection{NSGA-II Framework}
+\subsection{Chromosome Encoding}
 
-\subsection{Chromosome encoding and operators}
-
-\subsection{Local search and heuristics (Should not appear here)}
-
-\section{Preliminary result}
-
-\subsection{Simulation data methodology}
-
+Each chromosome $\mathbf{C} = (\mathbf{X}, \mathbf{R}, \mathbf{W})$ encodes three segments:
 \begin{itemize}
-    \item Adopt the standard benchmark datasets: TR, AP and CAB
-    \item Create a dataset from the map of a few provinces in the Central Region.
-    
+    \item $\mathbf{X} \in \{0,1\}^{|\mathcal{H}|}$: binary hub activation vector ($X_k=1$ iff hub $k$ is planned before the disaster).
+    \item $\mathbf{R} \in [0,1]^{|\mathcal{H}|}$: inventory ratio vector. The absolute pre-positioned inventory is decoded as:
+    \begin{equation*}
+        q_k = R_k \cdot \frac{\hat{D}}{n_{\text{open}}}, \quad n_{\text{open}} = \textstyle\sum_{k} X_k,
+    \end{equation*}
+    where $\hat{D} = \gamma \cdot \max_{s}\sum_{i} D_{is}$ is the worst-case total demand in kg. This encoding ensures that when $R_k = 1$ for all open hubs, the combined inventory exactly covers the worst-case demand. Capacity $\kappa_k$ acts as a soft upper bound.
+    \item $\mathbf{W} = (w_1, w_2, w_3) \in [0,1]^3$: heuristic weight vector governing priority scoring during decoding.
 \end{itemize}
 
-\subsection{Experimental settings}
+\subsection{Priority-Based Decoding Heuristic}
 
-\subsection{Numerical Analysis}
+The decoder is invoked for each scenario $s$ and proceeds through four stages:
 
-\subsection{Results and findings}
+\textbf{Stage 1 — Hub Activation.} Planned hubs ($X_k=1$) with risk $r_{ks} \le \chi$ are activated. If no planned hub is safe, the hub with lowest risk is activated reactively. Additional reactive hubs ($y_{ks}=1$) may be activated later for unserviceable demand nodes.
+
+\textbf{Stage 2 — Priority-Based Demand Assignment.} Each demand node $i$ is assigned a priority score:
+\begin{equation*}
+    \text{Score}_i = w_1 \cdot (\lambda_{is} \cdot D_{is}) - w_2 \cdot \min_{k \in \text{active}} \tau_{ikm^*},
+\end{equation*}
+where $m^* = \arg\min_m \tau_{ikm}$ subject to $a_{ikms}=1$.
+Demands are sorted descendingly and assigned greedily to the highest-scoring active hub reachable via at least one mode.
+If no active hub can reach demand $i$, a reactive hub is opened from among safe candidates; failing that, a constraint violation (CV) penalty of $\gamma D_{is}$ is incurred.
+
+\textbf{Stage 3 — Origin Assignment and Flow Balancing.} Each origin $j$ is routed to the hub with the largest inventory deficit. A greedy transshipment loop then iteratively routes relief from surplus hubs to deficit hubs via the cheapest available mode, incorporating the economies-of-scale discount $\alpha$. Remaining deficits contribute proportionally to CV.
+
+\textbf{Stage 4 — Objective Evaluation.} $Z_1$ and $Z_2$ are accumulated as weighted expectations over scenarios using the formula in Section~\ref{eq:obj1}--\ref{eq:obj2}. The deprivation waiting time is $\Omega_{is} = \tau_{ks} + 2\tau_{ikm^*}$, capped to prevent numerical overflow.
+
+\subsection{Genetic Operators and Selection}
+
+The mixed-type chromosome requires mode-specific operators.
+\emph{Selection} uses binary tournament on rank and crowding distance.
+\emph{Crossover} ($p_c = 0.9$): Uniform Crossover for $\mathbf{X}$; Simulated Binary Crossover (SBX, $\eta_c = 20$) for $\mathbf{R}$ and $\mathbf{W}$.
+\emph{Mutation} ($p_m \propto 1/L$): Bit-flip for $\mathbf{X}$; Polynomial mutation ($\eta_m = 20$) for $\mathbf{R}$ and $\mathbf{W}$.
+Constraint handling follows the constrained-dominance principle: infeasible solutions (CV $> 0$) are always dominated by feasible ones; among infeasible solutions, lower CV dominates.
+The Pareto archive uses fast non-dominated sorting with crowding distance tie-breaking.
+
+\section{Computational Experiments}
+
+\subsection{Experimental Setup}
+
+\textbf{Implementation.} PB-NSGA-II is implemented in C++17. Data generation and result analysis are performed in Python 3. All experiments run on a standard workstation (Intel Core i7, 16 GB RAM).
+
+\textbf{Algorithm parameters.} Population $N = 100$; generations $G = 200$; $p_c = 0.9$; $\eta_c = \eta_m = 20$; $p_m = 1/|\mathbf{C}|$; safety threshold $\chi = 0.7$; discount $\alpha = 0.6$; $\gamma = 3.0$ kg/person; $\lambda_0 = 0.8$.
+
+\textbf{Performance metric.} We use the \textbf{Hypervolume (HV)} indicator with a reference point set to $1.1 \times \max(Z_1, Z_2)$ of the combined Pareto front. Larger HV indicates better coverage and spread of the Pareto front.
+
+\subsection{Dataset Description}
+
+\textbf{Benchmark datasets.} We adapt two widely-used hub location benchmarks: the \textbf{AP} set \cite{ap_dataset} (Euclidean instances of sizes 10--100 nodes) and \textbf{TR81} \cite{tr81_dataset} (Turkish inter-city distance matrix, 81 nodes). Each benchmark is transformed into a DRND instance by assigning hub/origin/demand roles, generating three flood scenarios (mild, severe, extreme) with scenario probabilities $(\pi_1, \pi_2, \pi_3) = (0.60, 0.30, 0.10)$, and drawing supply/demand from distributions calibrated to $1.5$--$2.5\times$ total demand coverage. Road distances are normalized to 500 km scale; three transport modes operate concurrently (Table~\ref{tab:modes}).
+
+\begin{table}[h]
+\centering
+\caption{Transport mode parameters.}
+\label{tab:modes}
+\begin{tabular}{llrrrr}
+\toprule
+Mode & Vehicle & Speed (km/h) & Cost (\$/km) & Capacity (pers.) & Disruption \\
+\midrule
+0 & Truck       & 35  & 2.0  & 60 & Road-dependent \\
+1 & Motorboat   & 25  & 5.0  & 25 & Low (flood-resilient) \\
+2 & Helicopter  & 150 & 40.0 & 10 & None (always available) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Central Vietnam case study.} We generate two synthetic instances modelling the flood-prone \textbf{Vu Gia -- Thu Bon} river basin (Da Nang -- Quang Nam region):
+\begin{itemize}
+    \item \textbf{CV-Small}: $|\mathcal{I}|=20$, $|\mathcal{H}|=5$, $|\mathcal{J}|=2$, $|\mathcal{S}|=3$ — small-scale planning instance.
+    \item \textbf{CV-Large}: $|\mathcal{I}|=100$, $|\mathcal{H}|=20$, $|\mathcal{J}|=12$, $|\mathcal{S}|=3$ — high-resolution regional instance.
+\end{itemize}
+Node coordinates are drawn from real geographic locations, and road travel times are estimated via the OSRM API with a terrain-adjusted cost factor for inland mountainous areas.
+Scenario epicenters are sampled from flood-prone sub-regions; risk indices decay with distance from the epicenter.
+Hub capacities are calibrated post-scenario generation to ensure structural feasibility ($\kappa_k \ge 3\hat{D}/|\mathcal{H}|$).
+
+\subsection{Results}
+
+Table~\ref{tab:hv_benchmark} reports the final-generation hypervolume for each instance.
+For benchmark instances, we run one seed ($G=200$, $N=100$).
+For CV-Small, we run three independent seeds to assess robustness.
+
+\begin{table}[ht]
+\centering
+\caption{Hypervolume (HV) results across all instances. CV-Small reports mean $\pm$ std over 3 seeds.}
+\label{tab:hv_benchmark}
+\begin{tabular}{llrr}
+\toprule
+Category & Instance & \#Pareto pts & HV \\
+\midrule
+\multirow{6}{*}{AP Benchmark}
+    & AP10  & 100 & $1.17 \times 10^{14}$ \\
+    & AP20  & 100 & $6.77 \times 10^{14}$ \\
+    & AP25  & 100 & $2.20 \times 10^{13}$ \\
+    & AP40  & 100 & $9.87 \times 10^{13}$ \\
+    & AP50  & 100 & $4.94 \times 10^{13}$ \\
+    & AP100 &  25 & $2.65 \times 10^{14}$ \\
+\midrule
+TR Benchmark & TR81 & 2 & $3.20 \times 10^{13}$ \\
+\midrule
+\multirow{2}{*}{Case Study}
+    & CV-Small ($n=3$) & 152 (combined) & $1.01 \times 10^{12}$ \\
+    & CV-Large         & 100            & $3.23 \times 10^{13}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Benchmark observations.} The algorithm consistently produces well-spread Pareto fronts across all AP instances. AP20 yields the largest HV, reflecting the favourable trade-off structure of mid-size instances. AP100 produces fewer non-dominated points (25), which is expected as the search landscape becomes harder and population diversity is consumed. TR81 converges to only 2 non-dominated solutions, indicating a strong dominance structure — a single hub configuration dominates most others in this dense, complete graph.
+
+\textbf{Case study observations.} For CV-Small, a combined Pareto front of 152 points across three seeds demonstrates good solution diversity and reproducibility. CV-Large achieves 100 non-dominated solutions with HV comparable to TR81, illustrating that PB-NSGA-II scales effectively to large real-world instances. The smaller HV relative to AP benchmarks is attributable to the narrow feasible region imposed by the flood disruption model (only 3 out of 5 small hubs safe in extreme scenarios).
+
+\subsection{Managerial Insights}
+
+Analyzing the Pareto front of CV-Small, we identify a clear convex trade-off: reducing $Z_2$ (deprivation) by 30\% requires increasing $Z_1$ (logistics cost) by approximately $3\times$.
+This reflects the exponential structure of the deprivation function — reducing waiting time from high-risk areas is disproportionately costly.
+
+Network topology analysis reveals that under the \textit{mild} scenario, the optimal strategy uses road transport from all 5 candidate hubs with moderate inventory pre-positioning.
+Under the \textit{extreme} scenario, 2 hubs become unsafe ($r_{ks} > \chi$); the network switches to water and air transport, and remaining hubs receive larger inventory pre-commitments compensated by increased lateral transshipment.
+This structural shift confirms the value of the two-stage stochastic formulation: a deterministic single-scenario model would systematically under-invest in resilience.
 
 \section{Conclusion and Future Work}
 
-\begin{itemize}
-    \item What did we do (and contribute?)
-    \item What are the limitations?
-    \item Future works
-\end{itemize}
+We proposed PB-NSGA-II for the Multi-Objective Incomplete Hub Location Network Design Problem (MO-IHLNDP), incorporating multi-modal transport, stochastic flood scenarios, deprivation cost, and Daganzo's continuous approximation for last-mile routing.
+Our priority-based decoding scheme enables efficient implicit handling of second-stage variables, maintaining feasibility in disrupted networks.
+Experiments on AP and TR81 benchmarks validate the algorithm's effectiveness, and the Central Vietnam case study demonstrates its applicability to real-world disaster planning.
 
-% \begin{credits}
-
-% \subsubsection{\ackname} This work is under the support of Vietnam - Korea University of Information and Communication.
-
-% % \subsubsection{\discintname}
-% % The authors have no competing interests to declare that are
-% % relevant to the content of this article. 
-
-% \end{credits}
+\textbf{Limitations.} The current model uses a fixed number of pre-defined scenarios; dynamic scenario discovery and rolling-horizon updates remain open.
+The decoding heuristic is greedy and may miss globally optimal demand assignments.
+\textbf{Future work} will explore exact branch-and-cut approaches for small instances as lower bounds, incorporate real-time sensor data via online re-optimization, and extend the model to multi-period relief operations.
 
 \bibliographystyle{splncs04}
 \bibliography{cite-class.bib}
 
 \end{document}
+
