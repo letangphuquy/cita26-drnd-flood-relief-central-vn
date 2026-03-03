@@ -1,0 +1,27 @@
+Để làm thực nghiệm, cần quán triệt bốn vấn đề:
+1. Dữ liệu
+2. Thiết lập thí nghiệm
+3. Kết quả thí nghiệm
+4. Phân tích và Finding
+
+=======================
+1. Dữ liệu (prefix: data-)
+Phần 1: Dữ liệu tĩnh
+- Khu vực cần quan tâm: Đà Nẵng (gồm Đà Nẵng và Quảng Nam cũ), Huế.
+- Spatial discretization: Phân chia các khu vực địa lý thành các vùng lưới. Lưới ở đây không cần phải có hình dạng ô vuông và có thể không đều nhau. Ideally, diện tích của chúng phải bằng nhau, và ta chỉ xét các vùng đất liền.
+- Từ bản đồ lưới này, dựng đồ thị phẳng.
+- Thu thập dữ liệu để đánh giá risk score heatmap (risk: lũ lụt), dựa trên một phương pháp tính điểm và tập hợp các tiêu chí cụ thể. Hãy tham khảo các paper "Decision support framework for location selection and disaster relief network design jhlscm-11-2016-0040.pdf", "Robust reliable humanitarian relief network design an integration of shelter and supply facility location s10479-018-2758-6.pdf". Lưu một biến phụ -- auxiliary risk $r^a_u$ thể hiện đặc trưng nội tại của mỗi node vị trí địa lý mà không phụ thuộc vào kịch bản.
+- Xây dựng tập hợp các vùng/ tọa độ an toàn, rộng thoáng, sức chứa lớn có thể đặt Hub (tạo tập |H|).
+- Dựa trên diện tích của các địa điểm Hub candidates, dựng tham số H_k, kappa_k và c_k.
+- Xây dựng tập hợp các khu vực đô thị (tạo tập |I| và |J|).
+- Dựa trên địa hình thực tế, draft ma trận C_{uvm} và tau_{uvm}
+
+Phần 2: Thiết lập kịch bản.
+- Probabilistic data sampling model (dựa trên xác suất chứ không pre-judice và gán hẳn dữ liệu).
+- Epicenter stratregy: Sample ra ngẫu nhiên một vài điểm là tâm thảm họa. Những điểm xung quanh đó có cường độ thảm họa giảm dần. 
+- Dựa trên các seed (là các tâm vùng thảm họa, ở trên), giả lập dữ liệu:
+   + Demand $D$
+   + accessibility matrix $a$ -- phản ánh việc đứt gãy hạ tầng, và scenario-based torquoise constant $\phi$ (as line circuity in Dazango formula). Chúng được adjusted hợp lý theo kịch bản.
+- Origins được sample và generate từ những vùng không bị struck bởi disaster và có risk index thấp.
+
+- Risk index được sinh đặc thù theo từng vùng. Có những vùng an toàn (r^a_u thấp) thì biên độ hẹp hơn và risk tối đa cũng thấp hơn. Ngược lại, vùng rủi ro (r^a_u cao) thì more prone to disaster và more vulnerable. Mỗi vùng được assign một interval of risk, gắn liền với bước 1 ở trên (từ dữ liệu bản đồ).

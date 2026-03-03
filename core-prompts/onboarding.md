@@ -9,11 +9,11 @@ Tôi cần bạn tiến hành triển khai (implementation) toàn bộ các thí
 4. Sử dụng Open API của Map để tạo dữ liệu tổng hợp (synthetic dataset) tuân theo phương pháp luận chặt chẽ như trong 1. Mục tiêu là tạo dữ liệu case study thực tế cho khu vực chịu mưa nhiều nhất và thường xuyên mỗi năm trong miền Trung, với địa hình đa dạng, nhằm mục đích illustration.  Tham khảo dữ liệu bản đồ Open-Source. Gợi ý:
 - Vị trí: Lấy toạ độ các điểm thực tế khu vực ngập lụt miền Trung (tất cả các nodes nằm trong một bán kính khoảng 200km, ví dụ ở dải tần hẹp hoặc quanh vùng Sông Vu Gia - Thu Bồn, đảm bảo lưới kích thước vừa phải).
 - API: Sử dụng OSRM Open API kết hợp phương pháp Spatial Discretization lấy được ma trận thời gian và khoảng cách đường bộ ($C_{uvm}, \tau_{uvm}$) lưu ra file tham số cho solver C++.
-5. Lập trình thuật toán solver bằng ngôn ngữ C++ hoặc/ và Python. Theo sát gợi ý trong `thoughts-algorithm.txt`, `algorithms.md`, `project_suggestion.md` và paper ở `ref\NSGA-II 4235.996017.pdf`.
+5. Lập trình thuật toán solver bằng ngôn ngữ C++ hoặc/ và Python. Theo sát gợi ý trong `algorithm-1st-thoughts.txt`, `algorithms.md`, `project_suggestion.md` và paper ở `ref\NSGA-II 4235.996017.pdf`.
 6. Tạo script pipeline thuận tiện. Tôi sẽ là người chạy thí nghiệm. Bạn sẽ hỗ trợ phân tích số liệu.
 7. Hoàn thiện bài paper (Latex source) trong thư mục `paper` sử dụng template `llncs` (Springer Lecture notes).
 
-Những nội dung quan trọng nhất đã được tóm tắt trong các file `project_summary.md`, `project_suggestion.md`, `thoughts-algorithm.txt`, `algorithms.md`, `experiments-guide.md`.
+Những nội dung quan trọng nhất đã được tóm tắt trong các file `data-strategy.txt`, `project_summary.md`, `project_suggestion.md`, `algorithm-1st-thoughts.txt`, `algorithms.md`, `experiments-guide.md`.
 
 Đồng thời, tôi cũng đã phát triển một PoC hoàn thiện cho khung giải thuật. Bạn có thể tham khảo implementation tại đó. Giải thuật đó được phát triển dựa trên NSGA-II, kết hợp với Local Search heuristics và data structure để hình thành nên thuật toán NSMA. Tuy nhiên, thuật toán đó được áp dụng cho một bài toán khác, đó là bài toán HLP ba mục tiêu áp dụng cho đường sắt. Chi tiết xem thêm ở thư mục `intern`.
 
