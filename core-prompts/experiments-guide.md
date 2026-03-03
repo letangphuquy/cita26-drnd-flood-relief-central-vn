@@ -1,3 +1,5 @@
+MANG TÍNH CHẤT THAM KHẢO, KHÔNG CẦN PHẢI TUÂN THỦ TOÀN BỘ.
+
 Đánh giá logic và tốc độ xử lý: Ý tưởng sử dụng mô hình "Tâm thảm họa" (Epicenter-based decay) và "Rời rạc hóa không gian" (Spatial discretization) cực kỳ xuất sắc về mặt lý thuyết. Nó biến một bộ dữ liệu giả lập (synthetic dataset) thành một mô hình bán thực tế (semi-real) có tính thuyết phục cao, đủ sức vượt qua các vòng bình duyệt khắt khe mà chỉ mất chưa tới 1 giờ để code bằng Python.
 
 Dưới đây là phần phân tích rủi ro, phản biện và quy trình triển khai chi tiết (Blueprint) cho thuật toán sinh dữ liệu, được tối ưu hóa cho tốc độ lập trình.

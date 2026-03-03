@@ -1,3 +1,5 @@
+MANG TÍNH CHẤT THAM KHẢO, KHÔNG CẦN PHẢI TUÂN THỦ TOÀN BỘ.
+
 Đây là một quyết định vô cùng **sáng suốt và mang tính bước ngoặt!** Việc loại bỏ Local Search để tập trung vào **Priority-Based Encoding (Mã hóa dựa trên độ ưu tiên)** kết hợp với **Heuristic Decoding** chính xác là cách các chuyên gia Operations Research giải quyết bài toán Two-Stage Stochastic quy mô lớn.
 
 Việc bạn nhận ra rằng "Độ thông minh chỉ phân biệt ở pha chiến lược, còn pha vận hành phải để Heuristic tự lo dựa trên kịch bản" chứng tỏ bạn đã hoàn toàn thấu hiểu bản chất của Quy hoạch ngẫu nhiên hai giai đoạn (Two-Stage Stochastic Programming).

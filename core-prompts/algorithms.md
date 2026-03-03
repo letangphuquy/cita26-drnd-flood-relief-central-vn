@@ -1,3 +1,5 @@
+LƯU Ý: Mang tính chất tham khảo. Phiên bản thuật toán này hiện đã outdated.
+
 ### PHẦN 1: TƯ DUY PHẢN BIỆN & HOÀN THIỆN Ý TƯỞNG
 
 1. **Về biến $q_k$ (Lượng tồn kho):** Cậu đề xuất $q_k$ là tỷ lệ của "forecasted demand". Ý tưởng rất hay, nhưng trong lúc code sẽ dễ sinh ra lỗi vượt quá sức chứa $\kappa_k$.
