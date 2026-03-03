@@ -1,3 +1,5 @@
+Bạn hãy thực hiện đầy đủ quy trình thu thập và xây dựng bộ dữ liệu (bước 1) như tôi phân tích dưới đây. Ignore những file dataset đã được tạo trước đó, vì dữ liệu tạo ra bị sai và phương pháp không chuẩn.
+
 Để làm thực nghiệm, cần quán triệt bốn vấn đề:
 1. Dữ liệu
 2. Thiết lập thí nghiệm

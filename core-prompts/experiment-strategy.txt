@@ -1,0 +1,46 @@
+Bạn hãy thực hiện đầy đủ quy trình thực nghiệm (bước số 2) như tôi sẽ phân tích dưới đây:
+
+Để làm thực nghiệm, cần quán triệt bốn vấn đề:
+1. Dữ liệu
+2. Thiết lập thí nghiệm
+3. Kết quả thí nghiệm
+4. Phân tích và Finding
+
+=======================
+2. Thiết lập thí nghiệm (prefix: experiment-)
+
+A. Thí nghiệm so sánh thuật toán đề xuất với baseline
+Mục tiêu: Chứng minh thuật toán đề xuất là hiệu quả.
+Settings:
+- Dataset sử dụng: standard benchmark instances. Derived from HLP datasets.
+- Sử dụng metrics: 
+  + Hyper Volume
+  + Inverted Generational Distance
+  + Running Time
+  + Convergence Rate
+Tasks:
+- Impelement hai thuật toán
+- Thiết lập tham số của thuật toán GA. popsize, num_gen, mutation_rate, crossover_rate, elitism_size, tournament_size, ...
+- Chạy thí nghiệm 20 lần, mỗi lần lấy một seed random khác nhau. 
+Lấy mean và standard value để measure metrics robustly.
+- Với mỗi lần chạy, run thuật toán tiến hóa trên toàn bộ kịch bản và đánh giá.
+- Plot Pareto front figures
+
+B. Model Validation experiments
+1. Xác thực Mô hình (Model Validation & Toy Examples)
+2. Phân tích Giới hạn Tính toán (Computational Tractability)
+3. Phân tích Độ nhạy Tham số (Sensitivity Analysis)
+
+C. Managerial Insights
+Mục tiêu: Chứng minh độ hữu dụng của toàn bộ framework.
+Output:
+- Solution cho dữ liệu thực tế.
+- Visualization trên bản đồ thật.
+- Phân tích kết quả và đánh giá.
+Tasks:
+- Xây dựng bộ dataset thực tế (theo như bước 1)
+- Chạy giải thuật đề xuất trên bộ dataset thực tế
+- Đánh giá kết quả và đưa ra các insights
+- Trực quan hóa kết quả trên bản đồ
+- Vẽ biểu đồ so sánh các kịch bản
+- Plot Pareto front figures
