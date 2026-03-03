@@ -1,32 +1,56 @@
-// decoder.hpp — Priority-Based Heuristic Decoder for MO-IHLNDP
+// decoder.hpp — Priority-Based Heuristic Decoder for MO-IHLNDP (v2)
 //
-// KEY DESIGN — q_k encoding (from thoughts-algorithm.txt):
-//   q_k = R_k × (max_total_demand_kg / n_open_hubs)
-//   where max_total_demand_kg = γ × max_s{ Σ_i D_{is} }
-//   This ensures sum(q_k) covers total demand when all hubs stock R_k ≈ 1.
-//   The "ratio-of-total-demand" encoding gives direct, interpretable semantics
-//   and guarantees feasibility space is nonempty when R_k are reasonably large.
-//   kappa_k acts as an upper bound only (for storage space / facility
-//   constraint).
+// CHANGES FROM v1:
+//   - A[ii] is now a rotation OFFSET into the distance-sorted hub list
+//     (was: arbitrary preferred hub index, effectively unused)
+//   - Tiered hub selection:
+//       Pass 1 — first WINDOW_K=3 candidates in rotation, best-scoring
+//                among active + reachable + positive residual capacity
+//       Pass 2 — remaining candidates, first active + reachable (ignores capacity)
+//       W[5] check — proactively open a closer reactive hub if travel time
+//                    of best active hub exceeds (1-W[5]) × that time
+//   - Demand priority score: all raw components normalised to [0,1] across
+//     the demand set; Gaussian noise added for stochastic diversity (Fix A)
+//   - Score adds W[3] isolation term (most-constrained-first heuristic)
+//   - Hub score adds W[4] planned-hub bonus
+//   - hub_order_by_dist pre-computed once before scenario loop
 //
-// UNIT SYSTEM (consistent throughout):
-//   Demand  D_{is}  — persons
-//   Supply  O_{js}  — kg of relief items
-//   Inventory q_k   — kg of relief items (= demand_person × gamma)
-//   Hub load        — kg of relief items consumed
-//   Capacity kappa  — kg of relief items (upper bound on stored stock)
+// WEIGHT SEMANTICS:
+//   W[0]: demand urgency  (λ·D)              — demand sort
+//   W[1]: hub speed       (1/τ)              — hub score
+//   W[2]: residual capacity                  — hub score
+//   W[3]: demand isolation (1/num_reachable) — demand sort
+//   W[4]: planned hub preference bonus       — hub score
+//   W[5]: reactive eagerness threshold       — proactive reactive check
 //
-// 7-STEP DECODER:
-//   Step 1. Stage-1: decode x_k, compute q_k in kg
-//   Step 2. Reactive hub candidates (risk-safe inactive hubs)
-//   Step 3. Priority score for demand nodes
-//   Step 4. Demand allocation (z_{iks})
-//   Step 5. Origin assignment (z_{jks})
-//   Step 6. Greedy transshipment (balance hub inventories)
+// 7-STEP DECODER (same step numbering as v1):
+//   Step 1. Decode x_k, compute q_k = R_k × κ_k; fixed stage-1 costs
+//   Step 2. Activate planned hubs for scenario s (risk-safe)
+//   Step 3. Compute demand priority scores (normalised + noisy)
+//   Step 4. Tiered demand allocation
+//   Step 5. Origin assignment (largest-deficit-first)
+//   Step 6. Greedy transshipment (surplus→deficit)
 //   Step 7. Accumulate expected Z1 and Z2
 #pragma once
 
 #include "representation.hpp"
+
+// Stochastic noise magnitude on normalised demand priority scores
+static constexpr double DECODER_NOISE_SIGMA = 0.05;
+// Pass-1 hub candidate window size
+static constexpr int    WINDOW_K            = 3;
+
+// ---------------------------------------------------------------------------
+// Normalise a vector to [0,1] in-place; if range≈0 set all to 0.5
+// ---------------------------------------------------------------------------
+static void normalise_inplace(vector<double> &v) {
+  if (v.empty()) return;
+  double mn = *std::min_element(all(v));
+  double mx = *std::max_element(all(v));
+  double rng = mx - mn;
+  if (rng < EPS) { std::fill(all(v), 0.5); return; }
+  for (auto &x : v) x = (x - mn) / rng;
+}
 
 // ---------------------------------------------------------------------------
 void decode(Individual &ind, const DRNDInstance &inst) {
@@ -40,336 +64,331 @@ void decode(Individual &ind, const DRNDInstance &inst) {
   ind.Z2 = 0.0;
   ind.CV = 0.0;
 
-  // ── STEP 1: Decode Stage-1 variables ─────────────────────────────────
-  // NEW encoding (R1.2 fix): q_k = R_k × kappa_k
-  //   R_k ∈ [0,1] encodes the FRACTION OF HUB CAPACITY to pre-stock.
-  //   Fully decoupled from X: the meaning of R_k is independent of which
-  //   other hubs are open or closed. Semantics: R_k=1 → stock hub to its
-  //   physical limit; R_k=0 → empty hub.
-  //   (Previously q_k = R_k × D̂/n_open was coupled to X via n_open.)
-  //
-  // We also pre-compute D_hat = γ × max_s{Σ D_is} for use in reactive
-  // hub inventory assignment below.
-  double max_total_demand_kg = 0.0;
-  for (int si = 0; si < num_S; si++) {
-    double td = 0.0;
-    for (int ii = 0; ii < num_I; ii++)
-      td += inst.scenarios[si].demand[inst.demand_idx[ii]];
-    umax(max_total_demand_kg, inst.gamma * td);
-  }
-
-  // x_k and q_k (in kg)
-  vector<int> x(num_H);
+  // ── STEP 1: Decode Stage-1 variables ──────────────────────────────────
+  // q_k = R_k × κ_k  (capacity-fraction encoding, fully decoupled from X)
+  vector<int>    x(num_H);
   vector<double> q(num_H, 0.0);
   for (int ki = 0; ki < num_H; ki++) {
     x[ki] = ind.X[ki];
-    if (x[ki]) {
-      // q_k = R_k × kappa_k  (decoupled, reviewer-corrected encoding)
-      q[ki] = ind.R[ki] * inst.kappa[ki];
-      // kappa already acts as the upper bound by definition — no extra cap
-      // needed
-    }
+    if (x[ki]) q[ki] = ind.R[ki] * inst.kappa[ki];
   }
 
-  // Fixed phase-1 costs (independent of scenario)
   double Z1_fixed = 0.0;
   for (int ki = 0; ki < num_H; ki++) {
     if (x[ki]) {
       Z1_fixed += inst.F_hub[ki];
-      Z1_fixed += inst.c_hold[ki] * q[ki]; // holding cost per kg
+      Z1_fixed += inst.c_hold[ki] * q[ki];
     }
   }
 
-  // ── Per-scenario evaluation ───────────────────────────────────────────
+  // ── Pre-compute hub order by Euclidean distance for each demand ────────
+  // Scenario-independent; built once and reused across all scenarios.
+  // hub_order[ii][j] = local hub index of the j-th closest hub to demand ii
+  vector<vector<int>> hub_order(num_I, vector<int>(num_H));
+  for (int ii = 0; ii < num_I; ii++) {
+    int di = inst.demand_idx[ii];
+    vector<pair<double, int>> dists;
+    dists.reserve(num_H);
+    for (int ki = 0; ki < num_H; ki++) {
+      int hi = inst.hub_idx[ki];
+      double dx = inst.lon[di] - inst.lon[hi];
+      double dy = inst.lat[di] - inst.lat[hi];
+      dists.push_back({dx * dx + dy * dy, ki});
+    }
+    std::sort(all(dists));
+    for (int j = 0; j < num_H; j++) hub_order[ii][j] = dists[j].second;
+  }
+
+  // ── Per-scenario evaluation ────────────────────────────────────────────
   for (int si = 0; si < num_S; si++) {
     const Scenario &sc = inst.scenarios[si];
-    const double pi_s = sc.prob;
+    const double    pi_s = sc.prob;
 
     double Z1_s = Z1_fixed;
     double Z2_s = 0.0;
 
-    // ── STEP 2: Reactive hub activation (y_ks) ──────────────────────
-    // A hub is usable in scenario s iff its risk r_ks ≤ χ.
-    // Proactive hubs (x_k=1) are open by default; reactive hubs (x_k=0)
-    // get activated only if needed to cover demand shortfalls.
-    vector<bool> active(num_H, false);
+    // ── STEP 2: Activate planned hubs ─────────────────────────────────
+    vector<bool>   active(num_H, false);
+    vector<bool>   y(num_H, false);
+    vector<double> inventory(num_H, 0.0);
+
     for (int ki = 0; ki < num_H; ki++) {
       int k = inst.hub_idx[ki];
       if (x[ki] && sc.risk[k] <= inst.chi) {
-        active[ki] = true;
+        active[ki]    = true;
+        inventory[ki] = q[ki];
       }
     }
-    // Ensure at least one hub is active
+    // Guarantee at least one active hub
     {
-      bool any_active = false;
-      for (int ki = 0; ki < num_H; ki++)
-        if (active[ki]) {
-          any_active = true;
-          break;
-        }
-      if (!any_active) {
-        // Activate cheapest (lowest risk) hub regardless of x_k
+      bool any = false;
+      for (int ki = 0; ki < num_H; ki++) if (active[ki]) { any = true; break; }
+      if (!any) {
         int best_ki = 0;
         double best_r = 1e9;
         for (int ki = 0; ki < num_H; ki++) {
           int k = inst.hub_idx[ki];
-          if (sc.risk[k] < best_r) {
-            best_r = sc.risk[k];
-            best_ki = ki;
-          }
+          if (sc.risk[k] < best_r) { best_r = sc.risk[k]; best_ki = ki; }
         }
         active[best_ki] = true;
+        inventory[best_ki] = q[best_ki];
       }
     }
 
-    // Working inventory per hub (kg): starts at q[ki] for proactive hubs, 0 for
-    // reactive
-    vector<double> inventory(num_H, 0.0);
-    for (int ki = 0; ki < num_H; ki++)
-      if (active[ki])
-        inventory[ki] = q[ki];
-
-    vector<bool> y(num_H,
-                   false); // reactive activation flags (for cost tracking)
-
-    // ── STEP 3: Priority scoring for demand nodes ────────────────────
-    // Score_i = W[0] × λ_{is} × D_{is}  -  W[1] × (travel-time to nearest
-    // active hub)
-    vector<double> demand_score(num_I, 0.0);
+    // ── STEP 3: Demand priority scores (normalised + stochastic) ──────
+    // Raw components
+    vector<double> raw_urgency(num_I), raw_isolation(num_I), raw_dist(num_I);
     for (int ii = 0; ii < num_I; ii++) {
-      int i = inst.demand_idx[ii];
-      double D = sc.demand[i];
+      int    i   = inst.demand_idx[ii];
+      double D   = sc.demand[i];
       double lam = inst.lambda[ii][si];
-      double min_t = inst.big_M;
+      raw_urgency[ii] = lam * D;
+
+      int    n_reach = 0;
+      double min_t   = inst.big_M;
       for (int ki = 0; ki < num_H; ki++) {
-        if (!active[ki])
-          continue;
+        if (!active[ki]) continue;
         int k = inst.hub_idx[ki];
-        for (int m = 0; m < num_M; m++)
-          if (sc.acc(m, i, k))
+        bool reachable = false;
+        for (int m = 0; m < num_M; m++) {
+          if (sc.acc(m, i, k)) {
+            reachable = true;
             umin(min_t, inst.C_time[m][i][k]);
+          }
+        }
+        if (reachable) n_reach++;
       }
-      demand_score[ii] =
-          ind.W[0] * (lam * D) - ind.W[1] * (min_t < inst.big_M ? min_t : 0.0);
+      raw_isolation[ii] = (n_reach > 0) ? 1.0 / n_reach : 1.0;
+      raw_dist[ii]      = (min_t < inst.big_M) ? min_t : 0.0;
     }
 
-    // ── STEP 4: Demand allocation (z_{iks}) ──────────────────────────
-    vector<int> demand_order(num_I);
+    // Normalise each component to [0,1]
+    normalise_inplace(raw_urgency);
+    normalise_inplace(raw_isolation);
+    normalise_inplace(raw_dist);
+
+    // Weighted score + Gaussian noise
+    vector<double> demand_score(num_I);
+    for (int ii = 0; ii < num_I; ii++) {
+      demand_score[ii] = ind.W[0] * raw_urgency[ii]
+                       + ind.W[3] * raw_isolation[ii]
+                       - ind.W[1] * raw_dist[ii]
+                       + rand_gauss(DECODER_NOISE_SIGMA);
+    }
+
+    // ── STEP 4: Tiered demand allocation ──────────────────────────────
+    vector<int>    demand_order(num_I);
     std::iota(all(demand_order), 0);
     std::sort(all(demand_order),
               [&](int a, int b) { return demand_score[a] > demand_score[b]; });
 
-    vector<int> z_ik(num_I, -1);
-    vector<double> hub_load(num_H, 0.0); // kg consumed
+    vector<int>    z_ik(num_I, -1);
+    vector<double> hub_load(num_H, 0.0);
+    const int      K = std::min(WINDOW_K, num_H);
 
     for (int ii : demand_order) {
-      int i = inst.demand_idx[ii];
-      double D = sc.demand[i];
-      double D_kg = inst.gamma * D; // persons → kg
+      int    i    = inst.demand_idx[ii];
+      double D    = sc.demand[i];
+      double D_kg = inst.gamma * D;
 
-      int best_ki = -1;
-      double best_hub_score = -1e18;
+      // Build rotation: candidate[j] = hub_order[ii][(A[ii]+j) % |H|]
+      int offset = ind.A[ii] % num_H;
 
-      // Build candidate hub list: A[ii] first (preferred), then remaining
-      // sorted by distance to demand node i (ascending) — per feedback.
-      int pref_ki = (ind.A.empty()) ? -1 : (int)(ind.A[ii] % num_H);
-      // Compute distances from demand i to all hubs for fallback ordering
-      int di = i; // node index of demand
-      vector<pair<double, int>> dist_order;
-      dist_order.reserve(num_H);
-      for (int ki = 0; ki < num_H; ki++) {
-        if (ki == pref_ki)
-          continue; // preferred hub tried first separately
-        int hi = inst.hub_idx[ki];
-        double dx = inst.lon[di] - inst.lon[hi];
-        double dy = inst.lat[di] - inst.lat[hi];
-        dist_order.push_back({dx * dx + dy * dy, ki});
-      }
-      std::sort(dist_order.begin(), dist_order.end());
+      int    best_ki           = -1;
+      double best_hub_score    = -1e18;
+      double best_travel_time  = inst.big_M;
 
-      // Candidate list: [preferred hub] + [rest by distance]
-      vector<int> candidates;
-      candidates.reserve(num_H);
-      if (pref_ki >= 0)
-        candidates.push_back(pref_ki);
-      for (auto &[d, ki] : dist_order)
-        candidates.push_back(ki);
-
-      for (int ki : candidates) {
-        if (!active[ki] && !y[ki])
-          continue;
-        int k = inst.hub_idx[ki];
-        bool reachable = false;
-        double best_t = inst.big_M;
+      // ── Pass 1: first K candidates, best-scoring with positive capacity ──
+      for (int j = 0; j < K; j++) {
+        int ki = hub_order[ii][(offset + j) % num_H];
+        if (!active[ki] && !y[ki]) continue;
+        int    k         = inst.hub_idx[ki];
+        double best_t    = inst.big_M;
+        bool   reachable = false;
         for (int m = 0; m < num_M; m++) {
-          if (sc.acc(m, i, k)) {
-            reachable = true;
-
-            umin(best_t, inst.C_time[m][i][k]);
-          }
+          if (sc.acc(m, i, k)) { reachable = true; umin(best_t, inst.C_time[m][i][k]); }
         }
-        if (!reachable)
-          continue;
-        double residual_kg = inventory[ki] - hub_load[ki];
-        double hub_score =
-            ind.W[1] * (1.0 / (best_t + EPS)) + ind.W[2] * residual_kg;
-        if (hub_score > best_hub_score) {
-          best_hub_score = hub_score;
-          best_ki = ki;
+        if (!reachable) continue;
+        double residual = inventory[ki] - hub_load[ki];
+        if (residual <= 0.0) continue; // Pass 1: requires positive residual
+        double score = ind.W[1] * (1.0 / (best_t + EPS))
+                     + ind.W[2] * residual
+                     + ind.W[4] * (x[ki] ? 1.0 : 0.0);
+        if (score > best_hub_score) {
+          best_hub_score   = score;
+          best_ki          = ki;
+          best_travel_time = best_t;
         }
       }
 
-      // If no active hub reachable: try activating a safe inactive hub (new
-      // reactive)
+      // ── Pass 2: remaining candidates, first active+reachable (ignores capacity) ──
       if (best_ki == -1) {
+        for (int j = K; j < num_H; j++) {
+          int ki = hub_order[ii][(offset + j) % num_H];
+          if (!active[ki] && !y[ki]) continue;
+          int    k      = inst.hub_idx[ki];
+          double best_t = inst.big_M;
+          bool   reachable = false;
+          for (int m = 0; m < num_M; m++) {
+            if (sc.acc(m, i, k)) { reachable = true; umin(best_t, inst.C_time[m][i][k]); }
+          }
+          if (!reachable) continue;
+          best_ki          = ki;
+          best_travel_time = best_t;
+          break;
+        }
+      }
+
+      // ── W[5] proactive reactive check ─────────────────────────────────
+      // If best active hub's travel time exceeds (1-W[5])×that time,
+      // look for a safe inactive hub that is strictly faster.
+      // W[5]≈0: open if ANY faster reactive exists; W[5]≈1: never open proactively.
+      if (best_ki != -1 && ind.W[5] < 1.0 - EPS) {
+        double threshold_t = (1.0 - ind.W[5]) * best_travel_time;
+        int    react_ki    = -1;
+        double react_best  = threshold_t; // only improve below threshold
+
         for (int ki = 0; ki < num_H; ki++) {
-          if (active[ki] || y[ki])
-            continue;
+          if (active[ki] || y[ki]) continue;
           int k = inst.hub_idx[ki];
-          if (sc.risk[k] > inst.chi)
-            continue;
-          bool reachable = false;
-          for (int m = 0; m < num_M; m++)
+          if (sc.risk[k] > inst.chi) continue;
+          for (int m = 0; m < num_M; m++) {
             if (sc.acc(m, i, k)) {
-              reachable = true;
+              double t = inst.C_time[m][i][k];
+              if (t < react_best) { react_best = t; react_ki = ki; }
               break;
             }
-          if (!reachable)
-            continue;
-          // Activate this hub reactively — q_k = R_k × kappa_k (decoupled)
-          y[ki] = true;
-          double q_reactive =
-              (ind.R[ki] > 0 ? ind.R[ki] : 0.5) * inst.kappa[ki];
-          inventory[ki] = q_reactive;
+          }
+        }
 
-          Z1_s += sc.hub_reactive_cost[ki];
-          best_ki = ki;
+        if (react_ki != -1) {
+          y[react_ki]         = true;
+          inventory[react_ki] = (ind.R[react_ki] > 0 ? ind.R[react_ki] : 0.5)
+                                * inst.kappa[react_ki];
+          Z1_s               += sc.hub_reactive_cost[react_ki];
+          best_ki             = react_ki;
+          best_travel_time    = react_best;
+        }
+      }
+
+      // ── Forced reactive / infeasible ──────────────────────────────────
+      if (best_ki == -1) {
+        // Try to open any safe inactive hub reachable from i
+        for (int ki = 0; ki < num_H; ki++) {
+          if (active[ki] || y[ki]) continue;
+          int k = inst.hub_idx[ki];
+          if (sc.risk[k] > inst.chi) continue;
+          bool reachable = false;
+          for (int m = 0; m < num_M; m++)
+            if (sc.acc(m, i, k)) { reachable = true; break; }
+          if (!reachable) continue;
+          y[ki]         = true;
+          inventory[ki] = (ind.R[ki] > 0 ? ind.R[ki] : 0.5) * inst.kappa[ki];
+          Z1_s         += sc.hub_reactive_cost[ki];
+          best_ki       = ki;
+          double best_t = inst.big_M;
+          int    bk     = inst.hub_idx[ki];
+          for (int m = 0; m < num_M; m++)
+            if (sc.acc(m, i, bk)) umin(best_t, inst.C_time[m][i][bk]);
+          best_travel_time = best_t;
           break;
         }
       }
 
       if (best_ki == -1) {
-        // Truly infeasible: dummy hub penalty
+        // Truly infeasible — BigM penalty
         ind.CV += D_kg;
-        Z1_s += inst.big_M;
-        Z2_s = std::max(Z2_s, inst.big_M);
+        Z1_s   += inst.big_M;
+        umax(Z2_s, inst.big_M);
       } else {
-        z_ik[ii] = best_ki;
+        z_ik[ii]         = best_ki;
         hub_load[best_ki] += D_kg;
 
+        // Reactive hub cost (if not already accounted for above)
         if (!x[best_ki] && !y[best_ki]) {
-          y[best_ki] = true;
-          inventory[best_ki] =
-              (ind.R[best_ki] > 0 ? ind.R[best_ki] : 0.5) * inst.kappa[best_ki];
+          y[best_ki]         = true;
+          inventory[best_ki] = (ind.R[best_ki] > 0 ? ind.R[best_ki] : 0.5)
+                               * inst.kappa[best_ki];
           Z1_s += sc.hub_reactive_cost[best_ki];
         }
 
         // Daganzo CA last-mile cost
         Z1_s += inst.theta[best_ki][ii][si];
 
-        // Deprivation: Omega_is = tau_ks + min(tau_ikm) back
+        // Deprivation: Ω = τ_ks + 2 × min travel time; cap to prevent overflow
+        int    bk = inst.hub_idx[best_ki];
         double min_t = inst.big_M;
-        int k = inst.hub_idx[best_ki];
         for (int m = 0; m < num_M; m++)
-          if (sc.acc(m, i, k))
-            umin(min_t, inst.C_time[m][i][k]);
-        double omega = sc.hub_process_time[best_ki] +
-                       2.0 * (min_t < inst.big_M ? min_t : 0.0);
-        double lam = inst.lambda[ii][si];
-        // Deprivation cost = D_is × (exp(λ × ω) − 1)
-        // Cap lam*omega to prevent double overflow (exp(710) = inf).
-        // exp(20) ≈ 5e8 still represents extreme unmet deprivation adequately.
-        double exp_arg = std::min(lam * omega, 20.0);
-        double depriv = D * std::expm1(exp_arg);
+          if (sc.acc(m, i, bk)) umin(min_t, inst.C_time[m][i][bk]);
+        double omega    = sc.hub_process_time[best_ki]
+                        + 2.0 * (min_t < inst.big_M ? min_t : 0.0);
+        double lam      = inst.lambda[ii][si];
+        double exp_arg  = std::min(lam * omega, 20.0);
+        double depriv   = D * std::expm1(exp_arg);
         umax(Z2_s, depriv);
       }
-    }
+    } // end demand loop
 
-    // ── STEP 5: Origin assignment (z_{jks}) ──────────────────────────
+    // ── STEP 5: Origin assignment (largest-deficit-first) ─────────────
     vector<double> net_inv(num_H);
     for (int ki = 0; ki < num_H; ki++)
       net_inv[ki] = inventory[ki] - hub_load[ki];
 
     for (int jj = 0; jj < num_J; jj++) {
-      int j = inst.origin_idx[jj];
-      double O = sc.supply[j]; // kg of supply at origin j
+      int    j = inst.origin_idx[jj];
+      double O = sc.supply[j];
 
-      // Assign origin to hub with largest deficit that is reachable
-      int best_ki = -1;
+      int    best_ki  = -1;
       double worst_net = 1e18;
       for (int ki = 0; ki < num_H; ki++) {
-        if (!active[ki] && !y[ki])
-          continue;
-        int k = inst.hub_idx[ki];
+        if (!active[ki] && !y[ki]) continue;
+        int  k         = inst.hub_idx[ki];
         bool reachable = false;
         for (int m = 0; m < num_M; m++)
-          if (sc.acc(m, j, k)) {
-            reachable = true;
-            break;
-          }
-        if (!reachable)
-          continue;
-        if (net_inv[ki] < worst_net) {
-          worst_net = net_inv[ki];
-          best_ki = ki;
-        }
+          if (sc.acc(m, j, k)) { reachable = true; break; }
+        if (!reachable) continue;
+        if (net_inv[ki] < worst_net) { worst_net = net_inv[ki]; best_ki = ki; }
       }
       if (best_ki == -1) {
-        // fallback: any active hub
         for (int ki = 0; ki < num_H; ki++)
-          if (active[ki] || y[ki]) {
-            best_ki = ki;
-            break;
-          }
+          if (active[ki] || y[ki]) { best_ki = ki; break; }
       }
       if (best_ki != -1) {
-        int k = inst.hub_idx[best_ki];
+        int    k      = inst.hub_idx[best_ki];
         double best_c = inst.best_cost(j, k, si);
-        Z1_s += best_c * O;
+        Z1_s         += best_c * O;
         net_inv[best_ki] += O;
       }
     }
 
-    // ── STEP 6: Greedy transshipment ──────────────────────────────────
-    // Iteratively route goods from max-surplus hub to max-deficit hub.
+    // ── STEP 6: Greedy transshipment (surplus → deficit) ──────────────
     for (int iter = 0; iter < num_H * 2; iter++) {
-      int src_ki = -1, dst_ki = -1;
+      int    src_ki = -1, dst_ki = -1;
       double max_surplus = EPS, max_deficit = EPS;
       for (int ki = 0; ki < num_H; ki++) {
-        if (!active[ki] && !y[ki])
-          continue;
-        if (net_inv[ki] > max_surplus) {
-          max_surplus = net_inv[ki];
-          src_ki = ki;
-        }
-        if (net_inv[ki] < -max_deficit) {
-          max_deficit = -net_inv[ki];
-          dst_ki = ki;
-        }
+        if (!active[ki] && !y[ki]) continue;
+        if ( net_inv[ki] >  max_surplus) { max_surplus =  net_inv[ki]; src_ki = ki; }
+        if (-net_inv[ki] >  max_deficit) { max_deficit = -net_inv[ki]; dst_ki = ki; }
       }
-      if (src_ki == -1 || dst_ki == -1)
-        break;
-      int k = inst.hub_idx[src_ki];
-      int h = inst.hub_idx[dst_ki];
+      if (src_ki == -1 || dst_ki == -1) break;
+      int    k      = inst.hub_idx[src_ki];
+      int    h      = inst.hub_idx[dst_ki];
       double best_c = inst.big_M;
       for (int m = 0; m < num_M; m++)
-        if (sc.acc(m, k, h))
-          umin(best_c, inst.C_cost[m][k][h]);
-      if (best_c >= inst.big_M)
-        break;
+        if (sc.acc(m, k, h)) umin(best_c, inst.C_cost[m][k][h]);
+      if (best_c >= inst.big_M) break;
       double flow = std::min(max_surplus, max_deficit);
-      Z1_s += inst.alpha * best_c * flow;
+      Z1_s           += inst.alpha * best_c * flow;
       net_inv[src_ki] -= flow;
       net_inv[dst_ki] += flow;
     }
 
-    // Residual deficits → constraint violation
+    // Residual deficits → CV
     for (int ki = 0; ki < num_H; ki++)
-      if (net_inv[ki] < -EPS)
-        ind.CV += -net_inv[ki];
+      if (net_inv[ki] < -EPS) ind.CV += -net_inv[ki];
 
-    // ── STEP 7: Accumulate expected objectives ────────────────────────
+    // ── STEP 7: Accumulate expected objectives ─────────────────────────
     ind.Z1 += pi_s * Z1_s;
     ind.Z2 += pi_s * Z2_s;
-  }
+  } // end scenario loop
 }

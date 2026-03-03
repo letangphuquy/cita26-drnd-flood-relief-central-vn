@@ -20,10 +20,13 @@ struct Individual {
          //   A_i = preferred hub index for demand node i.
          //   Decoder uses A_i as first candidate; if infeasible, falls
          //   back to remaining hubs ordered by increasing distance to i.
-  vector<double> W; // [3]   heuristic weights w1..w3 ∈ [0,1]
+  vector<double> W; // [6]   heuristic weights w0..w5 ∈ [0,1]
                     // W[0]: demand urgency weight (λ·D) in priority score
-                    // W[1]: inverse-distance weight when scoring hubs
-                    // W[2]: residual capacity reward weight
+                    // W[1]: hub speed weight (1/τ) in hub selection score
+                    // W[2]: residual capacity weight in hub selection score
+                    // W[3]: demand isolation weight (1/num_reachable) in priority score
+                    // W[4]: planned hub preference bonus in hub selection score
+                    // W[5]: reactive eagerness threshold (0=aggressive, 1=conservative)
 
   // ── Phenotype (computed by decoder) ──────────────────────────────────
   double Z1 = 0, Z2 = 0; // objective values (minimise both)
@@ -32,11 +35,12 @@ struct Individual {
   // ── NSGA-II bookkeeping ────────────────────────────────────────────────
   int rank = 0;
   double crowding = 0.0;
+  int hamming_diversity = 0; // min Hamming distance to nearest neighbour in X space
 
   // ── Constructor ────────────────────────────────────────────────────────
   Individual() = default;
   explicit Individual(int num_H, int num_I)
-      : X(num_H, 0), R(num_H, 0.0), A(num_I, 0), W(3, 0.5) {}
+      : X(num_H, 0), R(num_H, 0.0), A(num_I, 0), W(6, 0.5) {}
 
   // ── Dominance (standard Pareto, no CV) ────────────────────────────────
   bool dominates(const Individual &o) const {
@@ -90,7 +94,7 @@ Individual random_individual(const DRNDInstance &inst) {
   for (int i = 0; i < inst.num_I; i++)
     ind.A[i] = (int)rand_int(0, inst.num_H - 1);
   // W: uniform [0,1]
-  for (int w = 0; w < 3; w++)
-    ind.W[w] = rand01();
+  for (auto &wv : ind.W)
+    wv = rand01();
   return ind;
 }
