@@ -1,0 +1,1933 @@
+{
+  "results": [
+    {
+      "pool": "ORIGIN",
+      "name": "Hai_Van_Pass_North",
+      "query": "Hai Van Pass, Da Nang, Vietnam",
+      "stored": [
+        16.1124,
+        108.1948
+      ],
+      "osm": [
+        16.1691434,
+        108.1262622
+      ],
+      "delta_km": 9.66,
+      "status": "WARNING",
+      "osm_place": "Đèo Hải Vân, Phường Hải Vân, Thành phố Đà Nẵng, Thành phố Huế, Việt Nam"
+    },
+    {
+      "pool": "ORIGIN",
+      "name": "Dung_Quat_Port",
+      "stored": [
+        15.4,
+        108.31
+      ],
+      "osm": null,
+      "delta_km": null,
+      "status": "NO_RESULT"
+    },
+    {
+      "pool": "ORIGIN",
+      "name": "Chu_Lai_Airport",
+      "stored": [
+        15.75,
+        108.47
+      ],
+      "osm": null,
+      "delta_km": null,
+      "status": "NO_RESULT"
+    },
+    {
+      "pool": "ORIGIN",
+      "name": "Thuan_An_Port",
+      "stored": [
+        16.53,
+        107.7
+      ],
+      "osm": null,
+      "delta_km": null,
+      "status": "NO_RESULT"
+    },
+    {
+      "pool": "ORIGIN",
+      "name": "Sa_Ky_Port",
+      "stored": [
+        14.76,
+        108.69
+      ],
+      "osm": null,
+      "delta_km": null,
+      "status": "NO_RESULT"
+    },
+    {
+      "pool": "ORIGIN",
+      "name": "Khe_Sanh_Entry",
+      "query": "Khe Sanh, Huong Hoa, Quang Tri, Vietnam",
+      "stored": [
+        17.19,
+        107.07
+      ],
+      "osm": [
+        16.625722,
+        106.7343735
+      ],
+      "delta_km": 72.19,
+      "status": "ERROR",
+      "osm_place": "Ngân hàng CSXH huyện Hướng Hoá, Lê Duẩn, Tân Hợp, Xã Khe Sanh, Tỉnh Quảng Trị, Việt Nam"
+    },
+    {
+      "pool": "ORIGIN",
+      "name": "Tra_Bong_Supply",
+      "query": "Tra Bong District, Quang Ngai, Vietnam",
+      "stored": [
+        15.36,
+        107.89
+      ],
+      "osm": [
+        15.2092972,
+        108.4534371
+      ],
+      "delta_km": 62.72,
+      "status": "ERROR",
+      "osm_place": "Huyện Trà Bồng, Xã Thanh Bồng, Tỉnh Quảng Ngãi, Việt Nam"
+    },
+    {
+      "pool": "ORIGIN",
+      "name": "Da_Nang_Seaport",
+      "query": "Tien Sa Port, Son Tra, Da Nang, Vietnam",
+      "stored": [
+        16.093,
+        108.228
+      ],
+      "osm": [
+        16.119709,
+        108.2171737
+      ],
+      "delta_km": 3.19,
+      "status": "OK",
+      "osm_place": "Cảng Tiên Sa, Phường Sơn Trà, Thành phố Đà Nẵng, Việt Nam"
+    },
+    {
+      "pool": "ORIGIN",
+      "name": "Hue_Train_Station",
+      "query": "Hue Railway Station, Thua Thien Hue, Vietnam",
+      "stored": [
+        16.46,
+        107.6
+      ],
+      "osm": [
+        16.4564881,
+        107.5780488
+      ],
+      "delta_km": 2.37,
+      "status": "OK",
+      "osm_place": "Huế, Kiệt 21 Bùi Thị Xuân, Huế, Phường Thuận Hóa, Thành phố Huế, 54000, Việt Nam"
+    },
+    {
+      "pool": "ORIGIN",
+      "name": "Ly_Son_Island_Supply",
+      "query": "Ly Son Island, Quang Ngai, Vietnam",
+      "stored": [
+        15.38,
+        109.1
+      ],
+      "osm": [
+        15.3809098,
+        109.1174595
+      ],
+      "delta_km": 1.87,
+      "status": "OK",
+      "osm_place": "Đảo Lý Sơn, Đồng Hộ An Hải, Đặc khu Lý Sơn, Tỉnh Quảng Ngãi, 54400, Việt Nam"
+    },
+    {
+      "pool": "ORIGIN",
+      "name": "Lang_Co_Beach_Base",
+      "query": "Lang Co, Phu Loc, Thua Thien Hue, Vietnam",
+      "stored": [
+        16.21,
+        107.96
+      ],
+      "osm": [
+        16.3380494,
+        107.9537173
+      ],
+      "delta_km": 14.25,
+      "status": "WARNING",
+      "osm_place": "Angsana Lăng Cô, Quốc lộ 49B, Phước Tượng, Xã Phú Lộc, Thành phố Huế, Việt Nam"
+    },
+    {
+      "pool": "ORIGIN",
+      "name": "Duc_Pho_Harbor",
+      "query": "Duc Pho, Quang Ngai, Vietnam",
+      "stored": [
+        14.57,
+        108.98
+      ],
+      "osm": [
+        14.8087189,
+        108.9571626
+      ],
+      "delta_km": 26.66,
+      "status": "ERROR",
+      "osm_place": "Phường Đức Phổ, Tỉnh Quảng Ngãi, Việt Nam"
+    },
+    {
+      "pool": "HUB",
+      "name": "Da_Nang_Airport_Hub",
+      "query": "Da Nang International Airport, Vietnam",
+      "stored": [
+        16.0544,
+        108.2022
+      ],
+      "osm": [
+        16.0425792,
+        108.1971613
+      ],
+      "delta_km": 1.42,
+      "status": "OK",
+      "osm_place": "Sân bay quốc tế Đà Nẵng, Kiệt 43 Cù Chính Lan, Xuân Hà, Phường Thanh Khê, Thành phố Đà Nẵng, 84236, Việt Nam"
+    },
+    {
+      "pool": "HUB",
+      "name": "Tam_Ky_Logistics_Hub",
+      "query": "Tam Ky City, Quang Nam, Vietnam",
+      "stored": [
+        15.56,
+        108.33
+      ],
+      "osm": [
+        15.5722328,
+        108.4743668
+      ],
+      "delta_km": 15.52,
+      "status": "ERROR",
+      "osm_place": "Tru by Hilton Tam Ky City Centre, Nguyễn Du, Phường Tam Kỳ, Thành phố Đà Nẵng, 220000, Việt Nam"
+    },
+    {
+      "pool": "HUB",
+      "name": "A_Luoi_Relief_Center",
+      "query": "A Luoi District, Thua Thien Hue, Vietnam",
+      "stored": [
+        16.4601,
+        107.5961
+      ],
+      "osm": [
+        16.2135045,
+        107.3367651
+      ],
+      "delta_km": 38.96,
+      "status": "ERROR",
+      "osm_place": "Huyện A Lưới, Thành phố Huế, Việt Nam"
+    },
+    {
+      "pool": "HUB",
+      "name": "Dong_Giang_Rescue_Stn",
+      "stored": [
+        15.97,
+        107.86
+      ],
+      "osm": null,
+      "delta_km": null,
+      "status": "NO_RESULT"
+    },
+    {
+      "pool": "HUB",
+      "name": "Thang_Binh_Depot",
+      "stored": [
+        15.64,
+        108.21
+      ],
+      "osm": null,
+      "delta_km": null,
+      "status": "NO_RESULT"
+    },
+    {
+      "pool": "HUB",
+      "name": "Nam_Giang_Forward_Base",
+      "stored": [
+        15.85,
+        107.7
+      ],
+      "osm": null,
+      "delta_km": null,
+      "status": "NO_RESULT"
+    },
+    {
+      "pool": "HUB",
+      "name": "Phu_Loc_Staging_Area",
+      "query": "Phu Loc District, Thua Thien Hue, Vietnam",
+      "stored": [
+        16.18,
+        107.8
+      ],
+      "osm": [
+        16.2031796,
+        107.7697382
+      ],
+      "delta_km": 4.13,
+      "status": "OK",
+      "osm_place": "Huyện Phú Lộc, Thành phố Huế, Việt Nam"
+    },
+    {
+      "pool": "HUB",
+      "name": "Nui_Thanh_Reserve",
+      "stored": [
+        15.45,
+        108.42
+      ],
+      "osm": null,
+      "delta_km": null,
+      "status": "NO_RESULT"
+    },
+    {
+      "pool": "HUB",
+      "name": "Lang_Co_Forward_Post",
+      "query": "Lang Co, Phu Loc, Thua Thien Hue, Vietnam",
+      "stored": [
+        16.25,
+        107.9
+      ],
+      "osm": [
+        16.3380494,
+        107.9537173
+      ],
+      "delta_km": 11.35,
+      "status": "WARNING",
+      "osm_place": "Angsana Lăng Cô, Quốc lộ 49B, Phước Tượng, Xã Phú Lộc, Thành phố Huế, Việt Nam"
+    },
+    {
+      "pool": "HUB",
+      "name": "Binh_Son_Warehouse",
+      "query": "Binh Son District, Quang Ngai, Vietnam",
+      "stored": [
+        15.22,
+        108.6
+      ],
+      "osm": [
+        15.3115055,
+        108.7286874
+      ],
+      "delta_km": 17.15,
+      "status": "ERROR",
+      "osm_place": "Huyện Bình Sơn, Xã Bình Sơn, Tỉnh Quảng Ngãi, Việt Nam"
+    },
+    {
+      "pool": "HUB",
+      "name": "A_Dot_Mountain_Base",
+      "query": "A Dot Commune, A Luoi, Thua Thien Hue, Vietnam",
+      "stored": [
+        16.93,
+        107.25
+      ],
+      "osm": [
+        16.1237235,
+        107.3414015
+      ],
+      "delta_km": 90.18,
+      "status": "ERROR",
+      "osm_place": "Sông A Sáp, Lâm Đớt, Xã A Lưới 4, Thành phố Huế, Việt Nam"
+    },
+    {
+      "pool": "HUB",
+      "name": "Quang_Ngai_Depot",
+      "query": "Quang Ngai City, Vietnam",
+      "stored": [
+        15.05,
+        108.4
+      ],
+      "osm": [
+        15.1190037,
+        108.8095598
+      ],
+      "delta_km": 44.64,
+      "status": "ERROR",
+      "osm_place": "Quảng Ngãi, Phường Cẩm Thành, Tỉnh Quảng Ngãi, Việt Nam"
+    },
+    {
+      "pool": "HUB",
+      "name": "A_Sap_Helipad",
+      "query": "A Sap, A Luoi, Thua Thien Hue, Vietnam",
+      "stored": [
+        16.15,
+        107.62
+      ],
+      "osm": [
+        16.2748624,
+        107.233354
+      ],
+      "delta_km": 43.56,
+      "status": "ERROR",
+      "osm_place": "Đường A Sáp, A Ngo, Xã A Lưới 2, Thành phố Huế, Việt Nam"
+    },
+    {
+      "pool": "HUB",
+      "name": "Que_Son_Facility",
+      "stored": [
+        15.78,
+        108.05
+      ],
+      "osm": null,
+      "delta_km": null,
+      "status": "NO_RESULT"
+    },
+    {
+      "pool": "HUB",
+      "name": "Huong_Viet_Depot",
+      "stored": [
+        16.86,
+        107.24
+      ],
+      "osm": null,
+      "delta_km": null,
+      "status": "NO_RESULT"
+    },
+    {
+      "pool": "HUB",
+      "name": "Quang_Ngai_Port_Hub",
+      "stored": [
+        14.87,
+        108.79
+      ],
+      "osm": null,
+      "delta_km": null,
+      "status": "NO_RESULT"
+    },
+    {
+      "pool": "HUB",
+      "name": "Phuoc_Son_Helipad",
+      "stored": [
+        15.62,
+        107.72
+      ],
+      "osm": null,
+      "delta_km": null,
+      "status": "NO_RESULT"
+    },
+    {
+      "pool": "HUB",
+      "name": "Rao_Trang_Base",
+      "stored": [
+        17.05,
+        107.18
+      ],
+      "osm": null,
+      "delta_km": null,
+      "status": "NO_RESULT"
+    },
+    {
+      "pool": "HUB",
+      "name": "Bac_Tra_My_Depot",
+      "stored": [
+        16.28,
+        107.51
+      ],
+      "osm": null,
+      "delta_km": null,
+      "status": "NO_RESULT"
+    },
+    {
+      "pool": "HUB",
+      "name": "Son_Ha_Hub",
+      "query": "Son Ha District, Quang Ngai, Vietnam",
+      "stored": [
+        15.48,
+        107.72
+      ],
+      "osm": [
+        14.9745651,
+        108.5245842
+      ],
+      "delta_km": 103.01,
+      "status": "ERROR",
+      "osm_place": "Huyện Sơn Hà, Xã Sơn Thủy, Tỉnh Quảng Ngãi, 55000, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Hoi_An_City",
+      "query": "Hoi An City, Quang Nam, Vietnam",
+      "stored": [
+        15.8732,
+        108.3341
+      ],
+      "osm": [
+        15.8683304,
+        108.3502537
+      ],
+      "delta_km": 1.81,
+      "status": "OK",
+      "osm_place": "Gratitude Vietnam Retreat Center, 486, Nguyễn Tri Phương, Phố cổ Hội An, Cẩm Nam, Phường Hội An, Thành phố Đà Nẵng, 64000, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Dien_Ban_District",
+      "stored": [
+        15.9374,
+        108.3036
+      ],
+      "osm": null,
+      "delta_km": null,
+      "status": "NO_RESULT"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Nui_Thanh_District",
+      "stored": [
+        15.43,
+        108.2073
+      ],
+      "osm": null,
+      "delta_km": null,
+      "status": "NO_RESULT"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Thang_Binh_District",
+      "query": "Thang Binh District, Vietnam",
+      "stored": [
+        15.7562,
+        108.2461
+      ],
+      "osm": [
+        15.7076968,
+        108.3969351
+      ],
+      "delta_km": 17.02,
+      "status": "ERROR",
+      "osm_place": "Huyện Thăng Bình, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Dai_Loc_District",
+      "query": "Dai Loc District, Vietnam",
+      "stored": [
+        16.0752,
+        108.1491
+      ],
+      "osm": [
+        15.833943,
+        107.9544484
+      ],
+      "delta_km": 33.95,
+      "status": "ERROR",
+      "osm_place": "Huyện Đại Lộc, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Dong_Giang_District",
+      "query": "Dong Giang District, Vietnam",
+      "stored": [
+        15.9867,
+        107.9883
+      ],
+      "osm": [
+        15.9125915,
+        107.7265211
+      ],
+      "delta_km": 29.18,
+      "status": "ERROR",
+      "osm_place": "Huyện Đông Giang, Thành phố Huế, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Tay_Giang_District",
+      "query": "Tay Giang District, Vietnam",
+      "stored": [
+        16.2114,
+        108.0243
+      ],
+      "osm": [
+        15.8947863,
+        107.4976056
+      ],
+      "delta_km": 66.39,
+      "status": "ERROR",
+      "osm_place": "Huyện Tây Giang, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "A_Luoi_District",
+      "query": "A Luoi District, Vietnam",
+      "stored": [
+        16.3012,
+        107.8631
+      ],
+      "osm": [
+        16.2135045,
+        107.3367651
+      ],
+      "delta_km": 57.03,
+      "status": "ERROR",
+      "osm_place": "Huyện A Lưới, Thành phố Huế, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Nam_Giang_District",
+      "query": "Nam Giang District, Vietnam",
+      "stored": [
+        15.9,
+        107.65
+      ],
+      "osm": [
+        15.6072266,
+        107.6070999
+      ],
+      "delta_km": 32.88,
+      "status": "ERROR",
+      "osm_place": "Huyện Nam Giang, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "A_Vuong_Commune",
+      "query": "A Vuong Commune, Vietnam",
+      "stored": [
+        16.1004,
+        107.7321
+      ],
+      "osm": [
+        20.8580445,
+        105.9733978
+      ],
+      "delta_km": 560.57,
+      "status": "ERROR",
+      "osm_place": "Xã Triệu Việt Vương, Tỉnh Hưng Yên, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Viet_An_Commune",
+      "query": "Viet An Commune, Vietnam",
+      "stored": [
+        15.9421,
+        108.2631
+      ],
+      "osm": [
+        15.5679405,
+        108.1790155
+      ],
+      "delta_km": 42.57,
+      "status": "ERROR",
+      "osm_place": "Xã Việt An, Thành phố Đà Nẵng, 50000, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Que_Son_District",
+      "query": "Que Son District, Vietnam",
+      "stored": [
+        16.0123,
+        108.0961
+      ],
+      "osm": [
+        15.683219,
+        108.0626607
+      ],
+      "delta_km": 36.77,
+      "status": "ERROR",
+      "osm_place": "Huyện Quế Sơn, 05103, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Phu_Ninh_District",
+      "query": "Phu Ninh District, Vietnam",
+      "stored": [
+        15.73,
+        108.12
+      ],
+      "osm": [
+        21.4568945,
+        105.2994946
+      ],
+      "delta_km": 702.69,
+      "status": "ERROR",
+      "osm_place": "Huyện Phù Ninh, Xã Dân Chủ, Tỉnh Phú Thọ, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Tam_Ky_City",
+      "query": "Tam Ky City, Quang Nam, Vietnam",
+      "stored": [
+        15.56,
+        108.36
+      ],
+      "osm": [
+        15.5722328,
+        108.4743668
+      ],
+      "delta_km": 12.33,
+      "status": "WARNING",
+      "osm_place": "Tru by Hilton Tam Ky City Centre, Nguyễn Du, Phường Tam Kỳ, Thành phố Đà Nẵng, 220000, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Huong_Tra_District",
+      "query": "Huong Tra District, Vietnam",
+      "stored": [
+        16.47,
+        107.52
+      ],
+      "osm": [
+        10.4538446,
+        105.6558257
+      ],
+      "delta_km": 698.65,
+      "status": "ERROR",
+      "osm_place": "Hồ Xuân Hương, Phường Mỹ Trà, Tỉnh Đồng Tháp, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Huong_Thuy_District",
+      "stored": [
+        16.39,
+        107.6
+      ],
+      "osm": null,
+      "delta_km": null,
+      "status": "NO_RESULT"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Nam_Dong_District",
+      "stored": [
+        16.08,
+        107.75
+      ],
+      "osm": null,
+      "delta_km": null,
+      "status": "NO_RESULT"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Phu_Loc_District",
+      "query": "Phu Loc District, Vietnam",
+      "stored": [
+        16.2,
+        107.86
+      ],
+      "osm": [
+        16.2031796,
+        107.7697382
+      ],
+      "delta_km": 9.64,
+      "status": "WARNING",
+      "osm_place": "Huyện Phú Lộc, Thành phố Huế, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "A_Luoi_Mountain",
+      "query": "A Luoi District, Thua Thien Hue, Vietnam",
+      "stored": [
+        16.4001,
+        107.6521
+      ],
+      "osm": [
+        16.2135045,
+        107.3367651
+      ],
+      "delta_km": 39.54,
+      "status": "ERROR",
+      "osm_place": "Huyện A Lưới, Thành phố Huế, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Nam_Dong_Highland",
+      "stored": [
+        16.2812,
+        107.5321
+      ],
+      "osm": null,
+      "delta_km": null,
+      "status": "NO_RESULT"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Da_Nang_City",
+      "query": "Da Nang City, Vietnam",
+      "stored": [
+        16.0543,
+        108.2022
+      ],
+      "osm": [
+        16.068,
+        108.212
+      ],
+      "delta_km": 1.85,
+      "status": "OK",
+      "osm_place": "Thành phố Đà Nẵng, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Cam_Le_District",
+      "query": "Cam Le District, Vietnam",
+      "stored": [
+        15.9123,
+        108.1541
+      ],
+      "osm": [
+        16.016946,
+        108.2033469
+      ],
+      "delta_km": 12.77,
+      "status": "WARNING",
+      "osm_place": "Quận Cẩm Lệ, Thành phố Đà Nẵng, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Lien_Chieu_District",
+      "query": "Lien Chieu District, Vietnam",
+      "stored": [
+        16.1232,
+        108.1982
+      ],
+      "osm": [
+        16.1216398,
+        108.1125643
+      ],
+      "delta_km": 9.15,
+      "status": "WARNING",
+      "osm_place": "Quận Liên Chiểu, Thành phố Đà Nẵng, 84236, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Son_Tra_District",
+      "query": "Son Tra District, Vietnam",
+      "stored": [
+        16.0012,
+        108.2401
+      ],
+      "osm": [
+        16.103337,
+        108.2638138
+      ],
+      "delta_km": 11.64,
+      "status": "WARNING",
+      "osm_place": "Quận Sơn Trà, Thành phố Đà Nẵng, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Thanh_Khe_District",
+      "query": "Thanh Khe District, Vietnam",
+      "stored": [
+        15.8721,
+        108.0841
+      ],
+      "osm": [
+        16.0540007,
+        108.1859768
+      ],
+      "delta_km": 22.97,
+      "status": "ERROR",
+      "osm_place": "Quận Thanh Khê, Phường An Khê, Thành phố Đà Nẵng, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Hoa_Vang_District",
+      "query": "Hoa Vang District, Vietnam",
+      "stored": [
+        16.2432,
+        108.0762
+      ],
+      "osm": [
+        16.0666545,
+        107.9738057
+      ],
+      "delta_km": 22.47,
+      "status": "ERROR",
+      "osm_place": "Huyện Hòa Vang, 51000, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Phu_Yen_Commune",
+      "query": "Phu Yen Commune, Vietnam",
+      "stored": [
+        15.7321,
+        108.1432
+      ],
+      "osm": [
+        21.2673711,
+        104.660889
+      ],
+      "delta_km": 716.61,
+      "status": "ERROR",
+      "osm_place": "Xã Phù Yên, Tỉnh Sơn La, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Bac_Tra_My",
+      "stored": [
+        15.32,
+        107.8341
+      ],
+      "osm": null,
+      "delta_km": null,
+      "status": "NO_RESULT"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Nam_Tra_My",
+      "query": "Nam Tra My, Vietnam",
+      "stored": [
+        15.8453,
+        107.9872
+      ],
+      "osm": [
+        15.1328127,
+        108.1145919
+      ],
+      "delta_km": 80.39,
+      "status": "ERROR",
+      "osm_place": "Huyện Nam Trà My, Tỉnh Quảng Ngãi, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Hiep_Duc_District",
+      "query": "Hiep Duc District, Vietnam",
+      "stored": [
+        15.6721,
+        108.0341
+      ],
+      "osm": [
+        15.5181225,
+        108.1027637
+      ],
+      "delta_km": 18.63,
+      "status": "ERROR",
+      "osm_place": "Huyện Hiệp Đức, 50000, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Tien_Phuoc_District",
+      "query": "Tien Phuoc District, Vietnam",
+      "stored": [
+        15.5631,
+        108.2541
+      ],
+      "osm": [
+        15.491617,
+        108.2986111
+      ],
+      "delta_km": 9.27,
+      "status": "WARNING",
+      "osm_place": "Huyện Tiên Phước, 52606, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Nui_Thanh_South",
+      "query": "Nui Thanh South, Vietnam",
+      "stored": [
+        15.4321,
+        108.4012
+      ],
+      "osm": [
+        21.082545,
+        105.8601617
+      ],
+      "delta_km": 683.14,
+      "status": "ERROR",
+      "osm_place": "Nhà Triển lãm khối A, VEC Quảng trường Sân Nam, Global Gate, Xã Đông Anh, Thành phố Hà Nội, 11810, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Tam_Ky_South",
+      "query": "Tam Ky South, Vietnam",
+      "stored": [
+        15.6012,
+        108.3341
+      ],
+      "osm": [
+        13.7689785,
+        109.2207623
+      ],
+      "delta_km": 224.95,
+      "status": "ERROR",
+      "osm_place": "Bưu điện trung tâm Quy Nhơn, 2, Trần Thị Kỷ, Khu vực 46, Trần Phú, Quy Nhơn, Phường Quy Nhơn, Tỉnh Gia Lai, 55111, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Phu_Loc_West",
+      "stored": [
+        16.5123,
+        107.6012
+      ],
+      "osm": null,
+      "delta_km": null,
+      "status": "NO_RESULT"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Phu_Vang_District",
+      "query": "Phu Vang District, Vietnam",
+      "stored": [
+        16.52,
+        107.62
+      ],
+      "osm": [
+        16.4453817,
+        107.7368036
+      ],
+      "delta_km": 14.96,
+      "status": "WARNING",
+      "osm_place": "Huyện Phú Vang, Phường Mỹ Thượng, Thành phố Huế, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Quang_Dien_District",
+      "query": "Quang Dien District, Vietnam",
+      "stored": [
+        16.58,
+        107.43
+      ],
+      "osm": [
+        16.5924815,
+        107.5129279
+      ],
+      "delta_km": 8.95,
+      "status": "WARNING",
+      "osm_place": "Huyện Quảng Điền, Phường Hóa Châu, Thành phố Huế, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Phong_Dien_District",
+      "query": "Phong Dien District, Vietnam",
+      "stored": [
+        16.52,
+        107.4
+      ],
+      "osm": [
+        9.9982023,
+        105.6621501
+      ],
+      "delta_km": 749.16,
+      "status": "ERROR",
+      "osm_place": "Huyện Phong Điền, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Hue_City_South",
+      "stored": [
+        16.42,
+        107.56
+      ],
+      "osm": null,
+      "delta_km": null,
+      "status": "NO_RESULT"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Khe_Tre_Commune",
+      "query": "Khe Tre Commune, Vietnam",
+      "stored": [
+        16.4631,
+        107.4321
+      ],
+      "osm": [
+        16.1684152,
+        107.718494
+      ],
+      "delta_km": 44.81,
+      "status": "ERROR",
+      "osm_place": "Xã Khe Tre, Thành phố Huế, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Tra_Don_Commune",
+      "stored": [
+        15.7143,
+        107.8101
+      ],
+      "osm": null,
+      "delta_km": null,
+      "status": "NO_RESULT"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Tra_Nam_Commune",
+      "query": "Tra Nam Commune, Vietnam",
+      "stored": [
+        15.5832,
+        107.9431
+      ],
+      "osm": [
+        15.1794882,
+        108.1289381
+      ],
+      "delta_km": 49.11,
+      "status": "ERROR",
+      "osm_place": "Trà Mai, Nam Trà My, Quảng Nam, Vietnam, Xã Nam Trà My, Thành phố Đà Nẵng, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Lang_Co_Area",
+      "stored": [
+        16.24,
+        107.94
+      ],
+      "osm": null,
+      "delta_km": null,
+      "status": "NO_RESULT"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Truoi_Lake_Area",
+      "stored": [
+        16.6012,
+        107.3541
+      ],
+      "osm": null,
+      "delta_km": null,
+      "status": "NO_RESULT"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Vu_Gia_River_South",
+      "stored": [
+        15.9432,
+        107.5932
+      ],
+      "osm": null,
+      "delta_km": null,
+      "status": "NO_RESULT"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Song_Bung_Lake",
+      "stored": [
+        16.1321,
+        107.4531
+      ],
+      "osm": null,
+      "delta_km": null,
+      "status": "NO_RESULT"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "A_Sap_Valley",
+      "query": "A Sap, A Luoi, Thua Thien Hue, Vietnam",
+      "stored": [
+        16.25,
+        107.27
+      ],
+      "osm": [
+        16.2748624,
+        107.233354
+      ],
+      "delta_km": 4.79,
+      "status": "OK",
+      "osm_place": "Đường A Sáp, A Ngo, Xã A Lưới 2, Thành phố Huế, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Phuoc_Son_District",
+      "stored": [
+        15.8123,
+        107.6321
+      ],
+      "osm": null,
+      "delta_km": null,
+      "status": "NO_RESULT"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Tra_My_Highlands",
+      "stored": [
+        15.6831,
+        107.7851
+      ],
+      "osm": null,
+      "delta_km": null,
+      "status": "NO_RESULT"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Bach_Ma_Forest",
+      "stored": [
+        16.19,
+        107.86
+      ],
+      "osm": null,
+      "delta_km": null,
+      "status": "NO_RESULT"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "A_Luoi_Valley",
+      "stored": [
+        16.35,
+        107.3
+      ],
+      "osm": null,
+      "delta_km": null,
+      "status": "NO_RESULT"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Huong_An_Commune",
+      "query": "Huong An Commune, Vietnam",
+      "stored": [
+        16.78,
+        107.22
+      ],
+      "osm": [
+        20.6223455,
+        105.7775657
+      ],
+      "delta_km": 453.44,
+      "status": "ERROR",
+      "osm_place": "Đối diện Đồn Công an Hương Sơn, Đường tỉnh 419, Xã Hương Sơn, Thành phố Hà Nội, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Tho_Quang_Ward",
+      "query": "Tho Quang Ward, Vietnam",
+      "stored": [
+        16.05,
+        108.23
+      ],
+      "osm": [
+        17.4750005,
+        106.6233501
+      ],
+      "delta_km": 233.17,
+      "status": "ERROR",
+      "osm_place": "Chứng tích nhà thờ Tam tòa, Đường Nguyễn Du, Phường Đồng Hới, Tỉnh Quảng Trị, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Hoa_Cuong_Ward",
+      "query": "Hoa Cuong Ward, Vietnam",
+      "stored": [
+        15.9812,
+        108.1721
+      ],
+      "osm": [
+        16.0416286,
+        108.2175304
+      ],
+      "delta_km": 8.29,
+      "status": "WARNING",
+      "osm_place": "Phường Hòa Cường, Thành phố Đà Nẵng, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "An_Tan_Commune",
+      "query": "An Tan Commune, Vietnam",
+      "stored": [
+        15.8342,
+        108.0012
+      ],
+      "osm": [
+        20.9672608,
+        106.2393223
+      ],
+      "delta_km": 600.25,
+      "status": "ERROR",
+      "osm_place": "An Tân, Xã Cẩm Giang, Thành phố Hải Phòng, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Lac_My_Commune",
+      "query": "Lac My Commune, Vietnam",
+      "stored": [
+        16.1891,
+        107.9341
+      ],
+      "osm": [
+        20.7765784,
+        105.7015796
+      ],
+      "delta_km": 561.78,
+      "status": "ERROR",
+      "osm_place": "Trước đường vào thôn dân cư số 7, thôn Vĩnh Lạc, xã Mỹ Thành khoảng 50m, Đường tỉnh 419, Xã Phúc Sơn, Thành phố Hà Nội, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Hong_Ha_Commune",
+      "query": "Hong Ha Commune, Vietnam",
+      "stored": [
+        16.3543,
+        107.6521
+      ],
+      "osm": [
+        21.0869773,
+        105.8206363
+      ],
+      "delta_km": 560.46,
+      "status": "ERROR",
+      "osm_place": "Nhật Tân Glamping, 3RPC+F72, Phú Thượng, Tây Hồ, Hà Nội, Vietnam, Cầu Nhật Tân, Ngọc Giang, Phường Hồng Hà, Thành phố Hà Nội, 12323, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Quang_An_Ward",
+      "query": "Quang An Ward, Vietnam",
+      "stored": [
+        16.5,
+        107.62
+      ],
+      "osm": [
+        21.0616195,
+        105.8235184
+      ],
+      "delta_km": 541.32,
+      "status": "ERROR",
+      "osm_place": "Phường Quảng An, Phường Tây Hồ, Thành phố Hà Nội, 11214, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Huong_Xuan_Commune",
+      "query": "Huong Xuan Commune, Vietnam",
+      "stored": [
+        16.2231,
+        107.3041
+      ],
+      "osm": [
+        18.0817927,
+        105.7131672
+      ],
+      "delta_km": 266.99,
+      "status": "ERROR",
+      "osm_place": "Xã Hương Xuân, Tỉnh Hà Tĩnh, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Tam_Viet_Commune",
+      "query": "Tam Viet Commune, Vietnam",
+      "stored": [
+        15.6521,
+        108.1341
+      ],
+      "osm": [
+        20.9899185,
+        106.0501369
+      ],
+      "delta_km": 632.95,
+      "status": "ERROR",
+      "osm_place": "Tâm Việt, Đường tỉnh 281, Chợ Bãi Sim, Thôn văn ổ, Xã Lạc Đạo, Tỉnh Hưng Yên, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Tam_Hiep_Commune",
+      "query": "Tam Hiep Commune, Vietnam",
+      "stored": [
+        15.4832,
+        108.3031
+      ],
+      "osm": [
+        15.4600049,
+        108.6094788
+      ],
+      "delta_km": 32.93,
+      "status": "ERROR",
+      "osm_place": "Khu Công Nghiệp - Hậu Cần Cảng Tam Hiệp, Xã Núi Thành, Thành phố Đà Nẵng, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Binh_Duong_Commune",
+      "query": "Binh Duong Commune, Vietnam",
+      "stored": [
+        15.7981,
+        108.4201
+      ],
+      "osm": [
+        20.2453858,
+        106.0730542
+      ],
+      "delta_km": 553.26,
+      "status": "ERROR",
+      "osm_place": "Đường sắt cao tốc Bắc-Nam (Đoạn Hà Nội - Vinh), Đường Trần Phú, Xã Khánh Thiện, Tỉnh Ninh Bình, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Phu_Dien_Ward",
+      "query": "Phu Dien Ward, Vietnam",
+      "stored": [
+        16.8,
+        107.26
+      ],
+      "osm": [
+        21.0482672,
+        105.7635616
+      ],
+      "delta_km": 497.9,
+      "status": "ERROR",
+      "osm_place": "Phường Phú Diễn, Thành phố Hà Nội, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "My_Khe_Beach_Area",
+      "stored": [
+        16.0601,
+        108.2
+      ],
+      "osm": null,
+      "delta_km": null,
+      "status": "NO_RESULT"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "A_Dot_Commune",
+      "query": "A Dot Commune, Vietnam",
+      "stored": [
+        16.9321,
+        107.3012
+      ],
+      "osm": [
+        16.1237235,
+        107.3414015
+      ],
+      "delta_km": 89.99,
+      "status": "ERROR",
+      "osm_place": "Sông A Sáp, Lâm Đớt, Xã A Lưới 4, Thành phố Huế, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Tam_Quan_Town",
+      "query": "Tam Quan Town, Vietnam",
+      "stored": [
+        15.4501,
+        108.5801
+      ],
+      "osm": [
+        22.0238283,
+        103.1578194
+      ],
+      "delta_km": 927.26,
+      "status": "ERROR",
+      "osm_place": "Chợ Trung tâm Thị xã Mường Lay, Quốc lộ 12, Bản Hóc, Na Lay, Mường Lay, Phường Mường Lay, Tỉnh Điện Biên, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Nuoc_Trong_Reservoir",
+      "query": "Nuoc Trong Reservoir, Vietnam",
+      "stored": [
+        15.2431,
+        108.4231
+      ],
+      "osm": [
+        15.1095578,
+        108.3878961
+      ],
+      "delta_km": 15.32,
+      "status": "ERROR",
+      "osm_place": "Hồ Nước Trong, Xã Tây Trà Bồng, Tỉnh Quảng Ngãi, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Duc_Pho_District",
+      "stored": [
+        15.1241,
+        108.3121
+      ],
+      "osm": null,
+      "delta_km": null,
+      "status": "NO_RESULT"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "A_Bat_Commune",
+      "query": "A Bat Commune, Vietnam",
+      "stored": [
+        16.9541,
+        107.1231
+      ],
+      "osm": [
+        20.9685527,
+        105.9075268
+      ],
+      "delta_km": 464.32,
+      "status": "ERROR",
+      "osm_place": "Xã Bát Tràng, Thành phố Hà Nội, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "A_La_Commune",
+      "query": "A La Commune, Vietnam",
+      "stored": [
+        17.0231,
+        107.2031
+      ],
+      "osm": [
+        15.631006,
+        107.3704429
+      ],
+      "delta_km": 155.82,
+      "status": "ERROR",
+      "osm_place": "Xã La Êê, Thành phố Đà Nẵng, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Cao_Ngan_Commune",
+      "query": "Cao Ngan Commune, Vietnam",
+      "stored": [
+        16.8501,
+        107.2501
+      ],
+      "osm": [
+        15.6189878,
+        108.2556502
+      ],
+      "delta_km": 173.97,
+      "status": "ERROR",
+      "osm_place": "Hồ Cao Ngạn, Xã Đồng Dương, Thành phố Đà Nẵng, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Mo_Duc_District",
+      "query": "Mo Duc District, Vietnam",
+      "stored": [
+        15.0541,
+        108.6541
+      ],
+      "osm": [
+        14.988425,
+        108.8876534
+      ],
+      "delta_km": 26.12,
+      "status": "ERROR",
+      "osm_place": "Huyện Mộ Đức, Xã Mỏ Cày, Tỉnh Quảng Ngãi, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Minh_Long_District",
+      "query": "Minh Long District, Vietnam",
+      "stored": [
+        15.1831,
+        108.7801
+      ],
+      "osm": [
+        14.9463252,
+        108.6761708
+      ],
+      "delta_km": 28.6,
+      "status": "ERROR",
+      "osm_place": "Huyện Minh Long, Xã Minh Long, Tỉnh Quảng Ngãi, 56000, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Chu_Lai_Port_Area",
+      "stored": [
+        15.42,
+        108.69
+      ],
+      "osm": null,
+      "delta_km": null,
+      "status": "NO_RESULT"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Son_Ha_District",
+      "query": "Son Ha District, Quang Ngai, Vietnam",
+      "stored": [
+        15.4012,
+        107.8501
+      ],
+      "osm": [
+        14.9745651,
+        108.5245842
+      ],
+      "delta_km": 86.54,
+      "status": "ERROR",
+      "osm_place": "Huyện Sơn Hà, Xã Sơn Thủy, Tỉnh Quảng Ngãi, 55000, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Son_Tay_District",
+      "query": "Son Tay District, Vietnam",
+      "stored": [
+        15.2831,
+        107.7021
+      ],
+      "osm": [
+        14.9702273,
+        108.3554841
+      ],
+      "delta_km": 78.29,
+      "status": "ERROR",
+      "osm_place": "Huyện Sơn Tây, Xã Sơn Tây, Tỉnh Quảng Ngãi, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Tra_Bong_District",
+      "query": "Tra Bong District, Quang Ngai, Vietnam",
+      "stored": [
+        15.0001,
+        107.9231
+      ],
+      "osm": [
+        15.2092972,
+        108.4534371
+      ],
+      "delta_km": 61.5,
+      "status": "ERROR",
+      "osm_place": "Huyện Trà Bồng, Xã Thanh Bồng, Tỉnh Quảng Ngãi, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Nghia_Hanh_District",
+      "query": "Nghia Hanh District, Vietnam",
+      "stored": [
+        14.9321,
+        108.1431
+      ],
+      "osm": [
+        14.9689251,
+        108.798443
+      ],
+      "delta_km": 70.52,
+      "status": "ERROR",
+      "osm_place": "Huyện Nghĩa Hành, Xã Đình Cương, Tỉnh Quảng Ngãi, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Tu_Nghia_District",
+      "query": "Tu Nghia District, Vietnam",
+      "stored": [
+        14.8541,
+        108.3201
+      ],
+      "osm": [
+        15.0913545,
+        108.7675545
+      ],
+      "delta_km": 54.83,
+      "status": "ERROR",
+      "osm_place": "Huyện Tư Nghĩa, Xã Nghĩa Giang, Tỉnh Quảng Ngãi, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Quang_Ngai_City",
+      "query": "Quang Ngai City, Vietnam",
+      "stored": [
+        15.12,
+        108.4801
+      ],
+      "osm": [
+        15.1190037,
+        108.8095598
+      ],
+      "delta_km": 35.37,
+      "status": "ERROR",
+      "osm_place": "Quảng Ngãi, Phường Cẩm Thành, Tỉnh Quảng Ngãi, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Son_Tinh_District",
+      "query": "Son Tinh District, Vietnam",
+      "stored": [
+        14.9012,
+        108.5601
+      ],
+      "osm": [
+        15.198644,
+        108.7084603
+      ],
+      "delta_km": 36.71,
+      "status": "ERROR",
+      "osm_place": "Huyện Sơn Tịnh, Xã Sơn Tịnh, Tỉnh Quảng Ngãi, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Binh_Son_District",
+      "query": "Binh Son District, Quang Ngai, Vietnam",
+      "stored": [
+        15.1231,
+        108.6271
+      ],
+      "osm": [
+        15.3115055,
+        108.7286874
+      ],
+      "delta_km": 23.62,
+      "status": "ERROR",
+      "osm_place": "Huyện Bình Sơn, Xã Bình Sơn, Tỉnh Quảng Ngãi, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Khue_Trung_Valley",
+      "stored": [
+        15.72,
+        107.55
+      ],
+      "osm": null,
+      "delta_km": null,
+      "status": "NO_RESULT"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Phu_Thuong_Ward",
+      "query": "Phu Thuong Ward, Vietnam",
+      "stored": [
+        16.72,
+        107.28
+      ],
+      "osm": [
+        21.0846271,
+        105.8073225
+      ],
+      "delta_km": 509.44,
+      "status": "ERROR",
+      "osm_place": "Phường Phú Thượng, Thành phố Hà Nội, 11210, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Truong_Giang_Commune",
+      "query": "Truong Giang Commune, Vietnam",
+      "stored": [
+        15.5501,
+        108.5401
+      ],
+      "osm": [
+        20.6499444,
+        106.3811747
+      ],
+      "delta_km": 611.23,
+      "status": "ERROR",
+      "osm_place": "Trường giang, QL.10, Xã Đồng Bằng, Tỉnh Hưng Yên, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Son_Qua_Commune",
+      "query": "Son Qua Commune, Vietnam",
+      "stored": [
+        17.07,
+        107.16
+      ],
+      "osm": [
+        21.3131235,
+        105.8669776
+      ],
+      "delta_km": 490.95,
+      "status": "ERROR",
+      "osm_place": "Qua Tổng kho dự trữ Sóc Sơn 70m, Đường tỉnh 35, Xã Trung Giã, Thành phố Hà Nội, 26920, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Xuan_Ha_Ward",
+      "query": "Xuan Ha Ward, Vietnam",
+      "stored": [
+        15.93,
+        108.28
+      ],
+      "osm": [
+        21.0388103,
+        105.7818897
+      ],
+      "delta_km": 626.14,
+      "status": "ERROR",
+      "osm_place": "Đại học Quốc gia Hà Nội, 144, Đường Xuân Thủy, Phường Cầu Giấy, Thành phố Hà Nội, 11314, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Man_Thai_Ward",
+      "query": "Man Thai Ward, Vietnam",
+      "stored": [
+        16.085,
+        108.2
+      ],
+      "osm": [
+        16.0901696,
+        108.246748
+      ],
+      "delta_km": 5.03,
+      "status": "WARNING",
+      "osm_place": "Đường Mân Thái 1, Phường Sơn Trà, Thành phố Đà Nẵng, 50408, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Phuoc_Hiep_Commune",
+      "query": "Phuoc Hiep Commune, Vietnam",
+      "stored": [
+        15.5601,
+        107.9151
+      ],
+      "osm": [
+        15.4686465,
+        107.917999
+      ],
+      "delta_km": 10.17,
+      "status": "WARNING",
+      "osm_place": "Xã Phước Hiệp, Thành phố Đà Nẵng, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Hoa_Lien_Commune",
+      "query": "Hoa Lien Commune, Vietnam",
+      "stored": [
+        16.14,
+        108.05
+      ],
+      "osm": [
+        16.0339098,
+        108.1135382
+      ],
+      "delta_km": 13.61,
+      "status": "WARNING",
+      "osm_place": "Đường sắt cao tốc Bắc - Nam, Đường cao tốc Hoà Liên - Tuý Loan, Phường Hòa Khánh, Thành phố Đà Nẵng, 51000, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Hoa_Tien_Commune",
+      "query": "Hoa Tien Commune, Vietnam",
+      "stored": [
+        16.31,
+        107.82
+      ],
+      "osm": [
+        15.9707544,
+        108.1818011
+      ],
+      "delta_km": 54.0,
+      "status": "ERROR",
+      "osm_place": "Xã Hòa Tiến, Thành phố Đà Nẵng, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Zuoih_Commune",
+      "stored": [
+        16.0321,
+        107.6531
+      ],
+      "osm": null,
+      "delta_km": null,
+      "status": "NO_RESULT"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Bha_Le_Commune",
+      "stored": [
+        15.8901,
+        107.4581
+      ],
+      "osm": null,
+      "delta_km": null,
+      "status": "NO_RESULT"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Tra_Vie_Commune",
+      "stored": [
+        15.85,
+        107.62
+      ],
+      "osm": null,
+      "delta_km": null,
+      "status": "NO_RESULT"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Ca_Dy_Commune",
+      "query": "Ca Dy Commune, Vietnam",
+      "stored": [
+        15.75,
+        107.76
+      ],
+      "osm": [
+        16.2832978,
+        107.8568671
+      ],
+      "delta_km": 60.2,
+      "status": "ERROR",
+      "osm_place": "Lê Bá Dỵ, Đá Bạc, Xã Phú Lộc, Thành phố Huế, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Tra_Bui_Commune",
+      "query": "Tra Bui Commune, Vietnam",
+      "stored": [
+        15.54,
+        107.84
+      ],
+      "osm": [
+        20.9215597,
+        105.9311443
+      ],
+      "delta_km": 631.42,
+      "status": "ERROR",
+      "osm_place": "Trà Chanh Bụi Phố, Đường tỉnh 377, Ấp Kim Ngưu, Công Luận 2, Xã Văn Giang, Tỉnh Hưng Yên, 11709, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Ta_Lang_Commune",
+      "query": "Ta Lang Commune, Vietnam",
+      "stored": [
+        16.2521,
+        107.8951
+      ],
+      "osm": [
+        15.9352351,
+        107.5385946
+      ],
+      "delta_km": 51.89,
+      "status": "ERROR",
+      "osm_place": "Tà Làng, Xã Avương, Thành phố Đà Nẵng, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Thuong_Quang_Commune",
+      "query": "Thuong Quang Commune, Vietnam",
+      "stored": [
+        16.4012,
+        107.4081
+      ],
+      "osm": [
+        17.5742556,
+        106.2527864
+      ],
+      "delta_km": 179.19,
+      "status": "ERROR",
+      "osm_place": "Cột đu dây zipline, đài quan sát linh trưởng, Đường Hồ Chí Minh nhánh Tây, Xã Phong Nha, Tỉnh Quảng Trị, 47257, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "A_Ngo_Commune",
+      "query": "A Ngo Commune, Vietnam",
+      "stored": [
+        16.6721,
+        107.2541
+      ],
+      "osm": [
+        16.2628437,
+        107.2454284
+      ],
+      "delta_km": 45.52,
+      "status": "ERROR",
+      "osm_place": "A Ngo, Xã A Lưới 2, Thành phố Huế, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "A_Tuc_Commune",
+      "query": "A Tuc Commune, Vietnam",
+      "stored": [
+        16.8341,
+        107.0931
+      ],
+      "osm": [
+        15.4881938,
+        108.5379582
+      ],
+      "delta_km": 214.96,
+      "status": "ERROR",
+      "osm_place": "Cầu Ba Tức - ORB 21, Xã Tam Anh, Thành phố Đà Nẵng, Việt Nam"
+    },
+    {
+      "pool": "DEMAND",
+      "name": "Ca_Lu_Commune",
+      "query": "Ca Lu Commune, Vietnam",
+      "stored": [
+        15.6,
+        107.7
+      ],
+      "osm": [
+        21.2608094,
+        105.6969861
+      ],
+      "delta_km": 663.94,
+      "status": "ERROR",
+      "osm_place": "Ca Lo Bridge, Cầu Tân Lợi, Phúc Yên, Phường Phúc Yên, Tỉnh Phú Thọ, 84211, Việt Nam"
+    }
+  ],
+  "summary": {
+    "total": 132,
+    "ok": 8,
+    "warning": 15,
+    "error": 71,
+    "no_result": 38
+  }
+}

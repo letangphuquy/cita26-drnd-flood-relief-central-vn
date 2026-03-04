@@ -1,0 +1,1481 @@
+{
+  "applied": [
+    {
+      "name": "Hai_Van_Pass_North",
+      "source": "osm",
+      "old": [
+        16.1691,
+        108.1263
+      ],
+      "new": [
+        16.1691434,
+        108.1262622
+      ]
+    },
+    {
+      "name": "Dung_Quat_Port",
+      "source": "manual",
+      "old": [
+        15.37,
+        108.8
+      ],
+      "new": [
+        15.37,
+        108.8
+      ]
+    },
+    {
+      "name": "Chu_Lai_Airport",
+      "source": "manual",
+      "old": [
+        15.4033,
+        108.7061
+      ],
+      "new": [
+        15.4033,
+        108.7061
+      ]
+    },
+    {
+      "name": "Thuan_An_Port",
+      "source": "manual",
+      "old": [
+        16.52,
+        107.69
+      ],
+      "new": [
+        16.52,
+        107.69
+      ]
+    },
+    {
+      "name": "Sa_Ky_Port",
+      "source": "manual",
+      "old": [
+        15.21,
+        108.87
+      ],
+      "new": [
+        15.21,
+        108.87
+      ]
+    },
+    {
+      "name": "Khe_Sanh_Entry",
+      "source": "manual",
+      "old": [
+        16.63,
+        106.73
+      ],
+      "new": [
+        16.63,
+        106.73
+      ]
+    },
+    {
+      "name": "Tra_Bong_Supply",
+      "source": "manual",
+      "old": [
+        15.2093,
+        108.4534
+      ],
+      "new": [
+        15.2093,
+        108.4534
+      ]
+    },
+    {
+      "name": "Lang_Co_Beach_Base",
+      "source": "manual",
+      "old": [
+        16.24,
+        108.02
+      ],
+      "new": [
+        16.24,
+        108.02
+      ]
+    },
+    {
+      "name": "Duc_Pho_Harbor",
+      "source": "osm",
+      "old": [
+        14.8087,
+        108.9572
+      ],
+      "new": [
+        14.8087189,
+        108.9571626
+      ]
+    },
+    {
+      "name": "Tam_Ky_Logistics_Hub",
+      "source": "osm",
+      "old": [
+        15.5722,
+        108.4744
+      ],
+      "new": [
+        15.5722328,
+        108.4743668
+      ]
+    },
+    {
+      "name": "A_Luoi_Relief_Center",
+      "source": "osm",
+      "old": [
+        16.2135,
+        107.3368
+      ],
+      "new": [
+        16.2135045,
+        107.3367651
+      ]
+    },
+    {
+      "name": "Dong_Giang_Rescue_Stn",
+      "source": "manual",
+      "old": [
+        15.9126,
+        107.7265
+      ],
+      "new": [
+        15.9126,
+        107.7265
+      ]
+    },
+    {
+      "name": "Thang_Binh_Depot",
+      "source": "manual",
+      "old": [
+        15.69,
+        108.34
+      ],
+      "new": [
+        15.69,
+        108.34
+      ]
+    },
+    {
+      "name": "Nam_Giang_Forward_Base",
+      "source": "manual",
+      "old": [
+        15.6072,
+        107.6071
+      ],
+      "new": [
+        15.6072,
+        107.6071
+      ]
+    },
+    {
+      "name": "Nui_Thanh_Reserve",
+      "source": "manual",
+      "old": [
+        15.45,
+        108.62
+      ],
+      "new": [
+        15.45,
+        108.62
+      ]
+    },
+    {
+      "name": "Lang_Co_Forward_Post",
+      "source": "manual",
+      "old": [
+        16.24,
+        108.02
+      ],
+      "new": [
+        16.24,
+        108.02
+      ]
+    },
+    {
+      "name": "Binh_Son_Warehouse",
+      "source": "osm",
+      "old": [
+        15.3115,
+        108.7287
+      ],
+      "new": [
+        15.3115055,
+        108.7286874
+      ]
+    },
+    {
+      "name": "A_Dot_Mountain_Base",
+      "source": "manual",
+      "old": [
+        16.12,
+        107.3
+      ],
+      "new": [
+        16.12,
+        107.3
+      ]
+    },
+    {
+      "name": "Quang_Ngai_Depot",
+      "source": "osm",
+      "old": [
+        15.119,
+        108.8096
+      ],
+      "new": [
+        15.1190037,
+        108.8095598
+      ]
+    },
+    {
+      "name": "A_Sap_Helipad",
+      "source": "manual",
+      "old": [
+        16.25,
+        107.25
+      ],
+      "new": [
+        16.25,
+        107.25
+      ]
+    },
+    {
+      "name": "Que_Son_Facility",
+      "source": "manual",
+      "old": [
+        15.6832,
+        108.0627
+      ],
+      "new": [
+        15.6832,
+        108.0627
+      ]
+    },
+    {
+      "name": "Huong_Viet_Depot",
+      "source": "manual",
+      "old": [
+        16.7,
+        107.06
+      ],
+      "new": [
+        16.7,
+        107.06
+      ]
+    },
+    {
+      "name": "Quang_Ngai_Port_Hub",
+      "source": "manual",
+      "old": [
+        15.37,
+        108.8
+      ],
+      "new": [
+        15.37,
+        108.8
+      ]
+    },
+    {
+      "name": "Phuoc_Son_Helipad",
+      "source": "manual",
+      "old": [
+        15.72,
+        107.97
+      ],
+      "new": [
+        15.72,
+        107.97
+      ]
+    },
+    {
+      "name": "Rao_Trang_Base",
+      "source": "manual",
+      "old": [
+        16.15,
+        107.4
+      ],
+      "new": [
+        16.15,
+        107.4
+      ]
+    },
+    {
+      "name": "Bac_Tra_My_Depot",
+      "source": "manual",
+      "old": [
+        15.32,
+        107.95
+      ],
+      "new": [
+        15.32,
+        107.95
+      ]
+    },
+    {
+      "name": "Son_Ha_Hub",
+      "source": "manual",
+      "old": [
+        15.03,
+        108.47
+      ],
+      "new": [
+        15.03,
+        108.47
+      ]
+    },
+    {
+      "name": "Dien_Ban_District",
+      "source": "manual",
+      "old": [
+        15.89,
+        108.25
+      ],
+      "new": [
+        15.89,
+        108.25
+      ]
+    },
+    {
+      "name": "Nui_Thanh_District",
+      "source": "manual",
+      "old": [
+        15.45,
+        108.62
+      ],
+      "new": [
+        15.45,
+        108.62
+      ]
+    },
+    {
+      "name": "Thang_Binh_District",
+      "source": "osm",
+      "old": [
+        15.7077,
+        108.3969
+      ],
+      "new": [
+        15.7076968,
+        108.3969351
+      ]
+    },
+    {
+      "name": "Dai_Loc_District",
+      "source": "osm",
+      "old": [
+        15.8339,
+        107.9544
+      ],
+      "new": [
+        15.833943,
+        107.9544484
+      ]
+    },
+    {
+      "name": "Dong_Giang_District",
+      "source": "osm",
+      "old": [
+        15.9126,
+        107.7265
+      ],
+      "new": [
+        15.9125915,
+        107.7265211
+      ]
+    },
+    {
+      "name": "Tay_Giang_District",
+      "source": "osm",
+      "old": [
+        15.8948,
+        107.4976
+      ],
+      "new": [
+        15.8947863,
+        107.4976056
+      ]
+    },
+    {
+      "name": "A_Luoi_District",
+      "source": "manual",
+      "old": [
+        16.2185,
+        107.3318
+      ],
+      "new": [
+        16.2185,
+        107.3318
+      ]
+    },
+    {
+      "name": "Nam_Giang_District",
+      "source": "osm",
+      "old": [
+        15.6072,
+        107.6071
+      ],
+      "new": [
+        15.6072266,
+        107.6070999
+      ]
+    },
+    {
+      "name": "A_Vuong_Commune",
+      "source": "manual",
+      "old": [
+        15.94,
+        107.58
+      ],
+      "new": [
+        15.94,
+        107.58
+      ]
+    },
+    {
+      "name": "Viet_An_Commune",
+      "source": "manual",
+      "old": [
+        15.58,
+        108.14
+      ],
+      "new": [
+        15.58,
+        108.14
+      ]
+    },
+    {
+      "name": "Que_Son_District",
+      "source": "osm",
+      "old": [
+        15.6832,
+        108.0627
+      ],
+      "new": [
+        15.683219,
+        108.0626607
+      ]
+    },
+    {
+      "name": "Phu_Ninh_District",
+      "source": "manual",
+      "old": [
+        15.58,
+        108.32
+      ],
+      "new": [
+        15.58,
+        108.32
+      ]
+    },
+    {
+      "name": "Tam_Ky_City",
+      "source": "osm",
+      "old": [
+        15.5722,
+        108.4744
+      ],
+      "new": [
+        15.5722328,
+        108.4743668
+      ]
+    },
+    {
+      "name": "Huong_Tra_District",
+      "source": "manual",
+      "old": [
+        16.51,
+        107.55
+      ],
+      "new": [
+        16.51,
+        107.55
+      ]
+    },
+    {
+      "name": "Huong_Thuy_District",
+      "source": "manual",
+      "old": [
+        16.34,
+        107.68
+      ],
+      "new": [
+        16.34,
+        107.68
+      ]
+    },
+    {
+      "name": "Nam_Dong_District",
+      "source": "manual",
+      "old": [
+        16.08,
+        107.72
+      ],
+      "new": [
+        16.08,
+        107.72
+      ]
+    },
+    {
+      "name": "Phu_Loc_District",
+      "source": "osm",
+      "old": [
+        16.2032,
+        107.7697
+      ],
+      "new": [
+        16.2031796,
+        107.7697382
+      ]
+    },
+    {
+      "name": "A_Luoi_Mountain",
+      "source": "manual",
+      "old": [
+        16.2085,
+        107.3418
+      ],
+      "new": [
+        16.2085,
+        107.3418
+      ]
+    },
+    {
+      "name": "Nam_Dong_Highland",
+      "source": "manual",
+      "old": [
+        16.0,
+        107.65
+      ],
+      "new": [
+        16.0,
+        107.65
+      ]
+    },
+    {
+      "name": "Cam_Le_District",
+      "source": "osm",
+      "old": [
+        16.0169,
+        108.2033
+      ],
+      "new": [
+        16.016946,
+        108.2033469
+      ]
+    },
+    {
+      "name": "Lien_Chieu_District",
+      "source": "osm",
+      "old": [
+        16.1216,
+        108.1126
+      ],
+      "new": [
+        16.1216398,
+        108.1125643
+      ]
+    },
+    {
+      "name": "Son_Tra_District",
+      "source": "osm",
+      "old": [
+        16.1033,
+        108.2638
+      ],
+      "new": [
+        16.103337,
+        108.2638138
+      ]
+    },
+    {
+      "name": "Thanh_Khe_District",
+      "source": "osm",
+      "old": [
+        16.054,
+        108.186
+      ],
+      "new": [
+        16.0540007,
+        108.1859768
+      ]
+    },
+    {
+      "name": "Hoa_Vang_District",
+      "source": "osm",
+      "old": [
+        16.0667,
+        107.9738
+      ],
+      "new": [
+        16.0666545,
+        107.9738057
+      ]
+    },
+    {
+      "name": "Phu_Yen_Commune",
+      "source": "manual",
+      "old": [
+        15.7,
+        108.3
+      ],
+      "new": [
+        15.7,
+        108.3
+      ]
+    },
+    {
+      "name": "Bac_Tra_My",
+      "source": "manual",
+      "old": [
+        15.32,
+        107.95
+      ],
+      "new": [
+        15.32,
+        107.95
+      ]
+    },
+    {
+      "name": "Nam_Tra_My",
+      "source": "manual",
+      "old": [
+        15.14,
+        108.12
+      ],
+      "new": [
+        15.14,
+        108.12
+      ]
+    },
+    {
+      "name": "Hiep_Duc_District",
+      "source": "osm",
+      "old": [
+        15.5181,
+        108.1028
+      ],
+      "new": [
+        15.5181225,
+        108.1027637
+      ]
+    },
+    {
+      "name": "Tien_Phuoc_District",
+      "source": "osm",
+      "old": [
+        15.4916,
+        108.2986
+      ],
+      "new": [
+        15.491617,
+        108.2986111
+      ]
+    },
+    {
+      "name": "Nui_Thanh_South",
+      "source": "manual",
+      "old": [
+        15.38,
+        108.65
+      ],
+      "new": [
+        15.38,
+        108.65
+      ]
+    },
+    {
+      "name": "Tam_Ky_South",
+      "source": "manual",
+      "old": [
+        15.5,
+        108.42
+      ],
+      "new": [
+        15.5,
+        108.42
+      ]
+    },
+    {
+      "name": "Phu_Loc_West",
+      "source": "manual",
+      "old": [
+        16.23,
+        107.75
+      ],
+      "new": [
+        16.23,
+        107.75
+      ]
+    },
+    {
+      "name": "Phu_Vang_District",
+      "source": "osm",
+      "old": [
+        16.4454,
+        107.7368
+      ],
+      "new": [
+        16.4453817,
+        107.7368036
+      ]
+    },
+    {
+      "name": "Quang_Dien_District",
+      "source": "osm",
+      "old": [
+        16.5925,
+        107.5129
+      ],
+      "new": [
+        16.5924815,
+        107.5129279
+      ]
+    },
+    {
+      "name": "Phong_Dien_District",
+      "source": "manual",
+      "old": [
+        16.61,
+        107.45
+      ],
+      "new": [
+        16.61,
+        107.45
+      ]
+    },
+    {
+      "name": "Hue_City_South",
+      "source": "manual",
+      "old": [
+        16.4,
+        107.6
+      ],
+      "new": [
+        16.4,
+        107.6
+      ]
+    },
+    {
+      "name": "Khe_Tre_Commune",
+      "source": "osm",
+      "old": [
+        16.1684,
+        107.7185
+      ],
+      "new": [
+        16.1684152,
+        107.718494
+      ]
+    },
+    {
+      "name": "Tra_Don_Commune",
+      "source": "manual",
+      "old": [
+        15.4,
+        107.95
+      ],
+      "new": [
+        15.4,
+        107.95
+      ]
+    },
+    {
+      "name": "Tra_Nam_Commune",
+      "source": "manual",
+      "old": [
+        15.08,
+        108.05
+      ],
+      "new": [
+        15.08,
+        108.05
+      ]
+    },
+    {
+      "name": "Lang_Co_Area",
+      "source": "manual",
+      "old": [
+        16.24,
+        108.02
+      ],
+      "new": [
+        16.24,
+        108.02
+      ]
+    },
+    {
+      "name": "Truoi_Lake_Area",
+      "source": "manual",
+      "old": [
+        16.35,
+        107.7
+      ],
+      "new": [
+        16.35,
+        107.7
+      ]
+    },
+    {
+      "name": "Vu_Gia_River_South",
+      "source": "manual",
+      "old": [
+        15.85,
+        107.6
+      ],
+      "new": [
+        15.85,
+        107.6
+      ]
+    },
+    {
+      "name": "Song_Bung_Lake",
+      "source": "manual",
+      "old": [
+        15.9,
+        107.5
+      ],
+      "new": [
+        15.9,
+        107.5
+      ]
+    },
+    {
+      "name": "Phuoc_Son_District",
+      "source": "manual",
+      "old": [
+        15.72,
+        107.97
+      ],
+      "new": [
+        15.72,
+        107.97
+      ]
+    },
+    {
+      "name": "Tra_My_Highlands",
+      "source": "manual",
+      "old": [
+        15.45,
+        108.05
+      ],
+      "new": [
+        15.45,
+        108.05
+      ]
+    },
+    {
+      "name": "Bach_Ma_Forest",
+      "source": "manual",
+      "old": [
+        16.18,
+        107.85
+      ],
+      "new": [
+        16.18,
+        107.85
+      ]
+    },
+    {
+      "name": "A_Luoi_Valley",
+      "source": "manual",
+      "old": [
+        16.21,
+        107.28
+      ],
+      "new": [
+        16.21,
+        107.28
+      ]
+    },
+    {
+      "name": "Huong_An_Commune",
+      "source": "manual",
+      "old": [
+        16.75,
+        107.3
+      ],
+      "new": [
+        16.75,
+        107.3
+      ]
+    },
+    {
+      "name": "Tho_Quang_Ward",
+      "source": "manual",
+      "old": [
+        16.1,
+        108.22
+      ],
+      "new": [
+        16.1,
+        108.22
+      ]
+    },
+    {
+      "name": "Hoa_Cuong_Ward",
+      "source": "osm",
+      "old": [
+        16.0416,
+        108.2175
+      ],
+      "new": [
+        16.0416286,
+        108.2175304
+      ]
+    },
+    {
+      "name": "An_Tan_Commune",
+      "source": "manual",
+      "old": [
+        15.95,
+        108.05
+      ],
+      "new": [
+        15.95,
+        108.05
+      ]
+    },
+    {
+      "name": "Lac_My_Commune",
+      "source": "manual",
+      "old": [
+        15.96,
+        107.85
+      ],
+      "new": [
+        15.96,
+        107.85
+      ]
+    },
+    {
+      "name": "Hong_Ha_Commune",
+      "source": "manual",
+      "old": [
+        16.35,
+        107.55
+      ],
+      "new": [
+        16.35,
+        107.55
+      ]
+    },
+    {
+      "name": "Quang_An_Ward",
+      "source": "manual",
+      "old": [
+        16.48,
+        107.68
+      ],
+      "new": [
+        16.48,
+        107.68
+      ]
+    },
+    {
+      "name": "Huong_Xuan_Commune",
+      "source": "manual",
+      "old": [
+        16.22,
+        107.35
+      ],
+      "new": [
+        16.22,
+        107.35
+      ]
+    },
+    {
+      "name": "Tam_Viet_Commune",
+      "source": "manual",
+      "old": [
+        15.58,
+        108.3
+      ],
+      "new": [
+        15.58,
+        108.3
+      ]
+    },
+    {
+      "name": "Tam_Hiep_Commune",
+      "source": "manual",
+      "old": [
+        15.38,
+        108.7
+      ],
+      "new": [
+        15.38,
+        108.7
+      ]
+    },
+    {
+      "name": "Binh_Duong_Commune",
+      "source": "manual",
+      "old": [
+        15.78,
+        108.5
+      ],
+      "new": [
+        15.78,
+        108.5
+      ]
+    },
+    {
+      "name": "Phu_Dien_Ward",
+      "source": "manual",
+      "old": [
+        16.76,
+        107.38
+      ],
+      "new": [
+        16.76,
+        107.38
+      ]
+    },
+    {
+      "name": "My_Khe_Beach_Area",
+      "source": "manual",
+      "old": [
+        16.06,
+        108.25
+      ],
+      "new": [
+        16.06,
+        108.25
+      ]
+    },
+    {
+      "name": "A_Dot_Commune",
+      "source": "manual",
+      "old": [
+        16.12,
+        107.3
+      ],
+      "new": [
+        16.12,
+        107.3
+      ]
+    },
+    {
+      "name": "Tam_Quan_Town",
+      "source": "manual",
+      "old": [
+        15.35,
+        108.8
+      ],
+      "new": [
+        15.35,
+        108.8
+      ]
+    },
+    {
+      "name": "Nuoc_Trong_Reservoir",
+      "source": "osm",
+      "old": [
+        15.1096,
+        108.3879
+      ],
+      "new": [
+        15.1095578,
+        108.3878961
+      ]
+    },
+    {
+      "name": "Duc_Pho_District",
+      "source": "manual",
+      "old": [
+        14.85,
+        108.96
+      ],
+      "new": [
+        14.85,
+        108.96
+      ]
+    },
+    {
+      "name": "A_Bat_Commune",
+      "source": "manual",
+      "old": [
+        16.75,
+        107.15
+      ],
+      "new": [
+        16.75,
+        107.15
+      ]
+    },
+    {
+      "name": "A_La_Commune",
+      "source": "manual",
+      "old": [
+        15.63,
+        107.37
+      ],
+      "new": [
+        15.63,
+        107.37
+      ]
+    },
+    {
+      "name": "Cao_Ngan_Commune",
+      "source": "manual",
+      "old": [
+        16.7,
+        107.15
+      ],
+      "new": [
+        16.7,
+        107.15
+      ]
+    },
+    {
+      "name": "Mo_Duc_District",
+      "source": "osm",
+      "old": [
+        14.9884,
+        108.8877
+      ],
+      "new": [
+        14.988425,
+        108.8876534
+      ]
+    },
+    {
+      "name": "Minh_Long_District",
+      "source": "osm",
+      "old": [
+        14.9463,
+        108.6762
+      ],
+      "new": [
+        14.9463252,
+        108.6761708
+      ]
+    },
+    {
+      "name": "Chu_Lai_Port_Area",
+      "source": "manual",
+      "old": [
+        15.4,
+        108.7
+      ],
+      "new": [
+        15.4,
+        108.7
+      ]
+    },
+    {
+      "name": "Son_Ha_District",
+      "source": "manual",
+      "old": [
+        15.03,
+        108.47
+      ],
+      "new": [
+        15.03,
+        108.47
+      ]
+    },
+    {
+      "name": "Son_Tay_District",
+      "source": "osm",
+      "old": [
+        14.9702,
+        108.3555
+      ],
+      "new": [
+        14.9702273,
+        108.3554841
+      ]
+    },
+    {
+      "name": "Tra_Bong_District",
+      "source": "osm",
+      "old": [
+        15.2093,
+        108.4534
+      ],
+      "new": [
+        15.2092972,
+        108.4534371
+      ]
+    },
+    {
+      "name": "Nghia_Hanh_District",
+      "source": "osm",
+      "old": [
+        14.9689,
+        108.7984
+      ],
+      "new": [
+        14.9689251,
+        108.798443
+      ]
+    },
+    {
+      "name": "Tu_Nghia_District",
+      "source": "osm",
+      "old": [
+        15.0914,
+        108.7676
+      ],
+      "new": [
+        15.0913545,
+        108.7675545
+      ]
+    },
+    {
+      "name": "Quang_Ngai_City",
+      "source": "osm",
+      "old": [
+        15.119,
+        108.8096
+      ],
+      "new": [
+        15.1190037,
+        108.8095598
+      ]
+    },
+    {
+      "name": "Son_Tinh_District",
+      "source": "osm",
+      "old": [
+        15.1986,
+        108.7085
+      ],
+      "new": [
+        15.198644,
+        108.7084603
+      ]
+    },
+    {
+      "name": "Binh_Son_District",
+      "source": "osm",
+      "old": [
+        15.3115,
+        108.7287
+      ],
+      "new": [
+        15.3115055,
+        108.7286874
+      ]
+    },
+    {
+      "name": "Khue_Trung_Valley",
+      "source": "manual",
+      "old": [
+        15.72,
+        107.55
+      ],
+      "new": [
+        15.72,
+        107.55
+      ]
+    },
+    {
+      "name": "Phu_Thuong_Ward",
+      "source": "manual",
+      "old": [
+        16.63,
+        107.42
+      ],
+      "new": [
+        16.63,
+        107.42
+      ]
+    },
+    {
+      "name": "Truong_Giang_Commune",
+      "source": "manual",
+      "old": [
+        15.55,
+        108.52
+      ],
+      "new": [
+        15.55,
+        108.52
+      ]
+    },
+    {
+      "name": "Son_Qua_Commune",
+      "source": "manual",
+      "old": [
+        16.85,
+        107.2
+      ],
+      "new": [
+        16.85,
+        107.2
+      ]
+    },
+    {
+      "name": "Xuan_Ha_Ward",
+      "source": "manual",
+      "old": [
+        16.07,
+        108.22
+      ],
+      "new": [
+        16.07,
+        108.22
+      ]
+    },
+    {
+      "name": "Man_Thai_Ward",
+      "source": "osm",
+      "old": [
+        16.0902,
+        108.2467
+      ],
+      "new": [
+        16.0901696,
+        108.246748
+      ]
+    },
+    {
+      "name": "Phuoc_Hiep_Commune",
+      "source": "osm",
+      "old": [
+        15.4686,
+        107.918
+      ],
+      "new": [
+        15.4686465,
+        107.917999
+      ]
+    },
+    {
+      "name": "Hoa_Lien_Commune",
+      "source": "manual",
+      "old": [
+        16.08,
+        108.12
+      ],
+      "new": [
+        16.08,
+        108.12
+      ]
+    },
+    {
+      "name": "Hoa_Tien_Commune",
+      "source": "manual",
+      "old": [
+        15.98,
+        108.19
+      ],
+      "new": [
+        15.98,
+        108.19
+      ]
+    },
+    {
+      "name": "Zuoih_Commune",
+      "source": "manual",
+      "old": [
+        15.65,
+        107.55
+      ],
+      "new": [
+        15.65,
+        107.55
+      ]
+    },
+    {
+      "name": "Bha_Le_Commune",
+      "source": "manual",
+      "old": [
+        15.55,
+        107.45
+      ],
+      "new": [
+        15.55,
+        107.45
+      ]
+    },
+    {
+      "name": "Tra_Vie_Commune",
+      "source": "manual",
+      "old": [
+        15.85,
+        107.62
+      ],
+      "new": [
+        15.85,
+        107.62
+      ]
+    },
+    {
+      "name": "Ca_Dy_Commune",
+      "source": "manual",
+      "old": [
+        15.58,
+        107.82
+      ],
+      "new": [
+        15.58,
+        107.82
+      ]
+    },
+    {
+      "name": "Tra_Bui_Commune",
+      "source": "manual",
+      "old": [
+        15.35,
+        108.1
+      ],
+      "new": [
+        15.35,
+        108.1
+      ]
+    },
+    {
+      "name": "Ta_Lang_Commune",
+      "source": "manual",
+      "old": [
+        16.13,
+        107.97
+      ],
+      "new": [
+        16.13,
+        107.97
+      ]
+    },
+    {
+      "name": "Thuong_Quang_Commune",
+      "source": "manual",
+      "old": [
+        16.15,
+        107.75
+      ],
+      "new": [
+        16.15,
+        107.75
+      ]
+    },
+    {
+      "name": "A_Ngo_Commune",
+      "source": "osm",
+      "old": [
+        16.2628,
+        107.2454
+      ],
+      "new": [
+        16.2628437,
+        107.2454284
+      ]
+    },
+    {
+      "name": "A_Tuc_Commune",
+      "source": "manual",
+      "old": [
+        16.85,
+        107.05
+      ],
+      "new": [
+        16.85,
+        107.05
+      ]
+    }
+  ],
+  "skipped": []
+}
