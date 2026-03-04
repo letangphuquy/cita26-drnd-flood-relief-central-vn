@@ -7,7 +7,7 @@ REM   default: pop=100, gen=200 (full paper quality)
 setlocal EnableDelayedExpansion
 set "PROJECT=%~dp0"
 set "SOLVER=%PROJECT%solver_cpp\solver.exe"
-set "DATA=%PROJECT%data"
+set "DATA=%PROJECT%hlp-dataset"
 set "DATA_CV=%PROJECT%data_prep"
 set "RESULTS=%PROJECT%results"
 
