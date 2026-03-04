@@ -266,13 +266,13 @@ Segment & Type & Size & Semantics \\
 \midrule
 $\mathbf{X}$ & Binary & $|\mathcal{H}|$ & $X_k = 1$: open planned hub $k$ before the disaster \\
 $\mathbf{R}$ & $[0,1]$ & $|\mathcal{H}|$ & Inventory fill fraction: $q_k = R_k \cdot \kappa_k$ \\
-$\mathbf{A}$ & $\{0,\ldots,|\mathcal{H}|-1\}$ & $|\mathcal{I}|$ & Rotation offset into distance-sorted hub list for demand $i$ \\
+$\mathbf{A}$ & $\{0,\ldots,|\mathcal{H}|-1\}$ & $|\mathcal{I}|$ & Preferred anchor hub for demand $i$; trial order = hubs by proximity to hub $A_i$ \\
 $\mathbf{W}$ & $[0,1]^6$ & $6$ & Heuristic weights governing decoder behaviour \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-The $\mathbf{R}$ segment is decoupled from $\mathbf{X}$: each $q_k = R_k \cdot \kappa_k$ depends only on the hub's physical capacity $\kappa_k$, independent of how many hubs are open. The $\mathbf{A}$ segment encodes a rotation offset per demand node that governs hub trial order during assignment (see Section~\ref{sec:decoder}). The six heuristic weights $\mathbf{W}$ are described in Table~\ref{tab:weights}.
+The $\mathbf{R}$ segment is decoupled from $\mathbf{X}$: each $q_k = R_k \cdot \kappa_k$ depends only on the hub's physical capacity $\kappa_k$, independent of how many hubs are open. The $\mathbf{A}$ segment identifies a \emph{preferred anchor hub} $A_i \in \mathcal{H}$ for each demand node $i$; during hub assignment the decoder ranks all hub candidates in increasing order of distance from hub $A_i$, so evolution of $\mathbf{A}$ directly steers the spatial focus of each demand's assignment (see Section~\ref{sec:decoder}). The six heuristic weights $\mathbf{W}$ are described in Table~\ref{tab:weights}.
 
 \begin{table}[ht]
 \centering
@@ -287,7 +287,7 @@ $w_1$ & Hub speed        & Hub scoring    & Prefer faster-to-reach hubs \\
 $w_2$ & Hub capacity     & Hub scoring    & Prefer hubs with more residual inventory \\
 $w_3$ & Demand isolation & Demand sorting & Prioritise demands with fewer reachable hubs \\
 $w_4$ & Hub type bonus   & Hub scoring    & Prefer planned over reactive hubs \\
-$w_5$ & Reactive eagerness & Reactive check & Conservative reactive opening (0 = aggressive) \\
+$w_5$ & Pass-1 window depth & Hub selection & Larger fraction of anchor-proximate hubs tried; favours planned over reactive \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -295,11 +295,15 @@ $w_5$ & Reactive eagerness & Reactive check & Conservative reactive opening (0 =
 \subsection{Priority-Based Decoding Heuristic}
 \label{sec:decoder}
 
-The decoder is invoked once per chromosome per scenario $s$. We pre-compute, for each demand node $i$, the list of all hubs sorted by increasing Euclidean distance: $\text{order}[i] = (k_{(1)}, k_{(2)}, \ldots, k_{(|\mathcal{H}|)})$.
+The decoder is invoked once per chromosome per scenario $s$. Before the scenario loop, we pre-compute the \emph{anchor-proximity order} for every hub $k \in \mathcal{H}$:
+\[
+  \pi_k = \bigl(k^{(1)}_k,\, k^{(2)}_k,\, \ldots,\, k^{(|\mathcal{H}|)}_k\bigr),
+\]
+where $k^{(j)}_k$ denotes the $j$-th closest hub to hub $k$ by Euclidean distance (so $k^{(1)}_k = k$ itself). This table is instance-specific and chromosome-independent, computed once per decode call.
 
-\textbf{Step 1 -- Hub Activation.} Planned hubs with $X_k = 1$ and risk $r_{ks} \le \chi$ are activated. If none qualify, the safest planned hub is forced active as a fallback.
+\textbf{Step 1 -- Hub Activation.} Planned hubs with $X_k = 1$ and risk $r_{ks} \le \chi$ are activated with inventory $q_k = R_k \cdot \kappa_k$. If none qualify, the safest planned hub is forced active as a fallback.
 
-\textbf{Step 2 -- Inventory Allocation.} Each active hub $k$ receives inventory $q_k = R_k \cdot \kappa_k$.
+\textbf{Step 2 -- Inventory Allocation.} Each active hub $k$ receives its pre-positioned inventory $q_k$.
 
 \textbf{Step 3 -- Demand Priority Scoring.} For each demand node $i$, three raw components are computed and independently normalised to $[0,1]$ across the demand set:
 \begin{equation}
@@ -315,21 +319,19 @@ The composite priority score incorporates Gaussian noise $\varepsilon_i \sim \ma
 \end{equation}
 Demands are sorted in descending order by $\text{Score}_i$.
 
-\textbf{Step 4 -- Tiered Hub Selection.} For each demand $i$ (in priority order), a hub is selected via a two-pass rotation procedure anchored at offset $A_i$:
+\textbf{Step 4 -- Tiered Hub Selection.} For each demand $i$ (in priority order), the hub candidate list is the anchor-proximity order $\pi_{A_i}$: all hubs ranked by ascending distance from the chromosome's anchor hub $A_i$. Intuitively, $A_i$ encodes which hub cluster demand $i$ should be served from, and nearby hubs in that cluster are tried first.
 
-\textit{Pass 1 (best-in-window).} Let $K = 3$. Examine the first $K$ candidates in the rotation:
-\begin{equation*}
-    \text{candidate}_j = \text{order}[i][(A_i + j) \bmod |\mathcal{H}|], \quad j = 0, \ldots, K-1.
-\end{equation*}
-Among candidates that are active, reachable ($a_{ikms}=1$ for some $m$), and have positive residual inventory, select the hub maximising:
+Let $K = \max\!\bigl(1,\, \lceil w_5 \cdot |\mathcal{H}| \rceil\bigr)$ be the \emph{Pass-1 window}. A large $w_5$ widens the window, favouring planned hubs over reactive opening; a small $w_5$ narrows it, falling back to reactive sooner.
+
+\textit{Pass 1 (best-in-window).} Examine the first $K$ candidates $\pi_{A_i}[0], \ldots, \pi_{A_i}[K-1]$. Among those that are active, reachable ($a_{ikms}=1$ for some $m$), and have positive residual inventory, select the hub maximising:
 \begin{equation}
     \text{HubScore}(k) = \frac{w_1}{\tau_{ikm^*} + \varepsilon} + w_2 \cdot \text{residual}_k + w_4 \cdot \mathbf{1}[X_k = 1].
     \label{eq:hub_score}
 \end{equation}
 
-\textit{Pass 2 (fallback).} If Pass~1 yields no eligible hub, scan the remaining candidates ($j = K, \ldots, |\mathcal{H}|-1$) and assign the first active, reachable hub regardless of residual capacity (this may incur a constraint violation).
+\textit{Pass 2 (overflow fallback).} If Pass~1 yields no eligible hub, scan the remaining candidates $\pi_{A_i}[K], \ldots, \pi_{A_i}[|\mathcal{H}|-1]$ and select the first active, reachable hub regardless of residual capacity (this may incur a constraint violation).
 
-\textit{Reactive check.} After selecting hub $k^*$ with travel time $\tau^*$, inspect all inactive safe hubs $k'$. If $\tau_{ik'} < (1 - w_5) \cdot \tau^*$, open $k'$ reactively (incurring fixed cost $F^a_{k's}$) and reassign demand $i$. If no hub is reachable at all, a reactive hub is opened as a last resort; failing that, a constraint violation penalty $\gamma D_{is}$ is incurred.
+\textit{Forced reactive.} If both passes fail, the decoder attempts to open any safe inactive hub reachable from $i$, incurring the reactive fixed cost $F^a_{ks}$. If no hub can be reached, a constraint violation penalty $\gamma D_{is}$ is recorded.
 
 \textbf{Step 5 -- Origin Routing and Trans-shipment.} Each origin $j$ is assigned to the nearest active hub. A greedy trans-shipment loop then routes surplus relief from over-stocked hubs to deficit hubs, using the cheapest available mode and applying the volume discount $\alpha$.
 
@@ -349,7 +351,7 @@ Constraint handling follows the constrained-dominance principle \cite{deb2002fas
 
 \textbf{Implementation.} PB-NSGA-II is implemented in C++17. Data generation and result analysis are performed in Python 3. All experiments run on a standard workstation (Intel Core i7, 16 GB RAM).
 
-\textbf{Algorithm parameters.} Population $N = 100$; generations $G = 200$; $p_c = 0.9$; $\eta_c = \eta_m = 20$; $p_m = 1/|\mathbf{C}|$ where $|\mathbf{C}| = 2|\mathcal{H}| + |\mathcal{I}| + 6$; decoder noise $\sigma = 0.05$; Pass~1 window $K = 3$. The safety threshold is $\chi = 0.7$; discount $\alpha = 0.6$; $\gamma = 3.0$ kg/person; $\lambda_0 = 0.8$.
+\textbf{Algorithm parameters.} Population $N = 100$; generations $G = 200$; $p_c = 0.9$; $\eta_c = \eta_m = 20$; $p_m = 1/|\mathbf{C}|$ where $|\mathbf{C}| = 2|\mathcal{H}| + |\mathcal{I}| + 6$; decoder noise $\sigma = 0.05$; Pass-1 window $K = \max(1,\lceil w_5 \cdot |\mathcal{H}|\rceil)$ (evolved per individual). The safety threshold is $\chi = 0.7$; discount $\alpha = 0.6$; $\gamma = 3.0$ kg/person; $\lambda_0 = 0.8$.
 
 \textbf{Performance metric.} We use the \textbf{Hypervolume (HV)} indicator. The reference point is set to $1.1 \times \max(Z_1, Z_2)$ of the combined Pareto front. A larger HV indicates better coverage and spread of the Pareto front.
 
