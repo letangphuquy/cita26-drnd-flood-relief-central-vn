@@ -44,3 +44,31 @@ Tasks:
 - Trực quan hóa kết quả trên bản đồ
 - Vẽ biểu đồ so sánh các kịch bản
 - Plot Pareto front figures
+
+
+===============
+General outline for paper writing:
+
+UP-NEXT: \section{Experiments}
+We should re-arrange the below contents to like this (Experiment: HLP benchmarks -- talk both dataset method and exp. set-up, as well as results) (Experiment: Case study -- present dataset methodology, then the settings, then the results) 
+
+4.1 Experimental Set-up (slight modifications)
+- Implementation
+- Algorithm/ Problem instance parameters
+- Performance metric (add cite for HV and IGD)
+- Results is averaged from 20 runs, taking mean and stddev value
+
+4.2 Dataset description
+Benchmark dataset: Present the method to transform the HLP instances to DRND instances
+
+Central Vietname case study: Present the methodology.
+
+4.3 Experiment 1: Algorithm efficiency 
+- Baseline: complete enumeration (can go for branch \& bound approach)
+- Proposed: PB-NSGA
+- Metrics: HV, IGD, pareto size, algorithm running time.
+
+4.4 Experiment 2: Case study in Vietnam
+- Figure: Pareto Front
+- Solution visualization on Map
+- Insights from the solutions
