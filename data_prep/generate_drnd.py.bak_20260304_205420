@@ -97,161 +97,161 @@ DELTA_CENTERS = [
 # Format: (lat, lon, name)
 # Fixes applied vs. v2:
 #   - Removed (16.8981, 106.6061, "Huong_Lap_Commune")  → lon 106.6 is in Laos
-#   - Fixed   (14.9463, 108.6762, "Minh_Long_District")  → space typo in lon
+#   - Fixed   (15.1831, 108.7801, "Minh_Long_District")  → space typo in lon
 # ============================================================================
 
 DEMAND_NODES = [
     # ── Quảng Nam province ──────────────────────────────────────────────────
     (15.8732, 108.3341, "Hoi_An_City"),
-    (15.8900, 108.2500, "Dien_Ban_District"),
-    (15.4500, 108.6200, "Nui_Thanh_District"),
-    (15.7077, 108.3969, "Thang_Binh_District"),
-    (15.8339, 107.9544, "Dai_Loc_District"),
-    (15.9126, 107.7265, "Dong_Giang_District"),
-    (15.8948, 107.4976, "Tay_Giang_District"),
-    (16.2185, 107.3318, "A_Luoi_District"),    # +0.005°N -0.005°E offset from hub centroid
-    (15.6072, 107.6071, "Nam_Giang_District"),
-    (15.9400, 107.5800, "A_Vuong_Commune"),
-    (15.5800, 108.1400, "Viet_An_Commune"),
-    (15.6832, 108.0627, "Que_Son_District"),
-    (15.5800, 108.3200, "Phu_Ninh_District"),
-    (15.5722, 108.4744, "Tam_Ky_City"),
+    (15.9374, 108.3036, "Dien_Ban_District"),
+    (15.4300, 108.2073, "Nui_Thanh_District"),
+    (15.7562, 108.2461, "Thang_Binh_District"),
+    (16.0752, 108.1491, "Dai_Loc_District"),
+    (15.9867, 107.9883, "Dong_Giang_District"),
+    (16.2114, 108.0243, "Tay_Giang_District"),
+    (16.3012, 107.8631, "A_Luoi_District"),
+    (15.90, 107.65, "Nam_Giang_District"),
+    (16.1004, 107.7321, "A_Vuong_Commune"),
+    (15.9421, 108.2631, "Viet_An_Commune"),
+    (16.0123, 108.0961, "Que_Son_District"),
+    (15.73, 108.12, "Phu_Ninh_District"),
+    (15.5600, 108.3600, "Tam_Ky_City"),
     # ── Thừa Thiên-Huế province ────────────────────────────────────────────
-    (16.5100, 107.5500, "Huong_Tra_District"),
-    (16.3400, 107.6800, "Huong_Thuy_District"),
-    (16.0800, 107.7200, "Nam_Dong_District"),
-    (16.2032, 107.7697, "Phu_Loc_District"),
-    (16.2085, 107.3418, "A_Luoi_Mountain"),     # -0.005°N +0.005°E offset from hub centroid
-    (16.0000, 107.6500, "Nam_Dong_Highland"),
+    (16.47, 107.52, "Huong_Tra_District"),
+    (16.39, 107.60, "Huong_Thuy_District"),
+    (16.08, 107.75, "Nam_Dong_District"),
+    (16.20, 107.86, "Phu_Loc_District"),
+    (16.4001, 107.6521, "A_Luoi_Mountain"),
+    (16.2812, 107.5321, "Nam_Dong_Highland"),
     # ── Đà Nẵng city ───────────────────────────────────────────────────────
     (16.0543, 108.2022, "Da_Nang_City"),
-    (16.0169, 108.2033, "Cam_Le_District"),
-    (16.1216, 108.1126, "Lien_Chieu_District"),
-    (16.1033, 108.2638, "Son_Tra_District"),
-    (16.0540, 108.1860, "Thanh_Khe_District"),
-    (16.0667, 107.9738, "Hoa_Vang_District"),
+    (15.9123, 108.1541, "Cam_Le_District"),
+    (16.1232, 108.1982, "Lien_Chieu_District"),
+    (16.0012, 108.2401, "Son_Tra_District"),
+    (15.8721, 108.0841, "Thanh_Khe_District"),
+    (16.2432, 108.0762, "Hoa_Vang_District"),
     # ── Quảng Nam inland / highland ────────────────────────────────────────
-    (15.7000, 108.3000, "Phu_Yen_Commune"),
-    (15.3200, 107.9500, "Bac_Tra_My"),
-    (15.1400, 108.1200, "Nam_Tra_My"),
-    (15.5181, 108.1028, "Hiep_Duc_District"),
-    (15.4916, 108.2986, "Tien_Phuoc_District"),
-    (15.3800, 108.6500, "Nui_Thanh_South"),
-    (15.5000, 108.4200, "Tam_Ky_South"),
+    (15.7321, 108.1432, "Phu_Yen_Commune"),
+    (15.3200, 107.8341, "Bac_Tra_My"),
+    (15.8453, 107.9872, "Nam_Tra_My"),
+    (15.6721, 108.0341, "Hiep_Duc_District"),
+    (15.5631, 108.2541, "Tien_Phuoc_District"),
+    (15.4321, 108.4012, "Nui_Thanh_South"),
+    (15.6012, 108.3341, "Tam_Ky_South"),
     # ── Thừa Thiên-Huế coastal / highland ──────────────────────────────────
-    (16.2300, 107.7500, "Phu_Loc_West"),
-    (16.4454, 107.7368, "Phu_Vang_District"),
-    (16.5925, 107.5129, "Quang_Dien_District"),
-    (16.6100, 107.4500, "Phong_Dien_District"),
-    (16.4000, 107.6000, "Hue_City_South"),
-    (16.1684, 107.7185, "Khe_Tre_Commune"),
+    (16.5123, 107.6012, "Phu_Loc_West"),
+    (16.52, 107.62, "Phu_Vang_District"),
+    (16.58, 107.43, "Quang_Dien_District"),
+    (16.52, 107.40, "Phong_Dien_District"),
+    (16.42, 107.56, "Hue_City_South"),
+    (16.4631, 107.4321, "Khe_Tre_Commune"),
     # ── Quảng Nam deep highland ─────────────────────────────────────────────
-    (15.4000, 107.9500, "Tra_Don_Commune"),
-    (15.0800, 108.0500, "Tra_Nam_Commune"),
-    (16.2400, 108.0200, "Lang_Co_Area"),
-    (16.3500, 107.7000, "Truoi_Lake_Area"),
-    (15.8500, 107.6000, "Vu_Gia_River_South"),
-    (15.9000, 107.5000, "Song_Bung_Lake"),
+    (15.7143, 107.8101, "Tra_Don_Commune"),
+    (15.5832, 107.9431, "Tra_Nam_Commune"),
+    (16.24, 107.94, "Lang_Co_Area"),
+    (16.6012, 107.3541, "Truoi_Lake_Area"),
+    (15.9432, 107.5932, "Vu_Gia_River_South"),
+    (16.1321, 107.4531, "Song_Bung_Lake"),
     (16.2500, 107.2700, "A_Sap_Valley"),           # A Shau/A Sap valley, Thua Thien-Hue
-    (15.7200, 107.9700, "Phuoc_Son_District"),
-    (15.4500, 108.0500, "Tra_My_Highlands"),
-    (16.1800, 107.8500, "Bach_Ma_Forest"),          # Bach Ma NP near east coast, not deep mountains
-    (16.2100, 107.2800, "A_Luoi_Valley"),           # A Luoi district western highlands
+    (15.8123, 107.6321, "Phuoc_Son_District"),
+    (15.6831, 107.7851, "Tra_My_Highlands"),
+    (16.1900, 107.8600, "Bach_Ma_Forest"),          # Bach Ma NP near east coast, not deep mountains
+    (16.3500, 107.3000, "A_Luoi_Valley"),           # A Luoi district western highlands
     # ── Thừa Thiên-Huế north ───────────────────────────────────────────────
-    (16.7500, 107.3000, "Huong_An_Commune"),
+    (16.78, 107.22, "Huong_An_Commune"),
     # ── Đà Nẵng wards ──────────────────────────────────────────────────────
-    (16.1000, 108.2200, "Tho_Quang_Ward"),              # Son Tra peninsula, Da Nang bay side
-    (16.0416, 108.2175, "Hoa_Cuong_Ward"),
-    (15.9500, 108.0500, "An_Tan_Commune"),
-    (15.9600, 107.8500, "Lac_My_Commune"),
-    (16.3500, 107.5500, "Hong_Ha_Commune"),
-    (16.4800, 107.6800, "Quang_An_Ward"),
-    (16.2200, 107.3500, "Huong_Xuan_Commune"),
-    (15.5800, 108.3000, "Tam_Viet_Commune"),
-    (15.3800, 108.7000, "Tam_Hiep_Commune"),
-    (15.7800, 108.5000, "Binh_Duong_Commune"),
-    (16.7600, 107.3800, "Phu_Dien_Ward"),
-    (16.0600, 108.2500, "My_Khe_Beach_Area"),
+    (16.0500, 108.23, "Tho_Quang_Ward"),              # Son Tra peninsula, Da Nang bay side
+    (15.9812, 108.1721, "Hoa_Cuong_Ward"),
+    (15.8342, 108.0012, "An_Tan_Commune"),
+    (16.1891, 107.9341, "Lac_My_Commune"),
+    (16.3543, 107.6521, "Hong_Ha_Commune"),
+    (16.50, 107.62, "Quang_An_Ward"),
+    (16.2231, 107.3041, "Huong_Xuan_Commune"),
+    (15.6521, 108.1341, "Tam_Viet_Commune"),
+    (15.4832, 108.3031, "Tam_Hiep_Commune"),
+    (15.7981, 108.4201, "Binh_Duong_Commune"),
+    (16.80, 107.26, "Phu_Dien_Ward"),
+    (16.0601, 108.20, "My_Khe_Beach_Area"),
     # ── Far north ───────────────────────────────────────────────────────────
-    (16.1200, 107.3000, "A_Dot_Commune"),
+    (16.9321, 107.3012, "A_Dot_Commune"),
     # ── Quảng Ngãi province ─────────────────────────────────────────────────
-    (15.3500, 108.8000, "Tam_Quan_Town"),
-    (15.1096, 108.3879, "Nuoc_Trong_Reservoir"),
-    (14.8500, 108.9600, "Duc_Pho_District"),
-    (16.7500, 107.1500, "A_Bat_Commune"),
-    (15.6300, 107.3700, "A_La_Commune"),
-    (16.7000, 107.1500, "Cao_Ngan_Commune"),
-    (14.9884, 108.8877, "Mo_Duc_District"),
-    (14.9463, 108.6762, "Minh_Long_District"),   # fixed: was "10 8.7801"
-    (15.4000, 108.7000, "Chu_Lai_Port_Area"),
-    (15.0300, 108.4700, "Son_Ha_District"),
-    (14.9702, 108.3555, "Son_Tay_District"),
-    (15.2093, 108.4534, "Tra_Bong_District"),
-    (14.9689, 108.7984, "Nghia_Hanh_District"),
-    (15.0914, 108.7676, "Tu_Nghia_District"),
-    (15.1190, 108.8096, "Quang_Ngai_City"),
-    (15.1986, 108.7085, "Son_Tinh_District"),
-    (15.3115, 108.7287, "Binh_Son_District"),
+    (15.4501, 108.5801, "Tam_Quan_Town"),
+    (15.2431, 108.4231, "Nuoc_Trong_Reservoir"),
+    (15.1241, 108.3121, "Duc_Pho_District"),
+    (16.9541, 107.1231, "A_Bat_Commune"),
+    (17.0231, 107.2031, "A_La_Commune"),
+    (16.8501, 107.2501, "Cao_Ngan_Commune"),
+    (15.0541, 108.6541, "Mo_Duc_District"),
+    (15.1831, 108.7801, "Minh_Long_District"),   # fixed: was "10 8.7801"
+    (15.42, 108.69, "Chu_Lai_Port_Area"),
+    (15.4012, 107.8501, "Son_Ha_District"),
+    (15.2831, 107.7021, "Son_Tay_District"),
+    (15.0001, 107.9231, "Tra_Bong_District"),
+    (14.9321, 108.1431, "Nghia_Hanh_District"),
+    (14.8541, 108.3201, "Tu_Nghia_District"),
+    (15.1200, 108.4801, "Quang_Ngai_City"),
+    (14.9012, 108.5601, "Son_Tinh_District"),
+    (15.1231, 108.6271, "Binh_Son_District"),
     # ── Remote highland communes ────────────────────────────────────────────
     (15.7200, 107.5500, "Khue_Trung_Valley"),        # western Quang Nam, inside Vietnam
-    (16.6300, 107.4200, "Phu_Thuong_Ward"),
-    (15.5500, 108.5200, "Truong_Giang_Commune"),  # moved inland — 108.62 risked sea-boundary
-    (16.8500, 107.2000, "Son_Qua_Commune"),
-    (16.0700, 108.2200, "Xuan_Ha_Ward"),
-    (16.0902, 108.2467, "Man_Thai_Ward"),
-    (15.4686, 107.9180, "Phuoc_Hiep_Commune"),
-    (16.0800, 108.1200, "Hoa_Lien_Commune"),         # Hoa Vang district inland, not in sea
-    (15.9800, 108.1900, "Hoa_Tien_Commune"),              # Hoa Tien, Hoa Vang lowland (~108.19°E)
-    (15.6500, 107.5500, "Zuoih_Commune"),
-    (15.5500, 107.4500, "Bha_Le_Commune"),
+    (16.72, 107.28, "Phu_Thuong_Ward"),
+    (15.5501, 108.5401, "Truong_Giang_Commune"),
+    (17.07, 107.16, "Son_Qua_Commune"),
+    (15.93, 108.28, "Xuan_Ha_Ward"),
+    (16.085, 108.20, "Man_Thai_Ward"),
+    (15.5601, 107.9151, "Phuoc_Hiep_Commune"),
+    (16.1400, 108.0500, "Hoa_Lien_Commune"),         # Hoa Vang district inland, not in sea
+    (16.31, 107.82, "Hoa_Tien_Commune"),              # inland of Tam Giang lagoon
+    (16.0321, 107.6531, "Zuoih_Commune"),
+    (15.8901, 107.4581, "Bha_Le_Commune"),
     (15.8500, 107.6200, "Tra_Vie_Commune"),          # western Quang Nam, inside Vietnam
-    (15.5800, 107.8200, "Ca_Dy_Commune"),            # Nam Giang/Tien Phuoc highland area
-    (15.3500, 108.1000, "Tra_Bui_Commune"),          # Bac Tra My highland, was way in Laos
-    (16.1300, 107.9700, "Ta_Lang_Commune"),
-    (16.1500, 107.7500, "Thuong_Quang_Commune"),
-    (16.2628, 107.2454, "A_Ngo_Commune"),
-    (16.8500, 107.0500, "A_Tuc_Commune"),
-    (15.6200, 107.7200, "Ta_Bhing_Commune"),          # Xã Tà Bhing, Nam Giang — Ca Lu was phantom
+    (15.7500, 107.7600, "Ca_Dy_Commune"),            # Nam Giang/Tien Phuoc highland area
+    (15.5400, 107.8400, "Tra_Bui_Commune"),          # Bac Tra My highland, was way in Laos
+    (16.2521, 107.8951, "Ta_Lang_Commune"),
+    (16.4012, 107.4081, "Thuong_Quang_Commune"),
+    (16.6721, 107.2541, "A_Ngo_Commune"),
+    (16.8341, 107.0931, "A_Tuc_Commune"),
+    (15.6000, 107.7000, "Ca_Lu_Commune"),            # western Quang Nam, inside Vietnam
 ]  # 100 nodes
 
 HUB_NODES = [
     # Elevated, safe logistics facilities with road/air access
     (16.0544, 108.2022, "Da_Nang_Airport_Hub"),
-    (15.5722, 108.4744, "Tam_Ky_Logistics_Hub"),
-    (16.2135, 107.3368, "A_Luoi_Relief_Center"),
-    (15.9126, 107.7265, "Dong_Giang_Rescue_Stn"),
-    (15.6900, 108.3400, "Thang_Binh_Depot"),
-    (15.6072, 107.6071, "Nam_Giang_Forward_Base"),
+    (15.5600, 108.3300, "Tam_Ky_Logistics_Hub"),
+    (16.4601, 107.5961, "A_Luoi_Relief_Center"),
+    (15.9700, 107.8600, "Dong_Giang_Rescue_Stn"),
+    (15.6400, 108.2100, "Thang_Binh_Depot"),
+    (15.85, 107.70, "Nam_Giang_Forward_Base"),
     (16.18, 107.80, "Phu_Loc_Staging_Area"),
-    (15.4500, 108.6200, "Nui_Thanh_Reserve"),
-    (16.2400, 108.0200, "Lang_Co_Forward_Post"),
-    (15.3115, 108.7287, "Binh_Son_Warehouse"),
-    (16.1200, 107.3000, "A_Dot_Mountain_Base"),
-    (15.1190, 108.8096, "Quang_Ngai_Depot"),
-    (16.2500, 107.2500, "A_Sap_Helipad"),
-    (15.6832, 108.0627, "Que_Son_Facility"),
-    (16.7000, 107.0600, "Huong_Viet_Depot"),
-    (15.3700, 108.8000, "Quang_Ngai_Port_Hub"),
-    (15.7200, 107.9700, "Phuoc_Son_Helipad"),
-    (16.1500, 107.4000, "Rao_Trang_Base"),
-    (15.3200, 107.9500, "Bac_Tra_My_Depot"),
-    (15.0300, 108.4700, "Son_Ha_Hub"),               # Son Ha district center, Quang Ngai
+    (15.4500, 108.4200, "Nui_Thanh_Reserve"),
+    (16.25, 107.90, "Lang_Co_Forward_Post"),
+    (15.2200, 108.6000, "Binh_Son_Warehouse"),
+    (16.9300, 107.2500, "A_Dot_Mountain_Base"),
+    (15.0500, 108.4000, "Quang_Ngai_Depot"),
+    (16.1500, 107.6200, "A_Sap_Helipad"),
+    (15.7800, 108.0500, "Que_Son_Facility"),
+    (16.86, 107.24, "Huong_Viet_Depot"),
+    (14.8700, 108.7900, "Quang_Ngai_Port_Hub"),
+    (15.6200, 107.7200, "Phuoc_Son_Helipad"),
+    (17.05, 107.18, "Rao_Trang_Base"),
+    (16.2800, 107.5100, "Bac_Tra_My_Depot"),
+    (15.4800, 107.7200, "Son_Ha_Hub"),               # Son Ha district center, Quang Ngai
 ]  # 20 nodes
 
 ORIGIN_NODES = [
     # External supply: ports, military airports, border logistics
-    (16.1691, 108.1263, "Hai_Van_Pass_North"),    # QL1A northern entry
-    (15.3700, 108.8000, "Dung_Quat_Port"),         # industrial port
-    (15.4033, 108.7061, "Chu_Lai_Airport"),         # military/civil airport
-    (16.5200, 107.6900, "Thuan_An_Port"),               # Thuan An inlet, Hue coastal port
-    (15.2100, 108.8700, "Sa_Ky_Port"),              # southern port
-    (16.6300, 106.7300, "Khe_Sanh_Entry"),          # western highland border entry
-    (15.2093, 108.4534, "Tra_Bong_Supply"),         # inland supply depot
+    (16.1124, 108.1948, "Hai_Van_Pass_North"),    # QL1A northern entry
+    (15.4000, 108.3100, "Dung_Quat_Port"),         # industrial port
+    (15.7500, 108.4700, "Chu_Lai_Airport"),         # military/civil airport
+    (16.53, 107.70, "Thuan_An_Port"),               # Thuan An inlet, Hue coastal port
+    (14.7600, 108.6900, "Sa_Ky_Port"),              # southern port
+    (17.1900, 107.0700, "Khe_Sanh_Entry"),          # western highland border entry
+    (15.3600, 107.8900, "Tra_Bong_Supply"),         # inland supply depot
     (16.0930, 108.2280, "Da_Nang_Seaport"),          # Tien Sa port, Da Nang (was 108.64 = in sea)
     (16.46, 107.60, "Hue_Train_Station"),           # Hue city railway station
     (15.3800, 109.1000, "Ly_Son_Island_Supply"),    # coastal island depot
-    (16.2400, 108.0200, "Lang_Co_Beach_Base"),          # Lang Co lagoon beach landing
-    (14.8087, 108.9572, "Duc_Pho_Harbor"),          # southern harbor
+    (16.21, 107.96, "Lang_Co_Beach_Base"),          # Lang Co lagoon beach landing
+    (14.5700, 108.9800, "Duc_Pho_Harbor"),          # southern harbor
 ]  # 12 nodes
 
 assert len(DEMAND_NODES) == 100, f"Expected 100 demand nodes, got {len(DEMAND_NODES)}"

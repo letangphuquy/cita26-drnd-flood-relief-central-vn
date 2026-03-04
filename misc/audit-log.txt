@@ -1,0 +1,453 @@
+(.venv) PS E:\Computer Science\Research\project-sos (Quang-Vu Nguyen)\CITA_paper>   python data_prep/audit_coords.py
+============================================================
+  DRND Node Coordinate Audit — Nominatim / OSM
+============================================================   
+  WARN threshold : 5.0 km
+  ERROR threshold: 15.0 km
+
+────────────────────────────────────────────────────────────   
+  Auditing ORIGIN  (12 nodes)
+────────────────────────────────────────────────────────────   
+  [Hai_Van_Pass_North]  query: "Hai Van Pass, Da Nang, Vietnam"
+    stored=(16.1124, 108.1948)  osm=(16.1691, 108.1263)  △ WARNING Δ=9.7 km
+    osm place: Đèo Hải Vân, Phường Hải Vân, Thành phố Đà Nẵng, Thành phố Huế, Việt Nam
+  [Dung_Quat_Port]  query: "Dung Quat Port, Binh Son, Quang Ngai, Vietnam"
+    ⚠  NO RESULT from Nominatim — cannot verify
+  [Chu_Lai_Airport]  query: "Chu Lai Airport, Nui Thanh, Quang Nam, Vietnam"
+    ⚠  NO RESULT from Nominatim — cannot verify
+  [Thuan_An_Port]  query: "Thuan An Port, Phu Vang, Thua Thien Hue, Vietnam"
+    ⚠  NO RESULT from Nominatim — cannot verify
+  [Sa_Ky_Port]  query: "Sa Ky Port, Binh Son, Quang Ngai, Vietnam"
+    ⚠  NO RESULT from Nominatim — cannot verify
+  [Khe_Sanh_Entry]  query: "Khe Sanh, Huong Hoa, Quang Tri, Vietnam"
+    stored=(17.19, 107.07)  osm=(16.6257, 106.7344)  ✗ ERROR   Δ=72.2 km
+    osm place: Ngân hàng CSXH huyện Hướng Hoá, Lê Duẩn, Tân Hợp, Xã Khe Sanh, Tỉnh Quảng Trị, Việt Nam
+  [Tra_Bong_Supply]  query: "Tra Bong District, Quang Ngai, Vietnam"
+    stored=(15.36, 107.89)  osm=(15.2093, 108.4534)  ✗ ERROR   Δ=62.7 km
+    osm place: Huyện Trà Bồng, Xã Thanh Bồng, Tỉnh Quảng Ngãi, Việt Nam
+  [Da_Nang_Seaport]  query: "Tien Sa Port, Son Tra, Da Nang, Vietnam"
+    stored=(16.093, 108.228)  osm=(16.1197, 108.2172)  ✓ OK      Δ=3.2 km
+  [Hue_Train_Station]  query: "Hue Railway Station, Thua Thien Hue, Vietnam"
+    stored=(16.46, 107.6)  osm=(16.4565, 107.5780)  ✓ OK      Δ=2.4 km
+  [Ly_Son_Island_Supply]  query: "Ly Son Island, Quang Ngai, Vietnam"
+    stored=(15.38, 109.1)  osm=(15.3809, 109.1175)  ✓ OK      Δ=1.9 km
+  [Lang_Co_Beach_Base]  query: "Lang Co, Phu Loc, Thua Thien Hue, Vietnam"
+    stored=(16.21, 107.96)  osm=(16.3380, 107.9537)  △ WARNING Δ=14.3 km
+    osm place: Angsana Lăng Cô, Quốc lộ 49B, Phước Tượng, Xã Phú Lộc, Thành phố Huế, Việt Nam
+  [Duc_Pho_Harbor]  query: "Duc Pho, Quang Ngai, Vietnam"
+    stored=(14.57, 108.98)  osm=(14.8087, 108.9572)  ✗ ERROR   Δ=26.7 km
+    osm place: Phường Đức Phổ, Tỉnh Quảng Ngãi, Việt Nam
+
+────────────────────────────────────────────────────────────
+  Auditing HUB  (20 nodes)
+────────────────────────────────────────────────────────────
+  [Da_Nang_Airport_Hub]  query: "Da Nang International Airport, Vietnam"
+    stored=(16.0544, 108.2022)  osm=(16.0426, 108.1972)  ✓ OK      Δ=1.4 km
+  [Tam_Ky_Logistics_Hub]  query: "Tam Ky City, Quang Nam, Vietnam"
+    stored=(15.56, 108.33)  osm=(15.5722, 108.4744)  ✗ ERROR   Δ=15.5 km
+    osm place: Tru by Hilton Tam Ky City Centre, Nguyễn Du, Phường Tam Kỳ, Thành phố Đà Nẵng, 220000, Việ
+  [A_Luoi_Relief_Center]  query: "A Luoi District, Thua Thien Hue, Vietnam"
+    stored=(16.4601, 107.5961)  osm=(16.2135, 107.3368)  ✗ ERROR   Δ=39.0 km
+    osm place: Huyện A Lưới, Thành phố Huế, Việt Nam
+  [Dong_Giang_Rescue_Stn]  query: "Dong Giang District, Quang Nam, Vietnam"
+    ⚠  NO RESULT from Nominatim — cannot verify
+  [Thang_Binh_Depot]  query: "Thang Binh District, Quang Nam, Vietnam"
+    ⚠  NO RESULT from Nominatim — cannot verify
+  [Nam_Giang_Forward_Base]  query: "Nam Giang District, Quang Nam, Vietnam"
+    ⚠  NO RESULT from Nominatim — cannot verify
+  [Phu_Loc_Staging_Area]  query: "Phu Loc District, Thua Thien Hue, Vietnam"
+    stored=(16.18, 107.8)  osm=(16.2032, 107.7697)  ✓ OK      Δ=4.1 km
+  [Nui_Thanh_Reserve]  query: "Nui Thanh District, Quang Nam, Vietnam"
+    ⚠  NO RESULT from Nominatim — cannot verify
+  [Lang_Co_Forward_Post]  query: "Lang Co, Phu Loc, Thua Thien Hue, Vietnam"
+    stored=(16.25, 107.9)  osm=(16.3380, 107.9537)  △ WARNING Δ=11.3 km
+    osm place: Angsana Lăng Cô, Quốc lộ 49B, Phước Tượng, Xã Phú Lộc, Thành phố Huế, Việt Nam
+  [Binh_Son_Warehouse]  query: "Binh Son District, Quang Ngai, Vietnam"
+    stored=(15.22, 108.6)  osm=(15.3115, 108.7287)  ✗ ERROR   Δ=17.1 km
+    osm place: Huyện Bình Sơn, Xã Bình Sơn, Tỉnh Quảng Ngãi, Việt Nam
+  [A_Dot_Mountain_Base]  query: "A Dot Commune, A Luoi, Thua Thien Hue, Vietnam"
+    stored=(16.93, 107.25)  osm=(16.1237, 107.3414)  ✗ ERROR   Δ=90.2 km
+    osm place: Sông A Sáp, Lâm Đớt, Xã A Lưới 4, Thành phố Huế, Việt Nam
+  [Quang_Ngai_Depot]  query: "Quang Ngai City, Vietnam"
+    stored=(15.05, 108.4)  osm=(15.1190, 108.8096)  ✗ ERROR   Δ=44.6 km
+    osm place: Quảng Ngãi, Phường Cẩm Thành, Tỉnh Quảng Ngãi, Việt Nam
+  [A_Sap_Helipad]  query: "A Sap, A Luoi, Thua Thien Hue, Vietnam"
+    stored=(16.15, 107.62)  osm=(16.2749, 107.2334)  ✗ ERROR   Δ=43.6 km
+    osm place: Đường A Sáp, A Ngo, Xã A Lưới 2, Thành phố Huế, Việt Nam
+  [Que_Son_Facility]  query: "Que Son District, Quang Nam, Vietnam"
+    ⚠  NO RESULT from Nominatim — cannot verify
+  [Huong_Viet_Depot]  query: "Huong Viet Commune, A Luoi, Thua Thien Hue, Vietnam"
+    ⚠  NO RESULT from Nominatim — cannot verify
+  [Quang_Ngai_Port_Hub]  query: "Quang Ngai Port, Quang Ngai, Vietnam"
+    ⚠  NO RESULT from Nominatim — cannot verify
+  [Phuoc_Son_Helipad]  query: "Phuoc Son District, Quang Nam, Vietnam"
+    ⚠  NO RESULT from Nominatim — cannot verify
+  [Rao_Trang_Base]  query: "Rao Trang, A Luoi, Thua Thien Hue, Vietnam"
+    ⚠  NO RESULT from Nominatim — cannot verify
+  [Bac_Tra_My_Depot]  query: "Bac Tra My District, Quang Nam, Vietnam"
+    ⚠  NO RESULT from Nominatim — cannot verify
+  [Son_Ha_Hub]  query: "Son Ha District, Quang Ngai, Vietnam"
+    stored=(15.48, 107.72)  osm=(14.9746, 108.5246)  ✗ ERROR   Δ=103.0 km
+    osm place: Huyện Sơn Hà, Xã Sơn Thủy, Tỉnh Quảng Ngãi, 55000, Việt Nam
+
+────────────────────────────────────────────────────────────
+  Auditing DEMAND  (100 nodes)
+────────────────────────────────────────────────────────────
+  [Hoi_An_City]  query: "Hoi An City, Quang Nam, Vietnam"
+    stored=(15.8732, 108.3341)  osm=(15.8683, 108.3503)  ✓ OK      Δ=1.8 km
+  [Dien_Ban_District]  query: "Dien Ban District, Vietnam"
+    ⚠  NO RESULT from Nominatim — cannot verify
+  [Nui_Thanh_District]  query: "Nui Thanh District, Quang Nam, Vietnam"
+    ⚠  NO RESULT from Nominatim — cannot verify
+  [Thang_Binh_District]  query: "Thang Binh District, Vietnam"
+    stored=(15.7562, 108.2461)  osm=(15.7077, 108.3969)  ✗ ERROR   Δ=17.0 km
+    osm place: Huyện Thăng Bình, Việt Nam
+  [Dai_Loc_District]  query: "Dai Loc District, Vietnam"
+    stored=(16.0752, 108.1491)  osm=(15.8339, 107.9544)  ✗ ERROR   Δ=34.0 km
+    osm place: Huyện Đại Lộc, Việt Nam
+  [Dong_Giang_District]  query: "Dong Giang District, Vietnam"
+    stored=(15.9867, 107.9883)  osm=(15.9126, 107.7265)  ✗ ERROR   Δ=29.2 km
+    osm place: Huyện Đông Giang, Thành phố Huế, Việt Nam
+  [Tay_Giang_District]  query: "Tay Giang District, Vietnam"
+    stored=(16.2114, 108.0243)  osm=(15.8948, 107.4976)  ✗ ERROR   Δ=66.4 km
+    osm place: Huyện Tây Giang, Việt Nam
+  [A_Luoi_District]  query: "A Luoi District, Vietnam"
+    stored=(16.3012, 107.8631)  osm=(16.2135, 107.3368)  ✗ ERROR   Δ=57.0 km
+    osm place: Huyện A Lưới, Thành phố Huế, Việt Nam
+  [Nam_Giang_District]  query: "Nam Giang District, Vietnam"
+    stored=(15.9, 107.65)  osm=(15.6072, 107.6071)  ✗ ERROR   Δ=32.9 km
+    osm place: Huyện Nam Giang, Việt Nam
+  [A_Vuong_Commune]  query: "A Vuong Commune, Vietnam"
+    stored=(16.1004, 107.7321)  osm=(20.8580, 105.9734)  ✗ ERROR   Δ=560.6 km
+    osm place: Xã Triệu Việt Vương, Tỉnh Hưng Yên, Việt Nam
+  [Viet_An_Commune]  query: "Viet An Commune, Vietnam"
+    stored=(15.9421, 108.2631)  osm=(15.5679, 108.1790)  ✗ ERROR   Δ=42.6 km
+    osm place: Xã Việt An, Thành phố Đà Nẵng, 50000, Việt Nam
+  [Que_Son_District]  query: "Que Son District, Vietnam"
+    stored=(16.0123, 108.0961)  osm=(15.6832, 108.0627)  ✗ ERROR   Δ=36.8 km
+    osm place: Huyện Quế Sơn, 05103, Việt Nam
+  [Phu_Ninh_District]  query: "Phu Ninh District, Vietnam"
+    stored=(15.73, 108.12)  osm=(21.4569, 105.2995)  ✗ ERROR   Δ=702.7 km
+    osm place: Huyện Phù Ninh, Xã Dân Chủ, Tỉnh Phú Thọ, Việt Nam
+  [Tam_Ky_City]  query: "Tam Ky City, Quang Nam, Vietnam"
+    stored=(15.56, 108.36)  osm=(15.5722, 108.4744)  △ WARNING Δ=12.3 km
+    osm place: Tru by Hilton Tam Ky City Centre, Nguyễn Du, Phường Tam Kỳ, Thành phố Đà Nẵng, 220000, Việ
+  [Huong_Tra_District]  query: "Huong Tra District, Vietnam"
+    stored=(16.47, 107.52)  osm=(10.4538, 105.6558)  ✗ ERROR   Δ=698.6 km
+    osm place: Hồ Xuân Hương, Phường Mỹ Trà, Tỉnh Đồng Tháp, Việt Nam
+  [Huong_Thuy_District]  query: "Huong Thuy District, Vietnam"
+    ⚠  NO RESULT from Nominatim — cannot verify
+  [Nam_Dong_District]  query: "Nam Dong District, Thua Thien Hue, Vietnam"
+    ⚠  NO RESULT from Nominatim — cannot verify
+  [Phu_Loc_District]  query: "Phu Loc District, Vietnam"
+    stored=(16.2, 107.86)  osm=(16.2032, 107.7697)  △ WARNING Δ=9.6 km
+    osm place: Huyện Phú Lộc, Thành phố Huế, Việt Nam
+  [A_Luoi_Mountain]  query: "A Luoi District, Thua Thien Hue, Vietnam"
+    stored=(16.4001, 107.6521)  osm=(16.2135, 107.3368)  ✗ ERROR   Δ=39.5 km
+    osm place: Huyện A Lưới, Thành phố Huế, Việt Nam
+  [Nam_Dong_Highland]  query: "Nam Dong Highland, Vietnam"
+    ⚠  NO RESULT from Nominatim — cannot verify
+  [Da_Nang_City]  query: "Da Nang City, Vietnam"
+    stored=(16.0543, 108.2022)  osm=(16.0680, 108.2120)  ✓ OK      Δ=1.8 km
+  [Cam_Le_District]  query: "Cam Le District, Vietnam"
+    stored=(15.9123, 108.1541)  osm=(16.0169, 108.2033)  △ WARNING Δ=12.8 km
+    osm place: Quận Cẩm Lệ, Thành phố Đà Nẵng, Việt Nam
+  [Lien_Chieu_District]  query: "Lien Chieu District, Vietnam"
+    stored=(16.1232, 108.1982)  osm=(16.1216, 108.1126)  △ WARNING Δ=9.1 km
+    osm place: Quận Liên Chiểu, Thành phố Đà Nẵng, 84236, Việt Nam
+  [Son_Tra_District]  query: "Son Tra District, Vietnam"
+    stored=(16.0012, 108.2401)  osm=(16.1033, 108.2638)  △ WARNING Δ=11.6 km
+    osm place: Quận Sơn Trà, Thành phố Đà Nẵng, Việt Nam
+  [Thanh_Khe_District]  query: "Thanh Khe District, Vietnam"
+    stored=(15.8721, 108.0841)  osm=(16.0540, 108.1860)  ✗ ERROR   Δ=23.0 km
+    osm place: Quận Thanh Khê, Phường An Khê, Thành phố Đà Nẵng, Việt Nam
+  [Hoa_Vang_District]  query: "Hoa Vang District, Vietnam"
+    stored=(16.2432, 108.0762)  osm=(16.0667, 107.9738)  ✗ ERROR   Δ=22.5 km
+    osm place: Huyện Hòa Vang, 51000, Việt Nam
+  [Phu_Yen_Commune]  query: "Phu Yen Commune, Vietnam"
+    stored=(15.7321, 108.1432)  osm=(21.2674, 104.6609)  ✗ ERROR   Δ=716.6 km
+    osm place: Xã Phù Yên, Tỉnh Sơn La, Việt Nam
+  [Bac_Tra_My]  query: "Bac Tra My District, Quang Nam, Vietnam"
+    ⚠  NO RESULT from Nominatim — cannot verify
+  [Nam_Tra_My]  query: "Nam Tra My, Vietnam"
+    stored=(15.8453, 107.9872)  osm=(15.1328, 108.1146)  ✗ ERROR   Δ=80.4 km
+    osm place: Huyện Nam Trà My, Tỉnh Quảng Ngãi, Việt Nam
+  [Hiep_Duc_District]  query: "Hiep Duc District, Vietnam"
+    stored=(15.6721, 108.0341)  osm=(15.5181, 108.1028)  ✗ ERROR   Δ=18.6 km
+    osm place: Huyện Hiệp Đức, 50000, Việt Nam
+  [Tien_Phuoc_District]  query: "Tien Phuoc District, Vietnam"
+    stored=(15.5631, 108.2541)  osm=(15.4916, 108.2986)  △ WARNING Δ=9.3 km
+    osm place: Huyện Tiên Phước, 52606, Việt Nam
+  [Nui_Thanh_South]  query: "Nui Thanh South, Vietnam"
+    stored=(15.4321, 108.4012)  osm=(21.0825, 105.8602)  ✗ ERROR   Δ=683.1 km
+    osm place: Nhà Triển lãm khối A, VEC Quảng trường Sân Nam, Global Gate, Xã Đông Anh, Thành phố Hà Nội
+  [Tam_Ky_South]  query: "Tam Ky South, Vietnam"
+    stored=(15.6012, 108.3341)  osm=(13.7690, 109.2208)  ✗ ERROR   Δ=224.9 km
+    osm place: Bưu điện trung tâm Quy Nhơn, 2, Trần Thị Kỷ, Khu vực 46, Trần Phú, Quy Nhơn, Phường Quy Nh
+  [Phu_Loc_West]  query: "Phu Loc West, Vietnam"
+    ⚠  NO RESULT from Nominatim — cannot verify
+  [Phu_Vang_District]  query: "Phu Vang District, Vietnam"
+    stored=(16.52, 107.62)  osm=(16.4454, 107.7368)  △ WARNING Δ=15.0 km
+    osm place: Huyện Phú Vang, Phường Mỹ Thượng, Thành phố Huế, Việt Nam
+  [Quang_Dien_District]  query: "Quang Dien District, Vietnam"
+    stored=(16.58, 107.43)  osm=(16.5925, 107.5129)  △ WARNING Δ=8.9 km
+    osm place: Huyện Quảng Điền, Phường Hóa Châu, Thành phố Huế, Việt Nam
+  [Phong_Dien_District]  query: "Phong Dien District, Vietnam"
+    stored=(16.52, 107.4)  osm=(9.9982, 105.6622)  ✗ ERROR   Δ=749.2 km
+    osm place: Huyện Phong Điền, Việt Nam
+  [Hue_City_South]  query: "Hue City South, Vietnam"
+    ⚠  NO RESULT from Nominatim — cannot verify
+  [Khe_Tre_Commune]  query: "Khe Tre Commune, Vietnam"
+    stored=(16.4631, 107.4321)  osm=(16.1684, 107.7185)  ✗ ERROR   Δ=44.8 km
+    osm place: Xã Khe Tre, Thành phố Huế, Việt Nam
+  [Tra_Don_Commune]  query: "Tra Don Commune, Vietnam"
+    ⚠  NO RESULT from Nominatim — cannot verify
+  [Tra_Nam_Commune]  query: "Tra Nam Commune, Vietnam"
+    stored=(15.5832, 107.9431)  osm=(15.1795, 108.1289)  ✗ ERROR   Δ=49.1 km
+    osm place: Trà Mai, Nam Trà My, Quảng Nam, Vietnam, Xã Nam Trà My, Thành phố Đà Nẵng, Việt Nam
+  [Lang_Co_Area]  query: "Lang Co Area, Vietnam"
+    ⚠  NO RESULT from Nominatim — cannot verify
+  [Truoi_Lake_Area]  query: "Truoi Lake Area, Vietnam"
+    ⚠  NO RESULT from Nominatim — cannot verify
+  [Vu_Gia_River_South]  query: "Vu Gia River South, Vietnam"
+    ⚠  NO RESULT from Nominatim — cannot verify
+  [Song_Bung_Lake]  query: "Song Bung Lake, Vietnam"
+    ⚠  NO RESULT from Nominatim — cannot verify
+  [A_Sap_Valley]  query: "A Sap, A Luoi, Thua Thien Hue, Vietnam"
+    stored=(16.25, 107.27)  osm=(16.2749, 107.2334)  ✓ OK      Δ=4.8 km
+  [Phuoc_Son_District]  query: "Phuoc Son District, Quang Nam, Vietnam"
+    ⚠  NO RESULT from Nominatim — cannot verify
+  [Tra_My_Highlands]  query: "Tra My Highlands, Vietnam"
+    ⚠  NO RESULT from Nominatim — cannot verify
+  [Bach_Ma_Forest]  query: "Bach Ma Forest, Vietnam"
+    ⚠  NO RESULT from Nominatim — cannot verify
+  [A_Luoi_Valley]  query: "A Luoi Valley, Vietnam"
+    ⚠  NO RESULT from Nominatim — cannot verify
+  [Huong_An_Commune]  query: "Huong An Commune, Vietnam"
+    stored=(16.78, 107.22)  osm=(20.6223, 105.7776)  ✗ ERROR   Δ=453.4 km
+    osm place: Đối diện Đồn Công an Hương Sơn, Đường tỉnh 419, Xã Hương Sơn, Thành phố Hà Nội, Việt Nam
+  [Tho_Quang_Ward]  query: "Tho Quang Ward, Vietnam"
+    stored=(16.05, 108.23)  osm=(17.4750, 106.6234)  ✗ ERROR   Δ=233.2 km
+    osm place: Chứng tích nhà thờ Tam tòa, Đường Nguyễn Du, Phường Đồng Hới, Tỉnh Quảng Trị, Việt Nam
+  [Hoa_Cuong_Ward]  query: "Hoa Cuong Ward, Vietnam"
+    stored=(15.9812, 108.1721)  osm=(16.0416, 108.2175)  △ WARNING Δ=8.3 km
+    osm place: Phường Hòa Cường, Thành phố Đà Nẵng, Việt Nam
+  [An_Tan_Commune]  query: "An Tan Commune, Vietnam"
+    stored=(15.8342, 108.0012)  osm=(20.9673, 106.2393)  ✗ ERROR   Δ=600.3 km
+    osm place: An Tân, Xã Cẩm Giang, Thành phố Hải Phòng, Việt Nam
+  [Lac_My_Commune]  query: "Lac My Commune, Vietnam"
+    stored=(16.1891, 107.9341)  osm=(20.7766, 105.7016)  ✗ ERROR   Δ=561.8 km
+    osm place: Trước đường vào thôn dân cư số 7, thôn Vĩnh Lạc, xã Mỹ Thành khoảng 50m, Đường tỉnh 419, X
+  [Hong_Ha_Commune]  query: "Hong Ha Commune, Vietnam"
+    stored=(16.3543, 107.6521)  osm=(21.0870, 105.8206)  ✗ ERROR   Δ=560.5 km
+    osm place: Nhật Tân Glamping, 3RPC+F72, Phú Thượng, Tây Hồ, Hà Nội, Vietnam, Cầu Nhật Tân, Ngọc Giang
+  [Quang_An_Ward]  query: "Quang An Ward, Vietnam"
+    stored=(16.5, 107.62)  osm=(21.0616, 105.8235)  ✗ ERROR   Δ=541.3 km
+    osm place: Phường Quảng An, Phường Tây Hồ, Thành phố Hà Nội, 11214, Việt Nam
+  [Huong_Xuan_Commune]  query: "Huong Xuan Commune, Vietnam"
+    stored=(16.2231, 107.3041)  osm=(18.0818, 105.7132)  ✗ ERROR   Δ=267.0 km
+    osm place: Xã Hương Xuân, Tỉnh Hà Tĩnh, Việt Nam
+  [Tam_Viet_Commune]  query: "Tam Viet Commune, Vietnam"
+    stored=(15.6521, 108.1341)  osm=(20.9899, 106.0501)  ✗ ERROR   Δ=633.0 km
+    osm place: Tâm Việt, Đường tỉnh 281, Chợ Bãi Sim, Thôn văn ổ, Xã Lạc Đạo, Tỉnh Hưng Yên, Việt Nam
+  [Tam_Hiep_Commune]  query: "Tam Hiep Commune, Vietnam"
+    stored=(15.4832, 108.3031)  osm=(15.4600, 108.6095)  ✗ ERROR   Δ=32.9 km
+    osm place: Khu Công Nghiệp - Hậu Cần Cảng Tam Hiệp, Xã Núi Thành, Thành phố Đà Nẵng, Việt Nam
+  [Binh_Duong_Commune]  query: "Binh Duong Commune, Vietnam"
+    stored=(15.7981, 108.4201)  osm=(20.2454, 106.0731)  ✗ ERROR   Δ=553.3 km
+    osm place: Đường sắt cao tốc Bắc-Nam (Đoạn Hà Nội - Vinh), Đường Trần Phú, Xã Khánh Thiện, Tỉnh Ninh 
+  [Phu_Dien_Ward]  query: "Phu Dien Ward, Vietnam"
+    stored=(16.8, 107.26)  osm=(21.0483, 105.7636)  ✗ ERROR   Δ=497.9 km
+    osm place: Phường Phú Diễn, Thành phố Hà Nội, Việt Nam
+  [My_Khe_Beach_Area]  query: "My Khe Beach Area, Vietnam"
+    ⚠  NO RESULT from Nominatim — cannot verify
+  [A_Dot_Commune]  query: "A Dot Commune, Vietnam"
+    stored=(16.9321, 107.3012)  osm=(16.1237, 107.3414)  ✗ ERROR   Δ=90.0 km
+    osm place: Sông A Sáp, Lâm Đớt, Xã A Lưới 4, Thành phố Huế, Việt Nam
+  [Tam_Quan_Town]  query: "Tam Quan Town, Vietnam"
+    stored=(15.4501, 108.5801)  osm=(22.0238, 103.1578)  ✗ ERROR   Δ=927.3 km
+    osm place: Chợ Trung tâm Thị xã Mường Lay, Quốc lộ 12, Bản Hóc, Na Lay, Mường Lay, Phường Mường Lay, 
+  [Nuoc_Trong_Reservoir]  query: "Nuoc Trong Reservoir, Vietnam"
+    stored=(15.2431, 108.4231)  osm=(15.1096, 108.3879)  ✗ ERROR   Δ=15.3 km
+    osm place: Hồ Nước Trong, Xã Tây Trà Bồng, Tỉnh Quảng Ngãi, Việt Nam
+  [Duc_Pho_District]  query: "Duc Pho District, Quang Ngai, Vietnam"
+    ⚠  NO RESULT from Nominatim — cannot verify
+  [A_Bat_Commune]  query: "A Bat Commune, Vietnam"
+    stored=(16.9541, 107.1231)  osm=(20.9686, 105.9075)  ✗ ERROR   Δ=464.3 km
+    osm place: Xã Bát Tràng, Thành phố Hà Nội, Việt Nam
+  [A_La_Commune]  query: "A La Commune, Vietnam"
+    stored=(17.0231, 107.2031)  osm=(15.6310, 107.3704)  ✗ ERROR   Δ=155.8 km
+    osm place: Xã La Êê, Thành phố Đà Nẵng, Việt Nam
+  [Cao_Ngan_Commune]  query: "Cao Ngan Commune, Vietnam"
+    stored=(16.8501, 107.2501)  osm=(15.6190, 108.2557)  ✗ ERROR   Δ=174.0 km
+    osm place: Hồ Cao Ngạn, Xã Đồng Dương, Thành phố Đà Nẵng, Việt Nam
+  [Mo_Duc_District]  query: "Mo Duc District, Vietnam"
+    stored=(15.0541, 108.6541)  osm=(14.9884, 108.8877)  ✗ ERROR   Δ=26.1 km
+    osm place: Huyện Mộ Đức, Xã Mỏ Cày, Tỉnh Quảng Ngãi, Việt Nam
+  [Minh_Long_District]  query: "Minh Long District, Vietnam"
+    stored=(15.1831, 108.7801)  osm=(14.9463, 108.6762)  ✗ ERROR   Δ=28.6 km
+    osm place: Huyện Minh Long, Xã Minh Long, Tỉnh Quảng Ngãi, 56000, Việt Nam
+  [Chu_Lai_Port_Area]  query: "Chu Lai, Nui Thanh, Quang Nam, Vietnam"
+    ⚠  NO RESULT from Nominatim — cannot verify
+  [Son_Ha_District]  query: "Son Ha District, Quang Ngai, Vietnam"
+    stored=(15.4012, 107.8501)  osm=(14.9746, 108.5246)  ✗ ERROR   Δ=86.5 km
+    osm place: Huyện Sơn Hà, Xã Sơn Thủy, Tỉnh Quảng Ngãi, 55000, Việt Nam
+  [Son_Tay_District]  query: "Son Tay District, Vietnam"
+    stored=(15.2831, 107.7021)  osm=(14.9702, 108.3555)  ✗ ERROR   Δ=78.3 km
+    osm place: Huyện Sơn Tây, Xã Sơn Tây, Tỉnh Quảng Ngãi, Việt Nam
+  [Tra_Bong_District]  query: "Tra Bong District, Quang Ngai, Vietnam"
+    stored=(15.0001, 107.9231)  osm=(15.2093, 108.4534)  ✗ ERROR   Δ=61.5 km
+    osm place: Huyện Trà Bồng, Xã Thanh Bồng, Tỉnh Quảng Ngãi, Việt Nam
+  [Nghia_Hanh_District]  query: "Nghia Hanh District, Vietnam"
+    stored=(14.9321, 108.1431)  osm=(14.9689, 108.7984)  ✗ ERROR   Δ=70.5 km
+    osm place: Huyện Nghĩa Hành, Xã Đình Cương, Tỉnh Quảng Ngãi, Việt Nam
+  [Tu_Nghia_District]  query: "Tu Nghia District, Vietnam"
+    stored=(14.8541, 108.3201)  osm=(15.0914, 108.7676)  ✗ ERROR   Δ=54.8 km
+    osm place: Huyện Tư Nghĩa, Xã Nghĩa Giang, Tỉnh Quảng Ngãi, Việt Nam
+  [Quang_Ngai_City]  query: "Quang Ngai City, Vietnam"
+    stored=(15.12, 108.4801)  osm=(15.1190, 108.8096)  ✗ ERROR   Δ=35.4 km
+    osm place: Quảng Ngãi, Phường Cẩm Thành, Tỉnh Quảng Ngãi, Việt Nam
+  [Son_Tinh_District]  query: "Son Tinh District, Vietnam"
+    stored=(14.9012, 108.5601)  osm=(15.1986, 108.7085)  ✗ ERROR   Δ=36.7 km
+    osm place: Huyện Sơn Tịnh, Xã Sơn Tịnh, Tỉnh Quảng Ngãi, Việt Nam
+  [Binh_Son_District]  query: "Binh Son District, Quang Ngai, Vietnam"
+    stored=(15.1231, 108.6271)  osm=(15.3115, 108.7287)  ✗ ERROR   Δ=23.6 km
+    osm place: Huyện Bình Sơn, Xã Bình Sơn, Tỉnh Quảng Ngãi, Việt Nam
+  [Khue_Trung_Valley]  query: "Khue Trung Valley, Vietnam"
+    ⚠  NO RESULT from Nominatim — cannot verify
+  [Phu_Thuong_Ward]  query: "Phu Thuong Ward, Vietnam"
+    stored=(16.72, 107.28)  osm=(21.0846, 105.8073)  ✗ ERROR   Δ=509.4 km
+    osm place: Phường Phú Thượng, Thành phố Hà Nội, 11210, Việt Nam
+  [Truong_Giang_Commune]  query: "Truong Giang Commune, Vietnam"
+    stored=(15.5501, 108.5401)  osm=(20.6499, 106.3812)  ✗ ERROR   Δ=611.2 km
+    osm place: Trường giang, QL.10, Xã Đồng Bằng, Tỉnh Hưng Yên, Việt Nam
+  [Son_Qua_Commune]  query: "Son Qua Commune, Vietnam"
+    stored=(17.07, 107.16)  osm=(21.3131, 105.8670)  ✗ ERROR   Δ=491.0 km
+    osm place: Qua Tổng kho dự trữ Sóc Sơn 70m, Đường tỉnh 35, Xã Trung Giã, Thành phố Hà Nội, 26920, Việ
+  [Xuan_Ha_Ward]  query: "Xuan Ha Ward, Vietnam"
+    stored=(15.93, 108.28)  osm=(21.0388, 105.7819)  ✗ ERROR   Δ=626.1 km
+    osm place: Đại học Quốc gia Hà Nội, 144, Đường Xuân Thủy, Phường Cầu Giấy, Thành phố Hà Nội, 11314, V
+  [Man_Thai_Ward]  query: "Man Thai Ward, Vietnam"
+    stored=(16.085, 108.2)  osm=(16.0902, 108.2467)  △ WARNING Δ=5.0 km
+    osm place: Đường Mân Thái 1, Phường Sơn Trà, Thành phố Đà Nẵng, 50408, Việt Nam
+  [Phuoc_Hiep_Commune]  query: "Phuoc Hiep Commune, Vietnam"
+    stored=(15.5601, 107.9151)  osm=(15.4686, 107.9180)  △ WARNING Δ=10.2 km
+    osm place: Xã Phước Hiệp, Thành phố Đà Nẵng, Việt Nam
+  [Hoa_Lien_Commune]  query: "Hoa Lien Commune, Vietnam"
+    stored=(16.14, 108.05)  osm=(16.0339, 108.1135)  △ WARNING Δ=13.6 km
+    osm place: Đường sắt cao tốc Bắc - Nam, Đường cao tốc Hoà Liên - Tuý Loan, Phường Hòa Khánh, Thành ph
+  [Hoa_Tien_Commune]  query: "Hoa Tien Commune, Vietnam"
+    stored=(16.31, 107.82)  osm=(15.9708, 108.1818)  ✗ ERROR   Δ=54.0 km
+    osm place: Xã Hòa Tiến, Thành phố Đà Nẵng, Việt Nam
+  [Zuoih_Commune]  query: "Zuoih Commune, Vietnam"
+    ⚠  NO RESULT from Nominatim — cannot verify
+  [Bha_Le_Commune]  query: "Bha Le Commune, Vietnam"
+    ⚠  NO RESULT from Nominatim — cannot verify
+  [Tra_Vie_Commune]  query: "Tra Vie Commune, Vietnam"
+    ⚠  NO RESULT from Nominatim — cannot verify
+  [Ca_Dy_Commune]  query: "Ca Dy Commune, Vietnam"
+    stored=(15.75, 107.76)  osm=(16.2833, 107.8569)  ✗ ERROR   Δ=60.2 km
+    osm place: Lê Bá Dỵ, Đá Bạc, Xã Phú Lộc, Thành phố Huế, Việt Nam
+  [Tra_Bui_Commune]  query: "Tra Bui Commune, Vietnam"
+    stored=(15.54, 107.84)  osm=(20.9216, 105.9311)  ✗ ERROR   Δ=631.4 km
+    osm place: Trà Chanh Bụi Phố, Đường tỉnh 377, Ấp Kim Ngưu, Công Luận 2, Xã Văn Giang, Tỉnh Hưng Yên, 
+  [Ta_Lang_Commune]  query: "Ta Lang Commune, Vietnam"
+    stored=(16.2521, 107.8951)  osm=(15.9352, 107.5386)  ✗ ERROR   Δ=51.9 km
+    osm place: Tà Làng, Xã Avương, Thành phố Đà Nẵng, Việt Nam
+  [Thuong_Quang_Commune]  query: "Thuong Quang Commune, Vietnam"
+    stored=(16.4012, 107.4081)  osm=(17.5743, 106.2528)  ✗ ERROR   Δ=179.2 km
+    osm place: Cột đu dây zipline, đài quan sát linh trưởng, Đường Hồ Chí Minh nhánh Tây, Xã Phong Nha, T
+  [A_Ngo_Commune]  query: "A Ngo Commune, Vietnam"
+    stored=(16.6721, 107.2541)  osm=(16.2628, 107.2454)  ✗ ERROR   Δ=45.5 km
+    osm place: A Ngo, Xã A Lưới 2, Thành phố Huế, Việt Nam
+  [A_Tuc_Commune]  query: "A Tuc Commune, Vietnam"
+    stored=(16.8341, 107.0931)  osm=(15.4882, 108.5380)  ✗ ERROR   Δ=215.0 km
+    osm place: Cầu Ba Tức - ORB 21, Xã Tam Anh, Thành phố Đà Nẵng, Việt Nam
+  [Ca_Lu_Commune]  query: "Ca Lu Commune, Vietnam"
+    stored=(15.6, 107.7)  osm=(21.2608, 105.6970)  ✗ ERROR   Δ=663.9 km
+    osm place: Ca Lo Bridge, Cầu Tân Lợi, Phúc Yên, Phường Phúc Yên, Tỉnh Phú Thọ, 84211, Việt Nam
+
+============================================================
+  SUMMARY
+============================================================
+  Total audited : 132
+  ✓ OK          : 8
+  △ WARNING     : 15
+  ✗ ERROR       : 71
+  ⚠ NO_RESULT   : 38
+
+  Nodes requiring correction (ERROR ≥ 15.0 km):
+    [DEMAND] Tam_Quan_Town                        stored=(15.4501, 108.5801)  osm=(22.0238, 103.1578)  Δ=927.3 km      
+    [DEMAND] Phong_Dien_District                  stored=(16.52, 107.4)  osm=(9.9982, 105.6622)  Δ=749.2 km
+    [DEMAND] Phu_Yen_Commune                      stored=(15.7321, 108.1432)  osm=(21.2674, 104.6609)  Δ=716.6 km      
+    [DEMAND] Phu_Ninh_District                    stored=(15.73, 108.12)  osm=(21.4569, 105.2995)  Δ=702.7 km
+    [DEMAND] Huong_Tra_District                   stored=(16.47, 107.52)  osm=(10.4538, 105.6558)  Δ=698.6 km
+    [DEMAND] Nui_Thanh_South                      stored=(15.4321, 108.4012)  osm=(21.0825, 105.8602)  Δ=683.1 km      
+    [DEMAND] Ca_Lu_Commune                        stored=(15.6, 107.7)  osm=(21.2608, 105.6970)  Δ=663.9 km
+    [DEMAND] Tam_Viet_Commune                     stored=(15.6521, 108.1341)  osm=(20.9899, 106.0501)  Δ=633.0 km      
+    [DEMAND] Tra_Bui_Commune                      stored=(15.54, 107.84)  osm=(20.9216, 105.9311)  Δ=631.4 km
+    [DEMAND] Xuan_Ha_Ward                         stored=(15.93, 108.28)  osm=(21.0388, 105.7819)  Δ=626.1 km
+    [DEMAND] Truong_Giang_Commune                 stored=(15.5501, 108.5401)  osm=(20.6499, 106.3812)  Δ=611.2 km      
+    [DEMAND] An_Tan_Commune                       stored=(15.8342, 108.0012)  osm=(20.9673, 106.2393)  Δ=600.2 km      
+    [DEMAND] Lac_My_Commune                       stored=(16.1891, 107.9341)  osm=(20.7766, 105.7016)  Δ=561.8 km      
+    [DEMAND] A_Vuong_Commune                      stored=(16.1004, 107.7321)  osm=(20.8580, 105.9734)  Δ=560.6 km      
+    [DEMAND] Hong_Ha_Commune                      stored=(16.3543, 107.6521)  osm=(21.0870, 105.8206)  Δ=560.5 km      
+    [DEMAND] Binh_Duong_Commune                   stored=(15.7981, 108.4201)  osm=(20.2454, 106.0731)  Δ=553.3 km      
+    [DEMAND] Quang_An_Ward                        stored=(16.5, 107.62)  osm=(21.0616, 105.8235)  Δ=541.3 km
+    [DEMAND] Phu_Thuong_Ward                      stored=(16.72, 107.28)  osm=(21.0846, 105.8073)  Δ=509.4 km
+    [DEMAND] Phu_Dien_Ward                        stored=(16.8, 107.26)  osm=(21.0483, 105.7636)  Δ=497.9 km
+    [DEMAND] Son_Qua_Commune                      stored=(17.07, 107.16)  osm=(21.3131, 105.8670)  Δ=490.9 km
+    [DEMAND] A_Bat_Commune                        stored=(16.9541, 107.1231)  osm=(20.9686, 105.9075)  Δ=464.3 km      
+    [DEMAND] Huong_An_Commune                     stored=(16.78, 107.22)  osm=(20.6223, 105.7776)  Δ=453.4 km
+    [DEMAND] Huong_Xuan_Commune                   stored=(16.2231, 107.3041)  osm=(18.0818, 105.7132)  Δ=267.0 km      
+    [DEMAND] Tho_Quang_Ward                       stored=(16.05, 108.23)  osm=(17.4750, 106.6234)  Δ=233.2 km
+    [DEMAND] Tam_Ky_South                         stored=(15.6012, 108.3341)  osm=(13.7690, 109.2208)  Δ=224.9 km      
+    [DEMAND] A_Tuc_Commune                        stored=(16.8341, 107.0931)  osm=(15.4882, 108.5380)  Δ=215.0 km      
+    [DEMAND] Thuong_Quang_Commune                 stored=(16.4012, 107.4081)  osm=(17.5743, 106.2528)  Δ=179.2 km      
+    [DEMAND] Cao_Ngan_Commune                     stored=(16.8501, 107.2501)  osm=(15.6190, 108.2557)  Δ=174.0 km      
+    [DEMAND] A_La_Commune                         stored=(17.0231, 107.2031)  osm=(15.6310, 107.3704)  Δ=155.8 km      
+    [HUB   ] Son_Ha_Hub                           stored=(15.48, 107.72)  osm=(14.9746, 108.5246)  Δ=103.0 km
+    [HUB   ] A_Dot_Mountain_Base                  stored=(16.93, 107.25)  osm=(16.1237, 107.3414)  Δ=90.2 km
+    [DEMAND] A_Dot_Commune                        stored=(16.9321, 107.3012)  osm=(16.1237, 107.3414)  Δ=90.0 km       
+    [DEMAND] Son_Ha_District                      stored=(15.4012, 107.8501)  osm=(14.9746, 108.5246)  Δ=86.5 km       
+    [DEMAND] Nam_Tra_My                           stored=(15.8453, 107.9872)  osm=(15.1328, 108.1146)  Δ=80.4 km       
+    [DEMAND] Son_Tay_District                     stored=(15.2831, 107.7021)  osm=(14.9702, 108.3555)  Δ=78.3 km       
+    [ORIGIN] Khe_Sanh_Entry                       stored=(17.19, 107.07)  osm=(16.6257, 106.7344)  Δ=72.2 km
+    [DEMAND] Nghia_Hanh_District                  stored=(14.9321, 108.1431)  osm=(14.9689, 108.7984)  Δ=70.5 km       
+    [DEMAND] Tay_Giang_District                   stored=(16.2114, 108.0243)  osm=(15.8948, 107.4976)  Δ=66.4 km       
+    [ORIGIN] Tra_Bong_Supply                      stored=(15.36, 107.89)  osm=(15.2093, 108.4534)  Δ=62.7 km
+    [DEMAND] Tra_Bong_District                    stored=(15.0001, 107.9231)  osm=(15.2093, 108.4534)  Δ=61.5 km       
+    [DEMAND] Ca_Dy_Commune                        stored=(15.75, 107.76)  osm=(16.2833, 107.8569)  Δ=60.2 km
+    [DEMAND] A_Luoi_District                      stored=(16.3012, 107.8631)  osm=(16.2135, 107.3368)  Δ=57.0 km       
+    [DEMAND] Tu_Nghia_District                    stored=(14.8541, 108.3201)  osm=(15.0914, 108.7676)  Δ=54.8 km       
+    [DEMAND] Hoa_Tien_Commune                     stored=(16.31, 107.82)  osm=(15.9708, 108.1818)  Δ=54.0 km
+    [DEMAND] Ta_Lang_Commune                      stored=(16.2521, 107.8951)  osm=(15.9352, 107.5386)  Δ=51.9 km       
+    [DEMAND] Tra_Nam_Commune                      stored=(15.5832, 107.9431)  osm=(15.1795, 108.1289)  Δ=49.1 km       
+    [DEMAND] A_Ngo_Commune                        stored=(16.6721, 107.2541)  osm=(16.2628, 107.2454)  Δ=45.5 km       
+    [DEMAND] Khe_Tre_Commune                      stored=(16.4631, 107.4321)  osm=(16.1684, 107.7185)  Δ=44.8 km       
+    [HUB   ] Quang_Ngai_Depot                     stored=(15.05, 108.4)  osm=(15.1190, 108.8096)  Δ=44.6 km
+    [HUB   ] A_Sap_Helipad                        stored=(16.15, 107.62)  osm=(16.2749, 107.2334)  Δ=43.6 km
+    [DEMAND] Viet_An_Commune                      stored=(15.9421, 108.2631)  osm=(15.5679, 108.1790)  Δ=42.6 km       
+    [DEMAND] A_Luoi_Mountain                      stored=(16.4001, 107.6521)  osm=(16.2135, 107.3368)  Δ=39.5 km       
+    [HUB   ] A_Luoi_Relief_Center                 stored=(16.4601, 107.5961)  osm=(16.2135, 107.3368)  Δ=39.0 km       
+    [DEMAND] Que_Son_District                     stored=(16.0123, 108.0961)  osm=(15.6832, 108.0627)  Δ=36.8 km       
+    [DEMAND] Son_Tinh_District                    stored=(14.9012, 108.5601)  osm=(15.1986, 108.7085)  Δ=36.7 km       
+    [DEMAND] Quang_Ngai_City                      stored=(15.12, 108.4801)  osm=(15.1190, 108.8096)  Δ=35.4 km
+    [DEMAND] Dai_Loc_District                     stored=(16.0752, 108.1491)  osm=(15.8339, 107.9544)  Δ=34.0 km       
+    [DEMAND] Tam_Hiep_Commune                     stored=(15.4832, 108.3031)  osm=(15.4600, 108.6095)  Δ=32.9 km       
+    [DEMAND] Nam_Giang_District                   stored=(15.9, 107.65)  osm=(15.6072, 107.6071)  Δ=32.9 km
+    [DEMAND] Dong_Giang_District                  stored=(15.9867, 107.9883)  osm=(15.9126, 107.7265)  Δ=29.2 km       
+    [DEMAND] Minh_Long_District                   stored=(15.1831, 108.7801)  osm=(14.9463, 108.6762)  Δ=28.6 km       
+    [ORIGIN] Duc_Pho_Harbor                       stored=(14.57, 108.98)  osm=(14.8087, 108.9572)  Δ=26.7 km
+    [DEMAND] Mo_Duc_District                      stored=(15.0541, 108.6541)  osm=(14.9884, 108.8877)  Δ=26.1 km       
+    [DEMAND] Binh_Son_District                    stored=(15.1231, 108.6271)  osm=(15.3115, 108.7287)  Δ=23.6 km       
+    [DEMAND] Thanh_Khe_District                   stored=(15.8721, 108.0841)  osm=(16.0540, 108.1860)  Δ=23.0 km       
+    [DEMAND] Hoa_Vang_District                    stored=(16.2432, 108.0762)  osm=(16.0667, 107.9738)  Δ=22.5 km       
+    [DEMAND] Hiep_Duc_District                    stored=(15.6721, 108.0341)  osm=(15.5181, 108.1028)  Δ=18.6 km       
+    [HUB   ] Binh_Son_Warehouse                   stored=(15.22, 108.6)  osm=(15.3115, 108.7287)  Δ=17.1 km
+    [DEMAND] Thang_Binh_District                  stored=(15.7562, 108.2461)  osm=(15.7077, 108.3969)  Δ=17.0 km       
+    [HUB   ] Tam_Ky_Logistics_Hub                 stored=(15.56, 108.33)  osm=(15.5722, 108.4744)  Δ=15.5 km
+    [DEMAND] Nuoc_Trong_Reservoir                 stored=(15.2431, 108.4231)  osm=(15.1096, 108.3879)  Δ=15.3 km       
+
+  Full report written to: E:\Computer Science\Research\project-sos (Quang-Vu Nguyen)\CITA_paper\data_prep\audit_report.json
+  Done.
