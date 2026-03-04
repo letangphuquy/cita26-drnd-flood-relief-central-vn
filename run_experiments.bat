@@ -8,6 +8,7 @@ setlocal EnableDelayedExpansion
 set "PROJECT=%~dp0"
 set "SOLVER=%PROJECT%solver_cpp\solver.exe"
 set "DATA=%PROJECT%data"
+set "DATA_CV=%PROJECT%data_prep"
 set "RESULTS=%PROJECT%results"
 
 REM Create results folder
@@ -60,24 +61,26 @@ REM ── EXPERIMENT 2: CENTRAL VIETNAM CASE STUDY ─────────�
 echo.
 echo === EXPERIMENT 2: Central Vietnam Case Study ===
 
-if exist "%DATA%\central_vietnam_small_drnd.json" (
+if exist "%DATA_CV%\cv_small_drnd.json" (
     echo [CV-Small] Running solver ^(3 seeds for robustness^)...
     for %%R in (0 1 2) do (
-        "%SOLVER%" "%DATA%\central_vietnam_small_drnd.json" ^
+        "%SOLVER%" "%DATA_CV%\cv_small_drnd.json" ^
             --pop %POP% --gen %GEN% --seed %%R ^
             --out "%RESULTS%\CV_small_seed%%R.json"
         echo [CV-Small] Seed=%%R done.
     )
 ) else (
-    echo [CV] Small instance not found. Run: python data\generate_synthetic.py
+    echo [CV] Small instance not found. Run: python data_prep\generate_drnd.py
 )
 
-if exist "%DATA%\central_vietnam_large_drnd.json" (
+if exist "%DATA_CV%\cv_large_drnd.json" (
     echo [CV-Large] Running solver...
-    "%SOLVER%" "%DATA%\central_vietnam_large_drnd.json" ^
+    "%SOLVER%" "%DATA_CV%\cv_large_drnd.json" ^
         --pop %POP% --gen %GEN% --seed 0 ^
         --out "%RESULTS%\CV_large_seed0.json"
     echo [CV-Large] Done.
+) else (
+    echo [CV] Large instance not found. Run: python data_prep\generate_drnd.py
 )
 
 REM ── ANALYSIS ──────────────────────────────────────────────────────────────
