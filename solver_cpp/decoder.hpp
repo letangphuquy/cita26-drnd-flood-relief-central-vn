@@ -1,19 +1,16 @@
-// decoder.hpp — Priority-Based Heuristic Decoder for MO-IHLNDP (v2)
+// decoder.hpp — Priority-Based Heuristic Decoder for MO-IHLNDP (v3)
 //
-// CHANGES FROM v1:
-//   - A[ii] is now a rotation OFFSET into the distance-sorted hub list
-//     (was: arbitrary preferred hub index, effectively unused)
-//   - Tiered hub selection:
-//       Pass 1 — first WINDOW_K=3 candidates in rotation, best-scoring
-//                among active + reachable + positive residual capacity
-//       Pass 2 — remaining candidates, first active + reachable (ignores capacity)
-//       W[5] check — proactively open a closer reactive hub if travel time
-//                    of best active hub exceeds (1-W[5]) × that time
-//   - Demand priority score: all raw components normalised to [0,1] across
-//     the demand set; Gaussian noise added for stochastic diversity (Fix A)
-//   - Score adds W[3] isolation term (most-constrained-first heuristic)
-//   - Hub score adds W[4] planned-hub bonus
-//   - hub_order_by_dist pre-computed once before scenario loop
+// CHANGES FROM v2:
+//   - A[ii] is now the INDEX of the preferred anchor hub for demand ii.
+//     Hub trial order = all hubs sorted by ascending distance FROM hub_{A[ii]}.
+//     (was: rotation offset into a demand-centric distance-sorted list, which
+//     produced an unnatural and hard-to-explain rotation semantics.)
+//   - W[5] now controls the Pass-1 window depth:
+//       K = max(1, ceil(W[5] * num_H))
+//     High W[5] → larger window → more planned hubs tried before reactive fallback.
+//     Low W[5]  → smaller window → faster fallback to reactive hubs.
+//     (was: proactive reactive check threshold, removed for clarity.)
+//   - hub_anchor_order[ki][j] pre-computed once: j-th closest hub to hub ki.
 //
 // WEIGHT SEMANTICS:
 //   W[0]: demand urgency  (λ·D)              — demand sort
@@ -21,13 +18,13 @@
 //   W[2]: residual capacity                  — hub score
 //   W[3]: demand isolation (1/num_reachable) — demand sort
 //   W[4]: planned hub preference bonus       — hub score
-//   W[5]: reactive eagerness threshold       — proactive reactive check
+//   W[5]: Pass-1 window depth (fraction of |H|) — planned-hub conservatism
 //
-// 7-STEP DECODER (same step numbering as v1):
+// 7-STEP DECODER:
 //   Step 1. Decode x_k, compute q_k = R_k × κ_k; fixed stage-1 costs
 //   Step 2. Activate planned hubs for scenario s (risk-safe)
 //   Step 3. Compute demand priority scores (normalised + noisy)
-//   Step 4. Tiered demand allocation
+//   Step 4. Tiered demand allocation (anchor-based proximity order)
 //   Step 5. Origin assignment (largest-deficit-first)
 //   Step 6. Greedy transshipment (surplus→deficit)
 //   Step 7. Accumulate expected Z1 and Z2
@@ -37,8 +34,6 @@
 
 // Stochastic noise magnitude on normalised demand priority scores
 static constexpr double DECODER_NOISE_SIGMA = 0.05;
-// Pass-1 hub candidate window size
-static constexpr int    WINDOW_K            = 3;
 
 // ---------------------------------------------------------------------------
 // Normalise a vector to [0,1] in-place; if range≈0 set all to 0.5
@@ -81,22 +76,23 @@ void decode(Individual &ind, const DRNDInstance &inst) {
     }
   }
 
-  // ── Pre-compute hub order by Euclidean distance for each demand ────────
-  // Scenario-independent; built once and reused across all scenarios.
-  // hub_order[ii][j] = local hub index of the j-th closest hub to demand ii
-  vector<vector<int>> hub_order(num_I, vector<int>(num_H));
-  for (int ii = 0; ii < num_I; ii++) {
-    int di = inst.demand_idx[ii];
+  // ── Pre-compute anchor-based hub order ────────────────────────────────
+  // hub_anchor_order[ki][j] = local hub index of the j-th closest hub to hub ki.
+  // Scenario-independent; built once.  A[ii] selects the anchor hub ki = A[ii],
+  // and the trial order for demand ii is hub_anchor_order[ki][0..num_H-1].
+  vector<vector<int>> hub_anchor_order(num_H, vector<int>(num_H));
+  for (int ki = 0; ki < num_H; ki++) {
+    int hi = inst.hub_idx[ki];
     vector<pair<double, int>> dists;
     dists.reserve(num_H);
-    for (int ki = 0; ki < num_H; ki++) {
-      int hi = inst.hub_idx[ki];
-      double dx = inst.lon[di] - inst.lon[hi];
-      double dy = inst.lat[di] - inst.lat[hi];
-      dists.push_back({dx * dx + dy * dy, ki});
+    for (int kj = 0; kj < num_H; kj++) {
+      int hj = inst.hub_idx[kj];
+      double dx = inst.lon[hi] - inst.lon[hj];
+      double dy = inst.lat[hi] - inst.lat[hj];
+      dists.push_back({dx * dx + dy * dy, kj});
     }
     std::sort(all(dists));
-    for (int j = 0; j < num_H; j++) hub_order[ii][j] = dists[j].second;
+    for (int j = 0; j < num_H; j++) hub_anchor_order[ki][j] = dists[j].second;
   }
 
   // ── Per-scenario evaluation ────────────────────────────────────────────
@@ -184,23 +180,31 @@ void decode(Individual &ind, const DRNDInstance &inst) {
 
     vector<int>    z_ik(num_I, -1);
     vector<double> hub_load(num_H, 0.0);
-    const int      K = std::min(WINDOW_K, num_H);
+
+    // W[5] controls the Pass-1 window depth: how many anchor-proximate hubs
+    // are evaluated before falling back to the overflow pass.
+    // K = max(1, ceil(W[5] * num_H)).  High W[5] → larger window → more
+    // planned-hub candidates tried; low W[5] → reactive fallback sooner.
+    const int K = std::max(1, (int)std::ceil(ind.W[5] * num_H));
 
     for (int ii : demand_order) {
       int    i    = inst.demand_idx[ii];
       double D    = sc.demand[i];
       double D_kg = inst.gamma * D;
 
-      // Build rotation: candidate[j] = hub_order[ii][(A[ii]+j) % |H|]
-      int offset = ind.A[ii] % num_H;
+      // Trial order for demand ii: hubs sorted by ascending distance from
+      // anchor hub A[ii].  The anchor hub itself is first (distance = 0).
+      const int anchor = ind.A[ii] % num_H;
+      const vector<int> &trial_order = hub_anchor_order[anchor];
 
       int    best_ki           = -1;
       double best_hub_score    = -1e18;
       double best_travel_time  = inst.big_M;
 
-      // ── Pass 1: first K candidates, best-scoring with positive capacity ──
+      // ── Pass 1: first K candidates in anchor-proximity order ──────────
+      // Selects the best-scoring active+reachable hub with positive residual.
       for (int j = 0; j < K; j++) {
-        int ki = hub_order[ii][(offset + j) % num_H];
+        int ki = trial_order[j];
         if (!active[ki] && !y[ki]) continue;
         int    k         = inst.hub_idx[ki];
         double best_t    = inst.big_M;
@@ -221,10 +225,11 @@ void decode(Individual &ind, const DRNDInstance &inst) {
         }
       }
 
-      // ── Pass 2: remaining candidates, first active+reachable (ignores capacity) ──
+      // ── Pass 2: remaining candidates, first active+reachable ──────────
+      // Ignores residual capacity; may incur a constraint violation.
       if (best_ki == -1) {
         for (int j = K; j < num_H; j++) {
-          int ki = hub_order[ii][(offset + j) % num_H];
+          int ki = trial_order[j];
           if (!active[ki] && !y[ki]) continue;
           int    k      = inst.hub_idx[ki];
           double best_t = inst.big_M;
@@ -236,38 +241,6 @@ void decode(Individual &ind, const DRNDInstance &inst) {
           best_ki          = ki;
           best_travel_time = best_t;
           break;
-        }
-      }
-
-      // ── W[5] proactive reactive check ─────────────────────────────────
-      // If best active hub's travel time exceeds (1-W[5])×that time,
-      // look for a safe inactive hub that is strictly faster.
-      // W[5]≈0: open if ANY faster reactive exists; W[5]≈1: never open proactively.
-      if (best_ki != -1 && ind.W[5] < 1.0 - EPS) {
-        double threshold_t = (1.0 - ind.W[5]) * best_travel_time;
-        int    react_ki    = -1;
-        double react_best  = threshold_t; // only improve below threshold
-
-        for (int ki = 0; ki < num_H; ki++) {
-          if (active[ki] || y[ki]) continue;
-          int k = inst.hub_idx[ki];
-          if (sc.risk[k] > inst.chi) continue;
-          for (int m = 0; m < num_M; m++) {
-            if (sc.acc(m, i, k)) {
-              double t = inst.C_time[m][i][k];
-              if (t < react_best) { react_best = t; react_ki = ki; }
-              break;
-            }
-          }
-        }
-
-        if (react_ki != -1) {
-          y[react_ki]         = true;
-          inventory[react_ki] = (ind.R[react_ki] > 0 ? ind.R[react_ki] : 0.5)
-                                * inst.kappa[react_ki];
-          Z1_s               += sc.hub_reactive_cost[react_ki];
-          best_ki             = react_ki;
-          best_travel_time    = react_best;
         }
       }
 
