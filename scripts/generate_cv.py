@@ -737,7 +737,13 @@ def build_instance(size="small"):
 # ============================================================================
 
 def main():
-    out_dir = os.path.dirname(os.path.abspath(__file__))
+    import argparse
+    parser = argparse.ArgumentParser(description="Generate CV DRND instance files.")
+    parser.add_argument("--outdir", type=str, default=None,
+                        help="Output directory (default: same as script).")
+    args = parser.parse_args()
+    out_dir = args.outdir if args.outdir else os.path.dirname(os.path.abspath(__file__))
+    os.makedirs(out_dir, exist_ok=True)
 
     for size in ["small", "large"]:
         inst = build_instance(size)

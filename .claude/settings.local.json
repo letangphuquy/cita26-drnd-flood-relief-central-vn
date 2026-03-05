@@ -12,7 +12,8 @@
       "Bash(\"solver_cpp/bb_solver.exe\":*)",
       "Bash(grep:*)",
       "Bash(./solver_cpp/bb_solver.exe:*)",
-      "Bash(./bb_solver:*)"
+      "Bash(./bb_solver:*)",
+      "Bash(python:*)"
     ]
   }
 }
