@@ -55,15 +55,15 @@ echo ============================================================
 echo  EXPERIMENT 1: Algorithm Efficiency on HLP Benchmarks
 echo ============================================================
 
-REM ── 1a. BB-Exact (True Pareto Front for small instances) ──────────────────
+REM ── 1a. BB-Exact (Complete Enumeration ground-truth Pareto fronts) ──────────
 echo.
-echo --- Exp1a: BB-Exact (ground-truth Pareto fronts) ---
+echo --- Exp1a: BB-Exact (complete enumeration, ground-truth Pareto fronts) ---
 for %%S in (10 20 25 40) do (
     set "INST=%DATA%\AP%%S_drnd.json"
     set "OUT=%RESULTS%\AP%%S_bb.json"
     if exist "!INST!" (
-        echo [BB AP%%S] Running...
-        "%BB%" "!INST!" --out "!OUT!" --trials 80 --time-limit %BB_TIME%
+        echo [BB AP%%S] Running complete enumeration...
+        "%BB%" "!INST!" --out "!OUT!" --mode enum --trials 500 --time-limit %BB_TIME%
         if !ERRORLEVEL!==0 (echo [BB AP%%S] Done.) else (echo [BB AP%%S] FAILED/Timeout)
     ) else (
         echo [BB AP%%S] Instance not found: !INST!
@@ -71,8 +71,8 @@ for %%S in (10 20 25 40) do (
 )
 
 if exist "%DATA_CV%\cv_small_drnd.json" (
-    echo [BB CV-Small] Running...
-    "%BB%" "%DATA_CV%\cv_small_drnd.json" --out "%RESULTS%\CV_small_bb.json" --trials 80 --time-limit %BB_TIME%
+    echo [BB CV-Small] Running complete enumeration...
+    "%BB%" "%DATA_CV%\cv_small_drnd.json" --out "%RESULTS%\CV_small_bb.json" --mode enum --trials 500 --time-limit %BB_TIME%
     if !ERRORLEVEL!==0 (echo [BB CV-Small] Done.) else (echo [BB CV-Small] FAILED/Timeout)
 )
 
@@ -142,7 +142,7 @@ echo ============================================================
 echo  Analysis and Visualization
 echo ============================================================
 
-python "%DATA%\analyze_results.py" "%RESULTS%"
+python "%PROJECT%hlp-dataset\analyze_results.py" "%RESULTS%"
 
 echo.
 echo [Map Viz] Generating solution map for CV-Small...

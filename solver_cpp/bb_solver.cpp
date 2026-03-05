@@ -1,10 +1,19 @@
-// bb_solver.cpp — Branch-and-Bound Exact Solver for MO-IHLNDP
+// bb_solver.cpp — Complete Enumeration / Branch-and-Bound Solver for MO-IHLNDP
 //
-// Enumerates all hub configurations X ∈ {0,1}^H via branch-and-bound.
-// Multi-objective dominance pruning uses two lower bounds:
-//   lb_Z1(partial X) = Σ committed fixed costs + Σ_i min expected routing
-//   lb_Z2(partial X) = Σ_s π_s * max_i { min-omega deprivation }
-// where "min over feasible hubs" = committed-open ∪ undecided hubs.
+// Two enumeration modes selected via --mode:
+//
+//   --mode enum (default):
+//     Complete enumeration of ALL hub configurations X ∈ {0,1}^H.
+//     No dominance pruning — every valid X (≥1 open hub) is evaluated.
+//     Guarantees a true ground-truth Pareto front; no solutions are skipped.
+//     Use for instances with num_H ≤ 20 to avoid exponential blow-up.
+//
+//   --mode bb:
+//     Branch-and-Bound with multi-objective dominance pruning:
+//       lb_Z1(partial X) = Σ committed fixed costs + Σ_i min expected routing
+//       lb_Z2(partial X) = Σ_s π_s * max_i { min-omega deprivation }
+//     Faster than enum for large H, but pruning correctness depends on the
+//     lower bounds being tight — use only when bounds are validated.
 //
 // At each leaf (complete X), the sub-problem for (R, A, W) is solved by
 // exhaustive evaluation of structured (R, A) combinations + random trials,
@@ -18,6 +27,7 @@
 //
 // Usage:
 //   bb_solver <instance.json> [--out <path>] [--trials N] [--time-limit S]
+//             [--mode enum|bb]
 //
 // Intended for instances with num_H ≤ 20 (exhaustive search space ≤ 1M).
 // Larger instances will hit the time limit and return a partial Pareto front.
@@ -257,24 +267,28 @@ static void evaluate_leaf(const vector<int>&  X,
     }
 
     // ── R strategies ──────────────────────────────────────────────────────
-    // Uniform fills
+    // Uniform fills: 11 levels from 0.0 to 1.0 (step 0.1) — dense grid so
+    // that the continuous R dimension is well-sampled in complete-enum mode.
     auto make_R_uniform = [&](double val) {
         vector<double> R(H, 0.0);
         for (int ki : open_ki) R[ki] = val;
         return R;
     };
-    vector<vector<double>> R_set = {
-        make_R_uniform(1.0),
-        make_R_uniform(0.75),
-        make_R_uniform(0.5),
-        make_R_uniform(0.25),
-        make_R_uniform(0.1),
-    };
-    // Per-hub spotlight: one hub gets full inventory, others get minimal.
-    // This explores non-uniform R solutions that PB-NSGA can find via evolution.
+    vector<vector<double>> R_set;
+    for (int step = 0; step <= 10; step++)
+        R_set.push_back(make_R_uniform(step * 0.1));
+
+    // Per-hub spotlight: one hub gets full inventory (1.0), others get
+    // minimal (0.1) — explores non-uniform R frontier.
     for (int focus : open_ki) {
         vector<double> R(H, 0.0);
         for (int ki : open_ki) R[ki] = (ki == focus) ? 1.0 : 0.1;
+        R_set.push_back(R);
+    }
+    // Per-hub half-spotlight: one hub at 0.5, others at 0.1.
+    for (int focus : open_ki) {
+        vector<double> R(H, 0.0);
+        for (int ki : open_ki) R[ki] = (ki == focus) ? 0.5 : 0.1;
         R_set.push_back(R);
     }
 
@@ -348,7 +362,7 @@ static void evaluate_leaf(const vector<int>&  X,
 }
 
 // ---------------------------------------------------------------------------
-// B&B search counters (global for simplicity)
+// Search counters (global for simplicity)
 // ---------------------------------------------------------------------------
 static long long g_nodes_visited       = 0;
 static long long g_pruned_infeasible   = 0;
@@ -358,14 +372,26 @@ static auto      g_t_start            = Clock::now();
 static double    g_time_limit_s       = 3600.0;
 
 // ---------------------------------------------------------------------------
-// Recursive B&B
+// Recursive enumeration / B&B
+//
+// use_pruning = false (--mode enum):
+//   Complete enumeration — all valid X ∈ {0,1}^H are evaluated.
+//   Dominance pruning is DISABLED; only structurally infeasible nodes
+//   (no open hub anywhere in the subtree) are skipped.
+//   Guarantees a true ground-truth Pareto front.
+//
+// use_pruning = true (--mode bb):
+//   Branch-and-Bound — uses lb_Z1 / lb_Z2 lower bounds to prune subtrees
+//   whose lower bound is dominated by the current archive.  Faster for
+//   large H but relies on bound correctness.
 // ---------------------------------------------------------------------------
 static void bb_search(vector<int>&          X,
                       int                   depth,
                       const DRNDInstance&   inst,
                       const BoundsCache&    bc,
                       ParetoArchive&        archive,
-                      int                   num_trials) {
+                      int                   num_trials,
+                      bool                  use_pruning) {
     if (Duration(Clock::now() - g_t_start).count() > g_time_limit_s) return;
 
     ++g_nodes_visited;
@@ -380,12 +406,13 @@ static void bb_search(vector<int>&          X,
         return;
     }
 
-    // ── Branch: try val=1 (open) first to find good Z2 solutions early,
-    //   improving pruning power before exploring val=0 (closed). ────────────
+    // ── Branch ────────────────────────────────────────────────────────────
+    // In BB mode, try val=1 first to find good solutions early (improves pruning).
+    // In enum mode, order is irrelevant — use 1 then 0 for consistency.
     for (int val : {1, 0}) {
         X[depth] = val;
 
-        // Structural feasibility: must have ≥1 hub at the leaf
+        // Structural feasibility: skip if no open hub is possible in subtree
         int open_so_far = 0;
         for (int k = 0; k <= depth; k++) open_so_far += X[k];
         const int remaining = inst.num_H - depth - 1;
@@ -394,15 +421,17 @@ static void bb_search(vector<int>&          X,
             continue;
         }
 
-        // MO dominance pruning: compute lower bounds for this partial X
-        const double lb_z1 = bc.lb_Z1(X, depth + 1);
-        const double lb_z2 = bc.lb_Z2(X, depth + 1);
-        if (archive.is_dominated(lb_z1, lb_z2)) {
-            ++g_pruned_dominance;
-            continue;
+        // MO dominance pruning (only in --mode bb)
+        if (use_pruning) {
+            const double lb_z1 = bc.lb_Z1(X, depth + 1);
+            const double lb_z2 = bc.lb_Z2(X, depth + 1);
+            if (archive.is_dominated(lb_z1, lb_z2)) {
+                ++g_pruned_dominance;
+                continue;
+            }
         }
 
-        bb_search(X, depth + 1, inst, bc, archive, num_trials);
+        bb_search(X, depth + 1, inst, bc, archive, num_trials, use_pruning);
     }
 }
 
@@ -411,13 +440,15 @@ static void bb_search(vector<int>&          X,
 // ---------------------------------------------------------------------------
 static void write_output(const ParetoArchive& archive,
                           const string&        out_path,
-                          double               elapsed_s) {
+                          double               elapsed_s,
+                          const string&        mode) {
     auto front = archive.front;
     std::sort(front.begin(), front.end(),
               [](const Solution& a, const Solution& b){ return a.Z1 < b.Z1; });
 
     json j;
-    j["meta"]["solver"]                 = "BB-Exact";
+    j["meta"]["solver"]                 = (mode == "enum") ? "BB-CompleteEnum" : "BB-Exact";
+    j["meta"]["mode"]                   = mode;
     j["meta"]["elapsed_s"]              = elapsed_s;
     j["meta"]["nodes_visited"]          = g_nodes_visited;
     j["meta"]["pruned_infeasible"]      = g_pruned_infeasible;
@@ -458,21 +489,29 @@ static void write_output(const ParetoArchive& archive,
 int main(int argc, char* argv[]) {
     if (argc < 2) {
         cerr << "Usage: bb_solver <instance.json> [--out <path>] "
-                "[--trials N] [--time-limit S]\n";
+                "[--trials N] [--time-limit S] [--mode enum|bb]\n";
         return 1;
     }
 
     string inst_path  = argv[1];
     string out_path   = "";
-    int    num_trials = 500;  // sub-problem evaluations per leaf (structured + random + perturbation)
+    int    num_trials = 500;   // sub-problem evaluations per leaf
     double time_limit = 3600.0;
+    string mode       = "enum"; // default: complete enumeration
 
     for (int i = 2; i < argc; i++) {
         const string arg = argv[i];
-        if (arg == "--out"        && i + 1 < argc) out_path   = argv[++i];
+        if      (arg == "--out"        && i + 1 < argc) out_path   = argv[++i];
         else if (arg == "--trials"     && i + 1 < argc) num_trials = std::stoi(argv[++i]);
         else if (arg == "--time-limit" && i + 1 < argc) time_limit = std::stod(argv[++i]);
+        else if (arg == "--mode"       && i + 1 < argc) mode       = argv[++i];
     }
+
+    if (mode != "enum" && mode != "bb") {
+        cerr << "Error: --mode must be 'enum' or 'bb'\n";
+        return 1;
+    }
+    const bool use_pruning = (mode == "bb");
 
     g_time_limit_s = time_limit;
 
@@ -480,6 +519,7 @@ int main(int argc, char* argv[]) {
     DRNDInstance inst = load_instance(inst_path);
 
     cerr << "=== BB-Exact Solver for MO-IHLNDP ===\n";
+    cerr << "Mode     : " << (use_pruning ? "Branch-and-Bound (pruning ON)" : "Complete Enumeration (pruning OFF)") << "\n";
     cerr << "Instance : " << inst_path << "\n";
     cerr << "  H=" << inst.num_H << "  I=" << inst.num_I
          << "  J=" << inst.num_J << "  S=" << inst.num_S << "\n";
@@ -488,7 +528,7 @@ int main(int argc, char* argv[]) {
     if (config_count > 0) cerr << " = " << config_count;
     cerr << "\n";
     if (inst.num_H > 20)
-        cerr << "  WARNING: num_H > 20; B&B may not finish within the time limit.\n";
+        cerr << "  WARNING: num_H > 20; enumeration may not finish within the time limit.\n";
     cerr << "Trials/leaf: " << num_trials
          << " | Time limit: " << time_limit << " s\n\n";
 
@@ -499,14 +539,15 @@ int main(int argc, char* argv[]) {
     vector<int>   X(inst.num_H, 0);
 
     g_t_start = Clock::now();
-    bb_search(X, 0, inst, bc, archive, num_trials);
+    bb_search(X, 0, inst, bc, archive, num_trials, use_pruning);
     const double elapsed = Duration(Clock::now() - g_t_start).count();
 
     cerr << "=== Done ===\n";
     cerr << "  Pareto front size : " << archive.front.size() << "\n";
     cerr << "  Nodes visited     : " << g_nodes_visited     << "\n";
     cerr << "  Pruned (infeas.)  : " << g_pruned_infeasible << "\n";
-    cerr << "  Pruned (dominance): " << g_pruned_dominance  << "\n";
+    if (use_pruning)
+        cerr << "  Pruned (dominance): " << g_pruned_dominance  << "\n";
     cerr << "  Leaves evaluated  : " << g_leaves_evaluated  << "\n";
     cerr << "  Elapsed           : " << elapsed << " s\n";
 
@@ -514,7 +555,7 @@ int main(int argc, char* argv[]) {
         cerr << "  WARNING: Time limit reached — result is PARTIAL front.\n";
 
     try {
-        write_output(archive, out_path, elapsed);
+        write_output(archive, out_path, elapsed, mode);
     } catch (const std::exception& e) {
         cerr << "Error writing output: " << e.what() << "\n";
         return 1;

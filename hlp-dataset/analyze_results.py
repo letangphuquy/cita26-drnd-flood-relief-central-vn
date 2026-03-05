@@ -366,12 +366,17 @@ def exp1_benchmark(bench_groups, fig_dir):
         reference_norm = ref_norm[0] if ref_norm else []
         ref_pt = (1.1, 1.1)
 
-        # ── Plot: one line per algo ────────────────────────────────────────
+        # ── Plot ──────────────────────────────────────────────────────────
+        # The reference front (BB ∪ PB-NSGA combined) is shown as the
+        # benchmark line.  BB exhaustively covers X configurations but uses
+        # a heuristic inner solver; PB-NSGA jointly optimises all variables.
+        # Either can contribute non-dominated solutions, so the combined
+        # front is the best available approximation of the true Pareto front.
         series_dict = {}
         if bb_pts:
-            series_dict["BB-Exact (true front)"] = bb_pts
+            series_dict["BB-Exact"] = bb_pts
         if pb_combined:
-            series_dict["PB-NSGA-II (combined)"] = pb_combined
+            series_dict["PB-NSGA-II"] = pb_combined
         plot_pareto(
             series_dict,
             os.path.join(fig_dir, f"{grp}_pareto.pdf"),
