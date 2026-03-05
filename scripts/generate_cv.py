@@ -98,6 +98,22 @@ DELTA_CENTERS = [
 # Fixes applied vs. v2:
 #   - Removed (16.8981, 106.6061, "Huong_Lap_Commune")  → lon 106.6 is in Laos
 #   - Fixed   (14.9463, 108.6762, "Minh_Long_District")  → space typo in lon
+# Fixes applied vs. v3 (coordinate RCA — nodes in water):
+#   - D17 Phu_Loc_District     (16.2032,107.7697) → (16.13,107.93)  — Truoi Reservoir
+#   - D33 Phu_Loc_West         (16.23,107.75)     → (16.21,107.86)  — Truoi Reservoir
+#   - D34 Phu_Vang_District    (16.4454,107.7368) → (16.45,107.65)  — Tam Giang lagoon
+#   - D38 Khe_Tre_Commune      (16.1684,107.7185) → (16.17,107.65)  — Truoi Reservoir
+#   - D41 Lang_Co_Area         (16.24,108.02)     → (16.24,107.96)  — Lang Co lagoon
+#   - D48 Bach_Ma_Forest       (16.18,107.85)     → (16.18,107.75)  — Cau Hai lagoon
+#   - D60 Binh_Duong_Commune   (15.78,108.50)     → (15.78,108.38)  — in sea
+#   - D64 Tam_Quan_Town        (15.35,108.80)     → (15.35,108.73)  — in sea
+#   - D83 Truong_Giang_Commune (15.55,108.52)     → (15.55,108.44)  — in sea
+#   - D96 Thuong_Quang_Commune (16.15,107.75)     → (16.15,107.65)  — Truoi Reservoir
+#   - H106 Phu_Loc_Staging_Area (16.18,107.80)   → (16.18,107.95)  — Truoi Reservoir
+#   - H108 Lang_Co_Forward_Post (16.24,108.02)   → (16.24,107.97)  — Lang Co lagoon
+#   - H115 Quang_Ngai_Port_Hub (15.37,108.80)    → (15.37,108.75)  — in sea
+#   - O121 Dung_Quat_Port      (15.37,108.80)    → (15.42,108.67)  — in sea (actual Dung Quat EZ)
+#   - O130 Lang_Co_Beach_Base  (16.24,108.02)    → (16.25,107.97)  — Lang Co lagoon
 # ============================================================================
 
 DEMAND_NODES = [
@@ -120,7 +136,7 @@ DEMAND_NODES = [
     (16.5100, 107.5500, "Huong_Tra_District"),
     (16.3400, 107.6800, "Huong_Thuy_District"),
     (16.0800, 107.7200, "Nam_Dong_District"),
-    (16.2032, 107.7697, "Phu_Loc_District"),
+    (16.13, 107.93, "Phu_Loc_District"),          # was (16.2032,107.7697) — inside Truoi Reservoir; moved to Phu Loc town on NH1A
     (16.2085, 107.3418, "A_Luoi_Mountain"),     # -0.005°N +0.005°E offset from hub centroid
     (16.0000, 107.6500, "Nam_Dong_Highland"),
     # ── Đà Nẵng city ───────────────────────────────────────────────────────
@@ -139,23 +155,23 @@ DEMAND_NODES = [
     (15.3800, 108.6500, "Nui_Thanh_South"),
     (15.5000, 108.4200, "Tam_Ky_South"),
     # ── Thừa Thiên-Huế coastal / highland ──────────────────────────────────
-    (16.2300, 107.7500, "Phu_Loc_West"),
-    (16.4454, 107.7368, "Phu_Vang_District"),
+    (16.21, 107.86, "Phu_Loc_West"),               # was (16.23,107.75) — inside Truoi Reservoir; moved to foothills between reservoir and lagoon
+    (16.45, 107.65, "Phu_Vang_District"),           # was (16.4454,107.7368) — inside Tam Giang lagoon; moved west to dry land
     (16.5925, 107.5129, "Quang_Dien_District"),
     (16.6100, 107.4500, "Phong_Dien_District"),
     (16.4000, 107.6000, "Hue_City_South"),
-    (16.1684, 107.7185, "Khe_Tre_Commune"),
+    (16.17, 107.65, "Khe_Tre_Commune"),             # was (16.1684,107.7185) — inside Truoi Reservoir; moved to highland west of reservoir
     # ── Quảng Nam deep highland ─────────────────────────────────────────────
     (15.4000, 107.9500, "Tra_Don_Commune"),
     (15.0800, 108.0500, "Tra_Nam_Commune"),
-    (16.2400, 108.0200, "Lang_Co_Area"),
+    (16.24, 107.96, "Lang_Co_Area"),                # was (16.24,108.02) — inside Lang Co lagoon; moved to land strip west of lagoon
     (16.3500, 107.7000, "Truoi_Lake_Area"),
     (15.8500, 107.6000, "Vu_Gia_River_South"),
     (15.9000, 107.5000, "Song_Bung_Lake"),
     (16.2500, 107.2700, "A_Sap_Valley"),           # A Shau/A Sap valley, Thua Thien-Hue
     (15.7200, 107.9700, "Phuoc_Son_District"),
     (15.4500, 108.0500, "Tra_My_Highlands"),
-    (16.1800, 107.8500, "Bach_Ma_Forest"),          # Bach Ma NP near east coast, not deep mountains
+    (16.18, 107.75, "Bach_Ma_Forest"),               # was (16.18,107.85) — inside Cau Hai lagoon; Bach Ma NP is in the mountains; moved west
     (16.2100, 107.2800, "A_Luoi_Valley"),           # A Luoi district western highlands
     # ── Thừa Thiên-Huế north ───────────────────────────────────────────────
     (16.7500, 107.3000, "Huong_An_Commune"),
@@ -169,13 +185,13 @@ DEMAND_NODES = [
     (16.2200, 107.3500, "Huong_Xuan_Commune"),
     (15.5800, 108.3000, "Tam_Viet_Commune"),
     (15.3800, 108.7000, "Tam_Hiep_Commune"),
-    (15.7800, 108.5000, "Binh_Duong_Commune"),
+    (15.78, 108.38, "Binh_Duong_Commune"),          # was (15.78,108.50) — in sea; moved 12km inland to Quang Nam coastal plain
     (16.7600, 107.3800, "Phu_Dien_Ward"),
     (16.0600, 108.2500, "My_Khe_Beach_Area"),
     # ── Far north ───────────────────────────────────────────────────────────
     (16.1200, 107.3000, "A_Dot_Commune"),
     # ── Quảng Ngãi province ─────────────────────────────────────────────────
-    (15.3500, 108.8000, "Tam_Quan_Town"),
+    (15.35, 108.73, "Tam_Quan_Town"),               # was (15.35,108.80) — in sea; moved to on-land Quang Ngai coast
     (15.1096, 108.3879, "Nuoc_Trong_Reservoir"),
     (14.8500, 108.9600, "Duc_Pho_District"),
     (16.7500, 107.1500, "A_Bat_Commune"),
@@ -195,7 +211,7 @@ DEMAND_NODES = [
     # ── Remote highland communes ────────────────────────────────────────────
     (15.7200, 107.5500, "Khue_Trung_Valley"),        # western Quang Nam, inside Vietnam
     (16.6300, 107.4200, "Phu_Thuong_Ward"),
-    (15.5500, 108.5200, "Truong_Giang_Commune"),  # moved inland — 108.62 risked sea-boundary
+    (15.55, 108.44, "Truong_Giang_Commune"),        # was (15.55,108.52) — still in sea; moved further inland
     (16.8500, 107.2000, "Son_Qua_Commune"),
     (16.0700, 108.2200, "Xuan_Ha_Ward"),
     (16.0902, 108.2467, "Man_Thai_Ward"),
@@ -208,7 +224,7 @@ DEMAND_NODES = [
     (15.5800, 107.8200, "Ca_Dy_Commune"),            # Nam Giang/Tien Phuoc highland area
     (15.3500, 108.1000, "Tra_Bui_Commune"),          # Bac Tra My highland, was way in Laos
     (16.1300, 107.9700, "Ta_Lang_Commune"),
-    (16.1500, 107.7500, "Thuong_Quang_Commune"),
+    (16.15, 107.65, "Thuong_Quang_Commune"),        # was (16.15,107.75) — inside Truoi Reservoir; moved to highland west of reservoir
     (16.2628, 107.2454, "A_Ngo_Commune"),
     (16.8500, 107.0500, "A_Tuc_Commune"),
     (15.6200, 107.7200, "Ta_Bhing_Commune"),          # Xã Tà Bhing, Nam Giang — Ca Lu was phantom
@@ -222,16 +238,16 @@ HUB_NODES = [
     (15.9126, 107.7265, "Dong_Giang_Rescue_Stn"),
     (15.6900, 108.3400, "Thang_Binh_Depot"),
     (15.6072, 107.6071, "Nam_Giang_Forward_Base"),
-    (16.18, 107.80, "Phu_Loc_Staging_Area"),
+    (16.18, 107.95, "Phu_Loc_Staging_Area"),        # was (16.18,107.80) — inside Truoi Reservoir/lagoon; moved to NH1A highway corridor
     (15.4500, 108.6200, "Nui_Thanh_Reserve"),
-    (16.2400, 108.0200, "Lang_Co_Forward_Post"),
+    (16.24, 107.97, "Lang_Co_Forward_Post"),        # was (16.24,108.02) — inside Lang Co lagoon; moved to land strip
     (15.3115, 108.7287, "Binh_Son_Warehouse"),
     (16.1200, 107.3000, "A_Dot_Mountain_Base"),
     (15.1190, 108.8096, "Quang_Ngai_Depot"),
     (16.2500, 107.2500, "A_Sap_Helipad"),
     (15.6832, 108.0627, "Que_Son_Facility"),
     (16.7000, 107.0600, "Huong_Viet_Depot"),
-    (15.3700, 108.8000, "Quang_Ngai_Port_Hub"),
+    (15.37, 108.75, "Quang_Ngai_Port_Hub"),         # was (15.37,108.80) — in sea; moved to on-land Binh Son coastal area
     (15.7200, 107.9700, "Phuoc_Son_Helipad"),
     (16.1500, 107.4000, "Rao_Trang_Base"),
     (15.3200, 107.9500, "Bac_Tra_My_Depot"),
@@ -241,7 +257,7 @@ HUB_NODES = [
 ORIGIN_NODES = [
     # External supply: ports, military airports, border logistics
     (16.1691, 108.1263, "Hai_Van_Pass_North"),    # QL1A northern entry
-    (15.3700, 108.8000, "Dung_Quat_Port"),         # industrial port
+    (15.42, 108.67, "Dung_Quat_Port"),              # was (15.37,108.80) — in sea; moved to actual Dung Quat Economic Zone location
     (15.4033, 108.7061, "Chu_Lai_Airport"),         # military/civil airport
     (16.5200, 107.6900, "Thuan_An_Port"),               # Thuan An inlet, Hue coastal port
     (15.2100, 108.8700, "Sa_Ky_Port"),              # southern port
@@ -250,7 +266,7 @@ ORIGIN_NODES = [
     (16.0930, 108.2280, "Da_Nang_Seaport"),          # Tien Sa port, Da Nang (was 108.64 = in sea)
     (16.46, 107.60, "Hue_Train_Station"),           # Hue city railway station
     (15.3800, 109.1000, "Ly_Son_Island_Supply"),    # coastal island depot
-    (16.2400, 108.0200, "Lang_Co_Beach_Base"),          # Lang Co lagoon beach landing
+    (16.25, 107.97, "Lang_Co_Beach_Base"),          # was (16.24,108.02) — inside Lang Co lagoon; moved to land strip near NH1A tunnel
     (14.8087, 108.9572, "Duc_Pho_Harbor"),          # southern harbor
 ]  # 12 nodes
 
