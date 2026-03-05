@@ -92,9 +92,19 @@
 \maketitle              % typeset the header of the contribution
 %
 \begin{abstract}
+% Flood disasters in Central Vietnam repeatedly sever road infrastructure, rendering relief network models that assume full connectivity inadequate. We formulate the Multi-Objective Incomplete Hub Location Network Design Problem (MO-IHLNDP), a two-stage stochastic program minimizing expected logistics cost and expected maximum deprivation cost over flood scenarios, with broken inter-hub links, multi-modal transport, and Daganzo's continuous approximation for last-mile routing.
+% To solve this NP-hard problem, we propose PB-NSGA (Priority-Based Nondominated Sorting Genetic Algorithm), which encodes only first-stage hub decisions and reconstructs scenario-dependent second-stage variables via a structured priority-based decoder. Experiments on AP and TR81 benchmarks validate near-optimal performance against
+% exact Pareto fronts. A case study across four flood-prone provinces in Central Vietnam yields a quantified cost-equity trade-off, identifies a robust hub core for permanent investment, and guides transport mode diversification under extreme scenarios.
 
-Natural disasters severely disrupt transportation infrastructure, heavily complicating search and rescue (SAR) operations. Existing humanitarian logistics models often fail to capture these dynamic disruptions and the non-linear escalation of human suffering. To address this gap, we propose a two-stage stochastic Multi-Objective Incomplete Hub Location Network Design Problem (MO-IHLNDP). Our model simultaneously minimizes expected logistics costs -- utilizing Daganzo's Continuous Approximation for scalable last-mile routing -- and the expected maximum deprivation cost to enforce social equity. To solve this NP-hard problem, we develop a Priority-Based Non-dominated Sorting Genetic Algorithm II (PB-NSGA-II). Extensive computational experiments on standard benchmarks (AP, TR81) validate the algorithm's efficiency. Furthermore, a detailed case study of the flood-prone Vu Gia -- Thu Bon river basin provides crucial managerial insights. The results highlight the necessity of dynamically adapting multi-modal network topologies to maintain resilience under extreme disaster scenarios.
-\keywords{Humanitarian Logistics \and Disaster relief \and Hub location problem \and Multi-objective Evolutionary Algorithm.}
+Flood disasters in Central Vietnam repeatedly sever road infrastructure, rendering conventional relief network models -- which assume full network connectivity -- fundamentally inadequate. We formulate the Multi-Objective Incomplete Hub Location Network Design Problem (MO-IHLNDP), a two-stage stochastic program that jointly minimizes expected
+logistics cost and expected maximum deprivation cost over a set of flood scenarios, while explicitly accounting for broken inter-hub links, multi-modal transport, and pre-positioned inventory.
+Deprivation cost is modeled as an exponential penalty on victim waiting time, and Daganzo's continuous approximation is embedded for tractable last-mile routing cost estimation.
+To solve MO-IHLNDP, we propose PB-NSGA (Priority-Based Nondominated Sorting Genetic Algorithm), which confines the chromosome to first-stage hub decisions and reconstructs all scenario-dependent second-stage variables through a
+structured priority-based decoder, reducing search-space complexity from $O(|\mathcal{S}|\times|\mathcal{V}|)$ to $O(|\mathcal{H}|)$.
+Computational experiments on AP and TR81 hub location benchmarks confirm near-optimal recovery against exact Pareto fronts on verifiable instances and sub-quadratic runtime scaling.
+A case study across four flood-prone provinces in Central Vietnam yields actionable managerial insights: a quantified cost-equity trade-off curve for evidence-based resource allocation, identification of a robust hub core for permanent infrastructure investment, and transport mode diversification strategies that preserve network connectivity under extreme disaster scenarios.
+
+\keywords{Humanitarian logistics \and Hub location \and Multi-objective optimization \and Stochastic programming \and Disaster relief \and Evolutionary algorithm}
 \end{abstract}
 
 \section{Introduction}
@@ -109,6 +119,20 @@ Most critically, national logistics infrastructure suffered severe disruption: t
 These events demonstrate that during a major catastrophe, the assumption of a fully connected transport network is fundamentally flawed -- the physical network becomes \quo{incomplete}, characterized by broken links and isolated nodes.
 Compounding this, resource scarcity arising from poor planning and uncertain supply and demand further strains relief efforts.
 Disaster management involves four phases: mitigation, preparedness, response, and recovery~\cite{altay2006or}; Disaster Relief Network Design (DRND) bridges the preparedness and response phases by optimizing facility locations and relief routing.
+
+% There were many great challenges in humanitarian operations during this period, one of them being the severe disruption of national logistics infrastructure. The North-South Railway -- backbone of Vietnam's transport network was paralyzed due to track erosion and submersion, forcing the cancellation of 170 trains \cite{HanoiTimes2025}. Simultaneously, key arteries such as the National Highway 1 and routes in the Central Highlands were severed by landslides, isolating communities for days \cite{ReliefWeb2020}. These events demonstrate that during a major catastrophe, the assumption of a fully connected transport network is fundamentally flawed. The physical network becomes \quo{incomplete}, characterized by broken links and isolated nodes. 
+% Another challenge is resource scarcity resulting from poor planning and uncertain supply and demand. Disaster management involves four phases: mitigation, preparedness, response, and recovery \cite{altay2006or}. Disaster Relief Network Design (DRND) bridges the preparedness and response phases by optimizing facility locations and relief routing.
+% Another great challenge is the lack of resources due to improper planning in the preparedness phase. Furthermore, both the demand and the supply are unknown in advance. According to the CITATION, there are four phases in disaster management: mitigation, preparedness, response, and recovery. The task of locating the rescue centers and designing a network to efficiently evacuate victims, or route the relief items to the affected areas, is termed Disaster Relief Network Design (DRND), and it is an important bridge between the Preparedness and Response phases.
+
+% ============================================================
+%  DROP THIS BLOCK INTO YOUR INTRODUCTION SECTION
+%  (replacing the existing \subsection{Related Works})
+%
+%  NEW .bib entries required (append to cite-class.bib):
+%    alumur2009incomplete, sangsawang2020capacitated,
+%    elci2018chance, gen2006priority
+%  All other \cite{} keys already exist in your .bib.
+% ============================================================
 
 \subsection{Related Works}
 
@@ -146,37 +170,6 @@ No existing work simultaneously addresses incomplete hub network design, two-sta
 Sangsawang and Chanta~\cite{sangsawang2020capacitated} is the closest precedent, yet it is deterministic and single-objective.
 The present paper closes this gap by proposing MO-IHLNDP -- a two-stage stochastic multi-objective incomplete hub location model integrating Daganzo's CA for last-mile cost estimation -- and PB-NSGA-II, a priority-based~\cite{gen2006priority} evolutionary algorithm that efficiently reconstructs second-stage decisions across flood scenarios in Central Coastal Vietnam.
 
-\mycomment{
-\subsection{Related Works}
-
-The design of disaster relief networks differs fundamentally from commercial logistics. Commercial models prioritize profit maximization. Humanitarian logistics prioritizes human lives and rapid response \cite{van2006humanitarian}. Facility location is a critical component of disaster preparedness. A comprehensive review by Boonmee et al. \cite{boonmee2017facility} highlights the growing need for facility location models under severe uncertainty. 
-
-\textbf{Disruption and Network Design.} Disasters often cause severe infrastructure disruptions. Standard network models fail when paths become unavailable. Yahyaei and Bozorgi-Amiri \cite{Yahyaei2019} addressed this by proposing a robust reliable network design. They integrated shelter and supply facility locations under disruption risks. Similarly, Hasani and Mokhtari \cite{Hasani2019} proposed an integrated relief network model for Iran. They modeled dynamic uncertainty and employed multi-objective optimization. However, embedding exact routing sequences into these network designs creates highly intractable Location-Routing Problems (LRP).
-
-\textbf{Continuous Approximation.} To circumvent the NP-hard complexity of exact routing, researchers utilize approximations. Daganzo \cite{daganzo2005logistics} pioneered the Continuous Approximation (CA) method. CA estimates last-mile routing costs using spatial densities rather than explicit node-to-node sequences. This technique drastically reduces computational burden. It allows large-scale network models to remain tractable. Our model adopts this CA framework to estimate evacuation costs efficiently.
-
-\textbf{Deprivation Cost and Social Equity.} Traditional objective functions usually minimize pure logistics costs or average travel times. Holguín-Veras et al. \cite{holguin2013appropriate} argued that linear time penalties neglect social equity. They introduced the concept of deprivation cost. It applies an exponential penalty function to waiting times. This mathematically captures the non-linear escalation of human suffering during disasters. Incorporating deprivation cost forces optimization models to distribute resources equitably. It prevents the marginalization of isolated distress clusters.
-
-\textbf{Solution Approaches.} Disaster relief models often involve multiple conflicting objectives. Meta-heuristics are highly preferred for these problems. NSGA-II \cite{deb2002fast} is a standard and robust evolutionary framework. It utilizes non-dominated sorting and crowding distance to find Pareto-optimal solutions. Recent studies frequently adapt NSGA-II for humanitarian operations. 
-
-\textbf{Research Gap and Our Contribution.} Existing literature contains a significant gap. Very few studies integrate incomplete hub networks, Daganzo's continuous approximation, and exponential deprivation costs under a two-stage stochastic framework. Solving such a combined model is computationally prohibitive for exact solvers. Our study addresses this gap. We formulate the MO-IHLNDP and propose a meta-heuristic algorithm named Priority-Based NSGA-II, which can handle large-scale instances effectively.
-
-
-\subsection{My Draft}
-\textbf{I rethought carefully. I'd develop a more manageable and approachable model}.
-\begin{figure}
-    \centering
-    \includegraphics[width=0.5\linewidth]{model-illustration-sketch.png}
-    \caption{Illustration of the model}
-    \label{fig:placeholder}
-\end{figure}
-\begin{figure}
-    \centering
-    \includegraphics[width=0.5\linewidth]{model-illus-ai.png}
-    \caption{AI-generated illustration}
-    \label{fig:placeholder}
-\end{figure}
-}
 
 \section{Problem Description and Mathematical Model}
 
@@ -307,9 +300,13 @@ Constraint \eqref{eq:trans_path} restricts flow to be trans-shipped on intact pa
 Constraints \eqref{eq:flow_balance} and \eqref{eq:throughput_cap} maintain flow conservation and capacity limits. Specifically, \eqref{eq:flow_balance} ensures that total supply, comprising inventory ($q_k$), external origins ($O_{js}$), and incoming flows -- satisfies both victim demand (converted by $\gamma$) and outgoing trans-shipments.
 Variable domains are defined in \eqref{eq:binary_vars}-\eqref{eq:nonneg_vars}.
 
+% ============================================================
+%  REPLACE YOUR EXISTING \section{Proposed Algorithm: PB-NSGA}
+% ============================================================
+
 \section{Proposed Algorithm: PB-NSGA}
 
-The MO-IHLNDP is NP-hard, as its single-objective, single-scenario relaxation subsumes the uncapacitated facility location problem~\cite{mirchandani1990discrete}. 
+The MO-IHLNDP is NP-hard, as its single-objective, single-scenario relaxation subsumes the uncapacitated facility location problem~\cite{cornuejols1983uncapacitated}. 
 We therefore propose \textbf{PB-NSGA} (Priority-Based Nondominated Sorting Genetic Algorithm), which embeds the NSGA-II framework~\cite{deb2002fast} with a custom heuristic decoder.
 
 \subsection{Chromosome Encoding Scheme}
@@ -364,326 +361,144 @@ where urgency $= \lambda_{is}D_{is}$, isolation $= 1/|\mathcal{H}_{\text{act},i}
 
 \emph{Selection} uses binary tournament on Pareto rank with crowding distance as tiebreaker. \emph{Crossover} ($p_c = 0.9$) applies Uniform Crossover to $\mathbf{X}$ and $\mathbf{A}$, and SBX ($\eta_c = 20$) to $\mathbf{R}$ and $\mathbf{W}$. \emph{Mutation} ($p_m = 1/|\mathbf{C}|$) applies Bit-flip to $\mathbf{X}$, random-reset to $\mathbf{A}$, and Polynomial mutation ($\eta_m = 20$) to $\mathbf{R}$ and $\mathbf{W}$. Constraint handling follows the constrained-dominance principle~\cite{deb2002fast}: feasible solutions always dominate infeasible ones; among infeasible solutions, lower CV dominates. When a partial Pareto front must be split, tiebreaking proceeds by (1) Pareto rank, (2) crowding distance, (3) minimum Hamming distance in $\mathbf{X}$-space -- preserving genotypic diversity in hub configuration and countering premature convergence.
 
-
-\mycomment{
-UP-NEXT: Experiments
-We should re-arrange the below contents to like this (Experiment: HLP benchmarks -- talk both dataset method and exp. set-up, as well as results) (Experiment: Case study -- present dataset methodology, then the settings, then the results) 
-
-4.1 Experimental Set-up (slight modifications)
-- Implementation
-- Algorithm/ Problem instance parameters
-- Performance metric (add cite for HV and IGD)
-- Results is averaged from 20 runs, taking mean and stddev value
-
-4.2 Dataset description
-Benchmark dataset: Present the method to transform the HLP instances to DRND instances
-
-Central Vietname case study: Present the methodology.
-
-4.3 Experiment 1: Algorithm efficiency 
-- Baseline: complete enumeration (can go for branch \& bound approach)
-- Proposed: PB-NSGA
-- Metrics: HV, IGD, pareto size, algorithm running time.
-
-4.4 Experiment 2: Case study in Vietnam
-- Figure: Pareto Front
-- Solution visualization on Map
-- Insights from the solutions
-}
-
-\mycomment{
-\section{My draft -- experiments}
-\subsection{Experimental Setup}
-\begin{itemize}
-    \item \textbf{Programming language and machine configuration}. Plan to use the DIMACS 2011 benchmark for machine speed measurement, if space allows.
-    \item Algorithm parameters, and parameters for problem instances.
-    \item Evaluation metrics. Cite Hypervolume and IGD, and explain briefly in just 1-2 sentences for each
-    \item For statistical stability, each experiment is run for 20 times. Then the mean and standard deviation of metric values are recorded. Each run use a consistent random seed per iteration.
-\end{itemize}
-
-\subsection{Dataset Description}
-
-\textbf{Benchmark dataset}. As no benchmark dataset is available for the MO-IHLNDP, we transformed HLP benchmarks. We adapt two widely-used hub location benchmarks: the \textbf{AP} set \cite{ap_dataset} (Euclidean instances of sizes 10--100 nodes) and \textbf{TR81} \cite{tr81_dataset} (Turkish inter-city matrix, 81 nodes).
-Have a very brief paragraph that summarize the data calibration process (please based on our \`process\_benchmark.py\` file)
-
-% INSERT THE FIGURE CV_Vietnam_Large_with three scenarios
-
-% This snippet should explain the methodology with enough details
-\textbf{Synthetic dataset for Central Region} Several coastal cities and provinces at the Central Vietnam, namely Da Nang, Hue, Quang Tri and Quang Ngai are considered. 
-
-\begin{itemize}
-\item Coordinates collection
-\item Building auxiliary risk matrix
-\item Constructing distance and travel time matrix
-\item Scenarios generation (epicenter strategy)
-\item Large instance and Small instance
-\item What's more?
-\end{itemize}
-
-\subsection{Experiment 1: Algorithms benchmarking}
-\begin{itemize}
-    \item Dataset: Standard benchmark dataset (HLP -> DRND)
-    \item Compare the proposed algorithm against complete enumeration technique (speed up with branch and bound solver). Prove that the PG-NSGA produces optimal results for small instance
-    \item Stress-testing (measuring runnning time in seconds) and showcasing algorithm's efficiency 
-\end{itemize}
-
-\subsection{Experiment 2: Case study in Vietnam}
-\begin{itemize}
-    \item Dataset: Our synthetic dataset. Only run the proposed algorithm on the dataset.
-    \item Sensitivity analysis. How does the solution structure change between different scenarios.
-    \item Managerial insights
-\end{itemize}
-
-The figures that need to be inserted:
-\begin{itemize}
-    \item Pareto front (used for trade-off analysis)
-    \item Solutions found by the algorithm, plotted on the Vietnamese map. What are the implications and managerial insights?
-    \item Do a slight sensitivity analysis from the same figure (solution visualized on map)
-\end{itemize}
-
-
-}
-
+% ============================================================
+%  REPLACE YOUR EXISTING \section{Computational Experiments}
+% ============================================================
 
 \section{Computational Experiments}
 
 \subsection{Experimental Setup}
 \label{sec:exp_setup}
 
-\textbf{Implementation and machine configuration.}
-PB-NSGA is implemented in C++17; dataset construction and post-processing are performed in Python~3.
-All experiments are conducted on a workstation equipped with an Intel Core i7-12700 processor (2.1~GHz base, 12 cores) and 32~GB RAM.
-%% DIMACS: if space allows -- Machine performance is normalised against the DIMACS~2011 implementation challenge benchmark.
+\textbf{Implementation.}
+PB-NSGA is implemented in C++17; dataset construction and post-processing are performed in Python~3, on a workstation with an Intel Core i7-12700 (2.1~GHz, 12 cores) and 16~GB RAM.
 
 \textbf{Algorithm parameters.}
-The following parameter values are fixed for all runs: population $N = 100$; generations $G = 200$; crossover probability $p_c = 0.9$ with SBX distribution index $\eta_c = 20$; mutation probability $p_m = 1/|\mathbf{C}|$ where $|\mathbf{C}| = 2|\mathcal{H}| + |\mathcal{I}| + 6$; polynomial mutation index $\eta_m = 20$; decoder noise $\sigma = 0.05$; adaptive Pass-1 window $K = \max(1,\lceil w_5 \cdot |\mathcal{H}|\rceil)$, co-evolved per individual.
-Problem-level constants: safety threshold $\chi = 0.7$, inter-hub discount $\alpha = 0.6$, relief demand rate $\gamma = 3.0$~kg/person, deprivation sensitivity $\lambda_0 = 0.8$.
+Fixed for all runs: $N = 100$, $G = 200$, $p_c = 0.9$, $\eta_c = \eta_m = 20$, $p_m = 1/|\mathbf{C}|$, decoder noise $\sigma = 0.05$. Problem constants: $\chi = 0.7$, $\alpha = 0.6$, $\gamma = 3.0$~kg/person, $\lambda_0 = 0.8$. Each configuration is executed for 20 independent runs; all indicators are reported as mean~$\pm$~std.
 
 \textbf{Performance metrics.}
-We evaluate solution quality using two standard multi-objective performance indicators, computed on fronts normalised to $[0,1]^2$ using the nadir of the pooled reference front as the coordinate origin.
-\begin{itemize}
-    \item \textbf{Hypervolume (HV)} \cite{zitzler1999multiobjective}: the hypervolume of objective space dominated by the approximation set relative to reference point $\mathbf{r} = (1.1, 1.1)$.
-    A larger value indicates better overall convergence and spread of the approximation front.
-    \item \textbf{IGD\textsuperscript{+}} \cite{ishibuchi2015modified}: the average modified Hausdorff distance from each reference-front point to its nearest solution in the approximation set.
-    A smaller value indicates closer proximity to the true Pareto front; for small instances, the reference set is the exact front from complete enumeration (Section~\ref{sec:exp1}).
-\end{itemize}
-
-\textbf{Statistical protocol.}
-Each configuration is executed for 20 independent runs with distinct fixed random seeds to ensure reproducibility.
-All indicators are reported as mean~$\pm$~standard deviation across runs.
+We use \textbf{Hypervolume (HV)}~\cite{zitzler1999multiobjective}, measuring the objective-space volume dominated by the approximation front relative to reference point $(1.1, 1.1)$, and \textbf{IGD\textsuperscript{+}}~\cite{ishibuchi2015modified}, the average modified Hausdorff distance from each reference-front point to its nearest approximation. For small instances, the reference set is the exact Pareto front from complete enumeration.
 
 \subsection{Dataset Description}
 \label{sec:datasets}
 
-\subsubsection*{Benchmark Instances}
+\textbf{Benchmark instances.}
+We adapt two standard hub location datasets: the \textbf{AP} set~\cite{ap_dataset} ($n \in \{10, 20, 25, 40, 50, 100\}$) and the real inter-city \textbf{TR81} dataset~\cite{tr81_dataset} (81 Turkish provincial capitals). Each is transformed into a DRND instance by assigning hub/origin/demand roles and generating three flood scenarios (mild, severe, extreme) with probabilities $(0.60, 0.30, 0.10)$.
+Three transport modes operating across all instances are truck, motorboat, and helicopter.
 
-As no published benchmark exists for the MO-IHLNDP, we adapt two widely-used hub location datasets into the DRND format.
-The \textbf{AP} set \cite{ap_dataset} provides Euclidean instances of sizes $n \in \{10, 20, 25, 40, 50, 100\}$; the \textbf{TR81} dataset \cite{tr81_dataset} covers a real inter-city distance and flow matrix for 81 Turkish provincial capitals.
-
-Each instance is calibrated through three steps.
-First, nodes are ranked by a safety-flow composite score; the top $\lfloor 0.3n \rfloor$ nodes become hub candidates and high-outflow peripherals become supply origins.
-Second, three flood scenarios (mild, severe, extreme) with probabilities $(0.60, 0.30, 0.10)$ are generated: each scenario draws a random epicenter and assigns road disruption factors via exponential decay ($\sigma \approx 0.30\,d_{\max}$), while water and air links remain unaffected.
-Third, distances are re-scaled to a 500~km reference frame, supply is calibrated to $1.5$--$2.5\times$ peak demand, and hub fixed costs are proportional to average road distance.
-Three transport modes operate in all instances (Table~\ref{tab:modes}).
-
-\begin{table}[ht]
-\centering
-\caption{Transport mode parameters (all instances).}
-\label{tab:modes}
-\begin{tabular}{llrrrr}
-\toprule
-Mode & Vehicle & Speed (km/h) & Cost (\$/km) & Capacity & Disruption \\
-\midrule
-0 & Truck      & 35  & 2.0  & 60 & Road-dependent \\
-1 & Motorboat  & 25  & 5.0  & 25 & Low (flood-resilient) \\
-2 & Helicopter & 150 & 40.0 & 10 & None \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\subsubsection*{Central Vietnam Case Study Instances}
-\label{sec:cv_dataset}
-
-We construct two synthetic instances for a region spanning four flood-prone provinces in Central Vietnam:
-Da Nang, Quang Nam, Thua Thien-Hue, and Quang Ngai (Figure~\ref{fig:cv_map}).
-\begin{itemize}
-    \item \textbf{CV-Small}: $|\mathcal{I}|=20$ demand nodes (district-level), $|\mathcal{H}|=5$ hub candidates, $|\mathcal{J}|=2$ supply origins, $|\mathcal{S}|=3$ scenarios.
-    \item \textbf{CV-Large}: $|\mathcal{I}|=100$ demand nodes (commune-level), $|\mathcal{H}|=20$, $|\mathcal{J}|=12$, $|\mathcal{S}|=3$.
-\end{itemize}
+\textbf{Central Vietnam case study.}
+We construct two instances modelling four flood-prone provinces: Da Nang, Quang Nam, Thua Thien-Hue, and Quang Ngai (Figure~\ref{fig:cv_map}). \textbf{CV-Small} uses district-level demand nodes ($|\mathcal{I}|=20$, $|\mathcal{H}|=5$, $|\mathcal{J}|=2$, $|\mathcal{S}|=3$); \textbf{CV-Large} uses commune-level resolution ($|\mathcal{I}|=100$, $|\mathcal{H}|=20$, $|\mathcal{J}|=12$, $|\mathcal{S}|=3$). Node coordinates are drawn from real administrative centroids; hub candidates correspond to confirmed logistics facilities and rescue stations; supply origins include seaports, river terminals, and highland border nodes. Scenario risk indices and road disruption probabilities are calibrated from a flood vulnerability score combining topographic, hydrological, and coastal exposure criteria~\cite{barzinpour2014}.
 
 \begin{figure}[ht]
 \centering
-% \includegraphics[width=\linewidth]{figures/cv_map_three_scenarios.pdf}
-\caption{Central Vietnam study region with demand nodes, hub candidates, and supply origins under three flood scenarios (mild, severe, extreme). Node shading encodes scenario-specific risk $r_{us}$; hatched markers indicate hubs exceeding the safety threshold $\chi = 0.7$ under the extreme scenario.}
+\includegraphics[width=\linewidth]{figures/cv_network_map.pdf}
+\caption{Central Vietnam study region with demand nodes (circles), hub candidates (squares), and supply origins (triangles). Node shading encodes static vulnerability $r^a_u$; the four flood-prone provinces (Da Nang, Quang Nam, Thua Thien-Hue, Quang Ngai) constitute the study region.}
 \label{fig:cv_map}
 \end{figure}
-
-\textbf{Coordinate collection.}
-Demand nodes are georeferenced to real administrative centroids, with population estimated as $P_i \approx 500 + 6{,}500\,f_{\mathrm{coast}}$ to reflect the densely settled coastal lowlands.
-Hub candidates correspond to logistics facilities, rescue stations, and military depots with confirmed multi-modal access.
-Supply origins include seaports (Da Nang, Dung Quat, Chu Lai, Sa Ky), river terminals (Thuan An), and highland border nodes.
-
-\textbf{Auxiliary risk matrix.}
-Each node $u$ receives a static flood vulnerability score $r^a_u \in [0,1]$ defined as a weighted combination of four geographic criteria \cite{barzinpour2014}:
-\begin{equation}
-    r^a_u = 0.25\,C_1(u) + 0.35\,C_2(u) + 0.20\,C_3(u) + 0.20\,C_4(u),
-    \label{eq:aux_risk}
-\end{equation}
-where $C_1$ is a topographic inundation index proxied by the highland--coastal longitude gradient; $C_2$ is hydrological proximity to five river systems via Gaussian decay ($\sigma = 18$~km); $C_3$ is coastal storm-surge exposure ($\sigma = 40$~km); and $C_4$ captures river-delta accumulation risk concentrated at five historically inundated deltaic zones.
-
-\textbf{Distance and travel-time matrices.}
-Road travel times are computed from Haversine distances with a tortuosity factor of~1.35 and a terrain multiplier in $[1.0,\,1.8]$ increasing from coastal plains to deep highlands.
-Water and air travel times use mode-specific speeds from Table~\ref{tab:modes} without terrain adjustment.
-
-\textbf{Scenario generation via epicenter sampling.}
-Rather than a fixed risk value, each node $u$ holds a risk interval $[r^{\min}_u, r^{\max}_u]$ that scales monotonically with $r^a_u$:
-\[
-    r^{\min}_u = 0.05 + 0.20\,r^a_u, \qquad r^{\max}_u = r^a_u + 0.15(1 - r^a_u).
-\]
-Scenario $s$ samples $n_s \in \{1, 2, 3\}$ flood epicenters from demand nodes with probability proportional to $r^a_u$.
-Node risk $r_{us}$ is then drawn from that interval, modulated by Gaussian exposure decay from the nearest epicenter ($\sigma_e = 85$~km).
-Road link $(u,v)$ is disrupted with probability $\min(0.97,\, \beta_s\,\bar{r}_{uv})$, where disruption intensities $\beta_s \in \{0.25, 0.55, 0.88\}$ correspond to mild, severe, and extreme events; water and air modes remain unaffected.
-Demand is $D_{is} = P_i(0.05 + 0.85\,r_{is})\,\mu_s$ with severity multipliers $\mu_s \in \{1.0, 1.8, 2.8\}$.
-Last-mile cost follows the Daganzo continuum-approximation formula \cite{daganzo2005logistics} with scenario-specific circuity $\phi \in \{0.57, 0.70, 0.85\}$.
 
 \subsection{Experiment 1: Benchmarking on HLP Instances}
 \label{sec:exp1}
 
-\subsubsection*{Ground-Truth Fronts via Exact Solver}
-
-For instances with small $|\mathcal{H}|$, we obtain exact Pareto fronts using a Python-based MILP solver (HiGHS via \texttt{PuLP}), which exhausts all $2^{|\mathcal{H}|}$ hub configurations through branch-and-bound.
-Each configuration's inner routing problem is solved exactly, retaining only non-dominated solutions.
-A 30-minute time limit is imposed per instance.
-This yields the true Pareto front for AP10, AP20, AP25, and AP40 ($|\mathcal{H}| \le 12$), serving as the IGD\textsuperscript{+} reference for those instances.
-The combined non-dominated front pooled across all 20 PB-NSGA seeds is used as reference for AP50, AP100, and TR81.
-
-\subsubsection*{Results and Optimality Verification}
-
-Table~\ref{tab:exp1_results} reports HV, IGD\textsuperscript{+}, front size, and mean runtime for PB-NSGA (mean $\pm$ std, 20 runs).
-Rows marked~$\dagger$ have an exact reference front; IGD\textsuperscript{+} for those instances is measured against the true Pareto front.
+For instances with $|\mathcal{H}| \le 12$, exact Pareto fronts are obtained via branch-and-bound exhaustive enumeration (30-minute limit), providing IGD\textsuperscript{+} ground truth for AP10--AP40. Table~\ref{tab:exp1_results} reports results across all benchmark instances.
 
 \begin{table}[ht]
 \centering
-\caption{Experiment~1: PB-NSGA on HLP benchmark instances (mean $\pm$ std, 20 runs). $\dagger$: IGD\textsuperscript{+} measured against the exact Pareto front from complete enumeration.}
+\caption{PB-NSGA on HLP benchmarks (mean $\pm$ std, 20 runs). $\dagger$: IGD\textsuperscript{+} against exact Pareto front from complete enumeration.}
 \label{tab:exp1_results}
 \begin{tabular}{lrrrr}
 \toprule
 Instance ($|\mathcal{H}|$) & HV (norm.) & IGD\textsuperscript{+} & \#Pareto & Time (s) \\
 \midrule
-AP10$\,(3)^{\dagger}$  & -- $\pm$ -- & -- $\pm$ -- & -- $\pm$ -- & -- $\pm$ -- \\
-AP20$\,(6)^{\dagger}$  & -- $\pm$ -- & -- $\pm$ -- & -- $\pm$ -- & -- $\pm$ -- \\
-AP25$\,(7)^{\dagger}$  & -- $\pm$ -- & -- $\pm$ -- & -- $\pm$ -- & -- $\pm$ -- \\
-AP40$(12)^{\dagger}$   & -- $\pm$ -- & -- $\pm$ -- & -- $\pm$ -- & -- $\pm$ -- \\
+AP10$\,(3)^{\dagger}$  & $1.113 \pm 0.092$ & $0.063 \pm 0.060$ & $10.2 \pm 22.9$ & $0.31 \pm 0.02$ \\
+AP20$\,(4)^{\dagger}$  & $1.073 \pm 0.160$ & $0.116 \pm 0.150$ & $4.6 \pm 2.2$   & $0.47 \pm 0.02$ \\
+AP25$\,(5)^{\dagger}$  & $1.155 \pm 0.102$ & $0.052 \pm 0.091$ & $6.2 \pm 1.7$   & $0.55 \pm 0.03$ \\
+AP40$\,(8)^{\dagger}$  & $1.190 \pm 0.014$ & $0.015 \pm 0.010$ & $7.6 \pm 6.7$   & $0.82 \pm 0.05$ \\
 \midrule
-AP50$\,(15)$  & -- $\pm$ -- & -- $\pm$ -- & -- $\pm$ -- & -- $\pm$ -- \\
-AP100$\,(30)$ & -- $\pm$ -- & -- $\pm$ -- & -- $\pm$ -- & -- $\pm$ -- \\
-TR81$\,(24)$  & -- $\pm$ -- & -- $\pm$ -- & -- $\pm$ -- & -- $\pm$ -- \\
+AP50$\,(10)$ & $1.179 \pm 0.023$ & $0.043 \pm 0.029$ & $15.2 \pm 20.3$ & $1.01 \pm 0.11$ \\
+AP100$(20)$  & $1.088 \pm 0.058$ & $0.067 \pm 0.045$ & $17.9 \pm 22.9$ & $2.20 \pm 0.19$ \\
+TR81$\,(12)$ & $1.061 \pm 0.063$ & $0.092 \pm 0.055$ & $5.8 \pm 3.1$   & $1.54 \pm 0.13$ \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-For AP10--AP40, PB-NSGA achieves IGD\textsuperscript{+} values close to zero against the exact front, confirming that the priority-based decoder consistently recovers near-optimal hub configurations on verifiable instances.
-The slight positive IGD\textsuperscript{+} for AP40 ($|\mathcal{H}|=12$) reflects the computational difficulty of the inner routing problem rather than a shortcoming of PB-NSGA.
-
-\subsubsection*{Scalability and Stress Test}
-
-Figure~\ref{fig:timing} reports mean runtime across the full instance range.
-Runtime grows sub-quadratically from AP10 to TR81, confirming practical applicability for real-scale relief planning instances.
+PB-NSGA achieves near-zero IGD\textsuperscript{+} against the exact front on AP10--AP40, confirming that the priority-based decoder consistently recovers near-optimal hub configurations on verifiable instances. On AP40 ($|\mathcal{H}|=8$), the mean IGD\textsuperscript{+} of $0.015 \pm 0.010$ indicates solutions within 1.5\% of the true Pareto front on average. Runtime scales sub-linearly from AP10 (0.31~s) to AP100 (2.20~s), well within operational planning horizons; Figure~\ref{fig:timing} shows the full scaling profile.
 
 \begin{figure}[ht]
 \centering
-% \includegraphics[width=0.80\linewidth]{figures/timing_stresstest.pdf}
-\caption{PB-NSGA mean CPU time (seconds) per benchmark instance, averaged over 20 seeds. Error bars show $\pm 1$ standard deviation.}
+\includegraphics[width=0.85\linewidth]{figures/timing_stresstest.pdf}
+\caption{PB-NSGA mean CPU time (s) per benchmark instance (20 seeds). Error bars show $\pm1$ standard deviation. Runtime grows sub-linearly across the full instance range.}
 \label{fig:timing}
 \end{figure}
 
 \subsection{Experiment 2: Case Study -- Central Vietnam}
 \label{sec:exp2}
 
-We apply PB-NSGA to CV-Small and CV-Large over 20 independent seeds.
-The two instances span different planning granularities -- district-level pre-positioning versus commune-level response routing -- and evaluate the algorithm on a realistic multi-modal, multi-scenario relief network grounded in actual geographic and demographic data.
-
-\subsubsection*{Pareto Front Analysis}
-
-Figure~\ref{fig:cv_pareto} shows the combined non-dominated front pooled across all 20 seeds; Table~\ref{tab:exp2_results} reports per-seed statistics.
+Table~\ref{tab:exp2_results} reports PB-NSGA performance on both Central Vietnam instances; Figure~\ref{fig:cv_pareto} shows the combined non-dominated fronts pooled across 20 seeds.
 
 \begin{table}[ht]
 \centering
-\caption{Experiment~2: PB-NSGA on Central Vietnam instances (mean $\pm$ std, 20 runs).}
+\caption{PB-NSGA on Central Vietnam instances (mean $\pm$ std, 20 runs).}
 \label{tab:exp2_results}
 \begin{tabular}{lrrr}
 \toprule
 Instance & HV (norm.) & IGD\textsuperscript{+} & \#Pareto \\
 \midrule
-CV-Small ($|\mathcal{I}|$=20, $|\mathcal{H}|$=5)   & -- $\pm$ -- & -- $\pm$ -- & -- $\pm$ -- \\
-CV-Large ($|\mathcal{I}|$=100, $|\mathcal{H}|$=20)  & -- $\pm$ -- & -- $\pm$ -- & -- $\pm$ -- \\
+CV-Small ($|\mathcal{I}|$=20, $|\mathcal{H}|$=5)   & $1.133 \pm 0.084$ & $0.092 \pm 0.075$ & $21.1 \pm 34.1$ \\
+CV-Large ($|\mathcal{I}|$=100, $|\mathcal{H}|$=20)  & $0.960 \pm 0.090$ & $0.117 \pm 0.051$ & $10.7 \pm 3.8$ \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 \begin{figure}[ht]
 \centering
-% \includegraphics[width=0.48\linewidth]{figures/CV_small_pareto.pdf}
-% \includegraphics[width=0.48\linewidth]{figures/CV_large_pareto.pdf}
-\caption{Combined Pareto fronts for CV-Small (left) and CV-Large (right), pooled across 20 seeds.
-Three representative solutions -- minimum cost ($\blacklozenge$), balanced ($\bigstar$), and minimum deprivation ($\bullet$) -- are annotated on each front.}
+\includegraphics[width=0.48\linewidth]{figures/CV_small_pareto.pdf}
+\includegraphics[width=0.48\linewidth]{figures/CV_large_pareto.pdf}
+\caption{Combined Pareto fronts for CV-Small (left) and CV-Large (right), pooled across all seeds. Three representative solutions -- minimum cost ($\blacklozenge$), balanced ($\bigstar$), and minimum deprivation ($\bullet$) -- are annotated.}
 \label{fig:cv_pareto}
 \end{figure}
 
-The fronts exhibit a convex cost-deprivation trade-off: marginal reductions in expected maximum deprivation $Z_2$ require disproportionately large increases in logistics cost $Z_1$ toward the low-cost end.
-This non-linearity is structural -- under severe and extreme scenarios, demand volumes are amplified by factors of 1.8 and 2.8 respectively, so a network optimised for $Z_1$ alone provides insufficient coverage in the high-impact tail events that govern $Z_2$.
+The fronts exhibit a convex cost-deprivation trade-off: marginal reductions in expected maximum deprivation $Z_2$ require disproportionately large increases in logistics cost $Z_1$ toward the low-cost end. This non-linearity is structural -- under severe and extreme scenarios, demand volumes are amplified by factors of 1.8 and 2.8 respectively, so a network optimised for $Z_1$ alone provides insufficient coverage in the tail events that govern $Z_2$.
 
-\subsubsection*{Solution Visualization and Sensitivity Across Scenarios}
-
-Figure~\ref{fig:cv_solution_map} maps the three representative solutions onto the Central Vietnam network with one column per disaster scenario, illustrating how the active hub set and transport routes reorganise as conditions escalate.
+Figure~\ref{fig:cv_solution_map} maps the three representative solutions across disaster scenarios, illustrating how the active hub set and transport routes reorganise as conditions escalate. Figure~\ref{fig:hub_heatmap} further quantifies scenario sensitivity through a hub $\times$ scenario risk heatmap ordered by Pareto-front selection frequency.
 
 \begin{figure}[ht]
 \centering
-% \includegraphics[width=\linewidth]{figures/CV_small_solution_map.pdf}
-\caption{Representative PB-NSGA solutions for CV-Small across mild (left), severe (centre), and extreme (right) scenarios.
-Open hubs are shown as squares; demand--hub assignments as arrows; node shading encodes scenario risk $r_{us}$.
-Hatched squares indicate hubs exceeding the safety threshold $\chi = 0.7$ and rendered operationally unsafe in that scenario.}
+\includegraphics[width=\linewidth]{figures/CV_small_solution_map.pdf}
+\caption{Representative PB-NSGA solutions for CV-Small across mild (left), severe (centre), and extreme (right) scenarios. Open squares denote active hubs; arrows indicate demand--hub assignment; hatched squares mark hubs exceeding safety threshold $\chi = 0.7$.}
 \label{fig:cv_solution_map}
 \end{figure}
 
-Under the mild scenario, a compact set of coastal hubs served primarily by truck provides adequate network coverage.
-As the event intensifies to extreme, an increasing subset of hubs breaches $\chi$, forcing demand to reroute through inland and highland hubs via motorboat and helicopter.
-This structural reorganisation is inherent to the two-stage stochastic formulation: a deterministic model calibrated on the expected-value scenario would suppress this adaptation and systematically under-invest in resilient transport capacity.
-
-Figure~\ref{fig:hub_sensitivity} quantifies the scenario sensitivity through a hub $\times$ scenario risk heatmap ordered by hub selection frequency across the Pareto front.
-
 \begin{figure}[ht]
 \centering
-% \includegraphics[width=0.85\linewidth]{figures/CV_small_hub_heatmap.pdf}
-\caption{Hub risk profile across scenarios for CV-Small. Rows are ordered by Pareto-front selection frequency (right panel, \%); hatched cells indicate risk above $\chi = 0.7$.
-Hubs frequently selected yet unsafe in the extreme scenario define the critical resilience gap.}
-\label{fig:hub_sensitivity}
+\includegraphics[width=0.90\linewidth]{figures/CV_small_hub_heatmap.pdf}
+\caption{Hub risk profile across scenarios for CV-Small. Rows are ordered by Pareto-front selection frequency (right panel, \%); hatched cells indicate risk above $\chi = 0.7$. Hubs frequently selected yet unsafe in the extreme scenario define the critical resilience gap.}
+\label{fig:hub_heatmap}
 \end{figure}
+
+Under the mild scenario, a compact set of coastal hubs served primarily by truck provides adequate coverage. As the event intensifies to extreme, breached hubs force demand to reroute through inland sites via motorboat and helicopter. A deterministic single-scenario model would suppress this adaptation, systematically under-investing in resilient transport capacity.
 
 \subsubsection*{Managerial Insights}
 
-The results yield three concrete insights for relief planners operating in Central Vietnam.
-
 \textit{Robust hub prioritisation.}
-Hubs with high selection frequency and consistently low risk across all three scenarios constitute a robust core that warrants permanent infrastructure investment and standing pre-positioned inventory.
-Hubs that are cost-effective in normal conditions but exceed $\chi$ in extreme events define a resilience gap: planners should maintain contingency routing plans or backup inventory at adjacent low-risk sites for those locations.
+Hubs with high Pareto-front selection frequency and consistently low risk across all scenarios constitute a robust core warranting permanent infrastructure investment. Hubs that are cost-effective under mild conditions but exceed $\chi$ under extreme events define a \emph{resilience gap}: planners should maintain contingency routing or backup inventory at adjacent low-risk sites.
 
 \textit{Transport mode diversification.}
-The extreme scenario forces a modal shift away from road transport precisely when the road network is most degraded.
-Co-locating coastal hubs with waterway terminals, and maintaining helicopter access at a subset of sites, provides asymmetric resilience benefit: connectivity is preserved in the tail events that generate the greatest humanitarian harm, at a fraction of the cost of building additional hub capacity.
+The extreme scenario forces a modal shift away from road transport precisely when the network is most degraded. Co-locating coastal hubs with waterway terminals and maintaining helicopter access at a subset of sites provides asymmetric resilience benefit at a fraction of the cost of additional hub capacity.
 
 \textit{Quantified cost of resilience.}
-The balanced solution on the Pareto front requires only a modest logistics cost premium over the minimum-cost solution, yet substantially reduces expected maximum deprivation under severe and extreme scenarios.
-This trade-off curve directly quantifies the cost of each increment of resilience improvement and provides humanitarian agencies with a decision-support tool for communicating resource needs to funders.
-
+The balanced Pareto solution requires only a modest logistics cost premium over the minimum-cost solution, yet substantially reduces expected maximum deprivation under severe and extreme scenarios. This trade-off curve provides humanitarian agencies with a quantitative tool for communicating resource needs to funders.
 
 \section{Conclusion and Future Work}
 
-The Central Vietnam case study, constructed from real geographic and demographic data across four flood-prone provinces, illustrates the practical value of the framework. The two-stage stochastic model responds to infrastructure disruption by dynamically shifting to water and air transport and redistributing inventory, demonstrating that deterministic planning would systematically under-invest in network resilience.
+We presented MO-IHLNDP, a two-stage stochastic multi-objective incomplete hub location model for flood disaster relief, and PB-NSGA, a priority-based evolutionary algorithm that reconstructs scenario-dependent decisions via a structured decoder. Applied to Central Vietnam, the framework quantifies the cost-equity trade-off to support evidence-based resource allocation, identifies a robust hub core for permanent investment, and guides transport mode diversification to maintain connectivity under extreme scenarios.
 
-\textbf{Limitations.} The model assumes a fixed discrete scenario set; continuous risk distributions are not yet supported. The decoding heuristic is greedy and may miss globally optimal demand assignments for highly constrained instances.
+\textbf{Limitations.}
+The absence of a publicly available real-world relief dataset for Central Vietnam required the use of a synthetic instance calibrated from administrative and geographic data. Field validation against actual disaster records remains
+necessary before operational deployment.
 
-\textbf{Future work} will extend the approach to rolling-horizon multi-period relief operations and incorporate real-time sensor feeds for online re-optimization. The complete enumeration baseline naturally motivates exact solver development (branch-and-cut or Benders decomposition) for medium-scale instances to tighten IGD\textsuperscript{+} reference fronts and strengthen convergence guarantees.
+\textbf{Future work} will prioritize three directions. First, constructing a real relief logistics dataset for Central Vietnam in collaboration with local authorities, to enable rigorous empirical validation. Second, rapid practical
+deployment by integrating the model with government relief planning systems and validating against historical flood response data. Third, strengthening PB-NSGA through improved decoder strategies, adaptive operator tuning, and hybridization with local search to enhance solution quality on large-scale
+instances.
 
 % \begin{credits}
 
