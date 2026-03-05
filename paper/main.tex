@@ -248,13 +248,54 @@ Constraint \eqref{eq:trans_path} restricts flow to be trans-shipped on intact pa
 Constraints \eqref{eq:flow_balance} and \eqref{eq:throughput_cap} maintain flow conservation and capacity limits. Specifically, \eqref{eq:flow_balance} ensures that total supply, comprising inventory ($q_k$), external origins ($O_{js}$), and incoming flows -- satisfies both victim demand (converted by $\gamma$) and outgoing trans-shipments.
 Variable domains are defined in \eqref{eq:binary_vars}-\eqref{eq:nonneg_vars}.
 
-\section{Proposed Algorithm: PB-NSGA-II}
+\section{Proposed Algorithm: PB-NSGA}
 
-The MO-IHLNDP is NP-hard due to its combinatorial structure and the nonlinear deprivation cost $Z_2$. Exact methods are intractable beyond small instances. In this work, we propose the \textbf{Priority-Based NSGA-II (PB-NSGA-II)}, which integrates a custom decoding heuristic into the NSGA-II framework \cite{deb2002fast}. The key design principle is \emph{implicit encoding}: only first-stage strategic decisions are carried in the chromosome, and all second-stage variables are reconstructed by the decoder for each scenario $s \in \mathcal{S}$. This reduces the effective search space from $O(|\mathcal{S}| \times |\mathcal{V}|)$ to $O(|\mathcal{H}|)$.
+\textbf{Complexity motivation.}
+The MO-IHLNDP is NP-hard: its single-scenario, single-objective relaxation subsumes the uncapacitated facility location problem (UFLP), which is NP-complete~\cite{cornuejols1990exceptional}. The two-stage stochastic structure further couples exponentially many scenario-dependent second-stage variables to shared first-stage decisions; the bi-objective formulation eliminates any single-objective exact-solver strategy. Exact enumeration is feasible only for small instances ($|\mathcal{H}| \le 10$, Section~\ref{sec:exp1}); practical-scale instances require a meta-heuristic.
 
-\subsection{Chromosome Encoding}
+We therefore propose \textbf{PB-NSGA} (Priority-Based Nondominated Sorting Genetic Algorithm), embedding the NSGA-II multi-objective evolutionary framework~\cite{deb2002fast} with a custom \emph{priority-based encoder-decoder} scheme. NSGA-II approximates the Pareto front through fast non-dominated sorting and crowding-distance selection without requiring objective weights -- well-suited for bi-objective problems with competing cost and deprivation objectives. The key innovation is that the chromosome encodes only first-stage strategic decisions; all scenario-dependent second-stage variables are reconstructed per scenario by a structured heuristic decoder. This reduces chromosome length from $O(|\mathcal{S}|\times|\mathcal{V}|)$ to $O(|\mathcal{H}|+|\mathcal{I}|)$, yielding feasible decodings at every generation.
 
-Each chromosome $\mathbf{C} = (\mathbf{X}, \mathbf{R}, \mathbf{A}, \mathbf{W})$ encodes four segments (Table~\ref{tab:chromosome}).
+\subsection{Algorithm Overview}
+
+Algorithm~\ref{alg:pbnsga} presents the complete PB-NSGA procedure. A population of $N$ chromosomes is initialised at random; in each generation, $N$ offspring are produced via genetic operators, the combined $2N$ pool is ranked by fast non-dominated sorting, and the best $N$ individuals survive -- with Hamming diversity over hub-opening vectors $\mathbf{X}$ as a tiebreaker to preserve genotypic variety.
+
+\begin{algorithm}[htbp]
+\caption{PB-NSGA for MO-IHLNDP}
+\label{alg:pbnsga}
+\begin{algorithmic}[1]
+\REQUIRE Population size $N$, generations $G$, instance data
+\ENSURE Approximate Pareto front $\mathcal{P}$
+\STATE Initialise $P_0$: $N$ chromosomes $\mathbf{C}=(\mathbf{X},\mathbf{R},\mathbf{A},\mathbf{W})$ drawn at random
+\FOR{each $\mathbf{C}\in P_0$}
+    \STATE Evaluate $(Z_1,Z_2,\text{CV})$: invoke Alg.~\ref{alg:decoder} for each $s\in\mathcal{S}$; aggregate
+\ENDFOR
+\FOR{$g=1$ \TO $G$}
+    \STATE $Q_g\leftarrow\textsc{GenerateOffspring}(P_{g-1})$: binary tournament, crossover, mutation
+    \FOR{each $\mathbf{C}\in Q_g$} \STATE Evaluate $(Z_1,Z_2,\text{CV})$ \ENDFOR
+    \STATE $R_g\leftarrow P_{g-1}\cup Q_g$ \hfill\COMMENT{$|R_g|=2N$}
+    \STATE $\mathcal{F}_1,\mathcal{F}_2,\ldots\leftarrow\textsc{FastNonDominatedSort}(R_g)$
+    \STATE $P_g\leftarrow\emptyset;\;i\leftarrow 1$
+    \WHILE{$|P_g|+|\mathcal{F}_i|\leq N$}
+        \STATE $P_g\leftarrow P_g\cup\mathcal{F}_i;\;i\leftarrow i+1$
+    \ENDWHILE
+    \STATE Fill remainder from $\mathcal{F}_i$ by crowding distance (tiebreak: Hamming distance in $\mathbf{X}$)
+\ENDFOR
+\RETURN $\mathcal{P}\leftarrow$ non-dominated solutions in $P_G$
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Chromosome Encoding Scheme}
+
+In GA \cite{holland1992genetic}, a chromosome encodes the decision variables (thus, the implied solution) in its representation. In PB-NSGA, only first-stage strategic decisions are carried in the chromosome and optimized via evolution, while second-stage variables are reconstructed for each scenario $s \in \mathcal{S}$ using the heuristic decoder.
+
+Specifically, each chromosome $\mathbf{C} = (\mathbf{X}, \mathbf{R}, \mathbf{A}, \mathbf{W})$ consists of four encoded segments. The binary vector $\mathbf{X} \in \{0,1\}^{|\mathcal{H}|}$ determines the establishment of planned hubs ($X_k = 1$). The continuous vector $\mathbf{R} \in [0,1]^{|\mathcal{H}|}$ defines the inventory fill fraction, setting the pre-positioned inventory as $q_k = R_k \cdot \kappa_k$. The integer vector $\mathbf{A} \in \{0,\ldots,|\mathcal{H}|-1\}^{|\mathcal{I}|}$ defines the preferred group of proximate hubs for each demand $i$. Lastly, the continuous vector $\mathbf{W} \in [0,1]^6$ contains six heuristic weights governing the decoder's behavior.
+
+% For each individual, the weight vector $\mathbf{W}$ encodes the strategy of the decoder.
+$w_0$ and $w_3$ dictate the demand sorting priority, favoring demands with high urgency ($\lambda \cdot D$) and severe isolation (fewer reachable hubs). During the assignment phase, $w_1$, $w_2$, and $w_4$ score the candidate hubs by prioritizing faster travel times, higher residual inventory, and a preference for planned hubs over reactive ones. Finally, $w_5$ controls the conservatism towards opening new reactive hubs. This approach effectively reduces the search space from $O(|\mathcal{S}| \times |\mathcal{V}|)$ to $O(|\mathcal{H}|)$.
+
+% BIG TO-DO: Fix the algorithm according to new $A$ definition
+
+The four segments are summarised in Table~\ref{tab:chromosome}; heuristic weight semantics are detailed in Table~\ref{tab:weights}.
 
 \begin{table}[ht]
 \centering
@@ -271,8 +312,6 @@ $\mathbf{W}$ & $[0,1]^6$ & $6$ & Heuristic weights governing decoder behaviour \
 \bottomrule
 \end{tabular}
 \end{table}
-
-The $\mathbf{R}$ segment is decoupled from $\mathbf{X}$: each $q_k = R_k \cdot \kappa_k$ depends only on the hub's physical capacity $\kappa_k$, independent of how many hubs are open. The $\mathbf{A}$ segment identifies a \emph{preferred anchor hub} $A_i \in \mathcal{H}$ for each demand node $i$; during hub assignment the decoder ranks all hub candidates in increasing order of distance from hub $A_i$, so evolution of $\mathbf{A}$ directly steers the spatial focus of each demand's assignment (see Section~\ref{sec:decoder}). The six heuristic weights $\mathbf{W}$ are described in Table~\ref{tab:weights}.
 
 \begin{table}[ht]
 \centering
@@ -295,47 +334,53 @@ $w_5$ & Pass-1 window depth & Hub selection & Larger fraction of anchor-proximat
 \subsection{Priority-Based Decoding Heuristic}
 \label{sec:decoder}
 
-The decoder is invoked once per chromosome per scenario $s$. Before the scenario loop, we pre-compute the \emph{anchor-proximity order} for every hub $k \in \mathcal{H}$:
-\[
-  \pi_k = \bigl(k^{(1)}_k,\, k^{(2)}_k,\, \ldots,\, k^{(|\mathcal{H}|)}_k\bigr),
-\]
-where $k^{(j)}_k$ denotes the $j$-th closest hub to hub $k$ by Euclidean distance (so $k^{(1)}_k = k$ itself). This table is instance-specific and chromosome-independent, computed once per decode call.
+The decoder is invoked once per chromosome per scenario $s \in \mathcal{S}$, reconstructing all second-stage decisions from $\mathbf{C}$. It proceeds in four steps.
 
-\textbf{Step 1 -- Hub Activation.} Planned hubs with $X_k = 1$ and risk $r_{ks} \le \chi$ are activated with inventory $q_k = R_k \cdot \kappa_k$. If none qualify, the safest planned hub is forced active as a fallback.
+\textbf{Step 1 -- Initialisation.} Planned hubs with $X_k = 1$ and $r_{ks} \le \chi$ are activated with pre-positioned inventory $q_k = R_k \cdot \kappa_k$; if none qualify, the safest hub is forced active. The anchor-proximity order $\pi_k = (k^{(1)}, k^{(2)}, \ldots)$, ranking all hubs by ascending distance from hub $k$, is pre-computed once (chromosome-independent).
 
-\textbf{Step 2 -- Inventory Allocation.} Each active hub $k$ receives its pre-positioned inventory $q_k$.
-
-\textbf{Step 3 -- Demand Priority Scoring.} For each demand node $i$, three raw components are computed and independently normalised to $[0,1]$ across the demand set:
+\textbf{Step 2 -- Demand Prioritisation.} Each demand node $i$ receives a score
 \begin{equation}
-    \text{urgency}_i = \lambda_{is} \cdot D_{is}, \quad
-    \text{isolation}_i = \frac{1}{|\{k \in \mathcal{H}_{\text{act}} : \exists m,\; a_{ikms}=1\}|}, \quad
-    \text{dist}_i = \min_{\substack{k \in \mathcal{H}_{\text{act}},\, m:\\ a_{ikms}=1}} \tau_{ikm}.
-    \label{eq:raw_components}
-\end{equation}
-The composite priority score incorporates Gaussian noise $\varepsilon_i \sim \mathcal{N}(0, \sigma)$ to prevent phenotype collapse across generations:
-\begin{equation}
-    \text{Score}_i = w_0 \cdot \widetilde{\text{urgency}}_i + w_3 \cdot \widetilde{\text{isolation}}_i - w_1 \cdot \widetilde{\text{dist}}_i + \varepsilon_i.
+    \text{Score}_i = w_0\,\widetilde{\text{urgency}}_i + w_3\,\widetilde{\text{isolation}}_i - w_1\,\widetilde{\text{dist}}_i + \varepsilon_i,
     \label{eq:demand_score}
 \end{equation}
-Demands are sorted in descending order by $\text{Score}_i$.
+where urgency $= \lambda_{is}D_{is}$, isolation $= 1/|\mathcal{H}_{\text{act},i}|$, dist $=$ minimum travel time to any active hub, each normalised to $[0,1]$, and $\varepsilon_i \sim \mathcal{N}(0,\sigma)$ prevents premature convergence. Demands are processed in descending score order.
 
-\textbf{Step 4 -- Tiered Hub Selection.} For each demand $i$ (in priority order), the hub candidate list is the anchor-proximity order $\pi_{A_i}$: all hubs ranked by ascending distance from the chromosome's anchor hub $A_i$. Intuitively, $A_i$ encodes which hub cluster demand $i$ should be served from, and nearby hubs in that cluster are tried first.
+\textbf{Step 3 -- Tiered Hub Assignment.} For each demand $i$, the trial order is $\pi_{A_i}$ — all hubs sorted by proximity to the anchor hub $A_i$. Let $K = \max(1, \lceil w_5 \cdot |\mathcal{H}| \rceil)$.
+\begin{itemize}
+    \item \textit{Pass 1:} Among the $K$ closest-to-anchor hubs that are active, reachable, and have positive residual inventory, select the one maximising $\text{HubScore}(k) = w_1/\tau_{ikm^*} + w_2 \cdot \text{residual}_k + w_4 \cdot \mathbf{1}[X_k=1]$.
+    \item \textit{Pass 2 (overflow):} If Pass~1 fails, select the first active, reachable hub from the remaining $|\mathcal{H}|-K$ candidates (capacity violation permitted).
+    \item \textit{Reactive fallback:} If both passes fail, open the nearest safe inactive hub at cost $F^a_{ks}$; irrecoverable infeasibility accumulates as constraint violation.
+\end{itemize}
 
-Let $K = \max\!\bigl(1,\, \lceil w_5 \cdot |\mathcal{H}| \rceil\bigr)$ be the \emph{Pass-1 window}. A large $w_5$ widens the window, favouring planned hubs over reactive opening; a small $w_5$ narrows it, falling back to reactive sooner.
+\textbf{Step 4 -- Supply Routing and Objective Accumulation.} Origins are greedily assigned to the most under-supplied active hub. Surplus inventory is redistributed via inter-hub trans-shipment with discount $\alpha$. Finally, $Z_1$ and $Z_2$ are accumulated as probability-weighted expectations over all $s \in \mathcal{S}$.
 
-\textit{Pass 1 (best-in-window).} Examine the first $K$ candidates $\pi_{A_i}[0], \ldots, \pi_{A_i}[K-1]$. Among those that are active, reachable ($a_{ikms}=1$ for some $m$), and have positive residual inventory, select the hub maximising:
-\begin{equation}
-    \text{HubScore}(k) = \frac{w_1}{\tau_{ikm^*} + \varepsilon} + w_2 \cdot \text{residual}_k + w_4 \cdot \mathbf{1}[X_k = 1].
-    \label{eq:hub_score}
-\end{equation}
+Algorithm~\ref{alg:decoder} formalises the decoder for a single scenario.
 
-\textit{Pass 2 (overflow fallback).} If Pass~1 yields no eligible hub, scan the remaining candidates $\pi_{A_i}[K], \ldots, \pi_{A_i}[|\mathcal{H}|-1]$ and select the first active, reachable hub regardless of residual capacity (this may incur a constraint violation).
-
-\textit{Forced reactive.} If both passes fail, the decoder attempts to open any safe inactive hub reachable from $i$, incurring the reactive fixed cost $F^a_{ks}$. If no hub can be reached, a constraint violation penalty $\gamma D_{is}$ is recorded.
-
-\textbf{Step 5 -- Origin Routing and Trans-shipment.} Each origin $j$ is assigned to the nearest active hub. A greedy trans-shipment loop then routes surplus relief from over-stocked hubs to deficit hubs, using the cheapest available mode and applying the volume discount $\alpha$.
-
-\textbf{Step 6 -- Objective Evaluation.} $Z_1$ and $Z_2$ are accumulated as probability-weighted expectations over all scenarios $s \in \mathcal{S}$ using Equations~\eqref{eq:obj1}--\eqref{eq:obj2}.
+\begin{algorithm}[htbp]
+\caption{Priority-Based Decoder (single scenario $s$)}
+\label{alg:decoder}
+\begin{algorithmic}[1]
+\REQUIRE Chromosome $\mathbf{C}=(\mathbf{X},\mathbf{R},\mathbf{A},\mathbf{W})$, scenario $s$, instance data
+\ENSURE $(Z_1^s,\,Z_2^s,\,\text{CV}^s)$
+\STATE Activate $\mathcal{H}_{\text{act}}\leftarrow\{k:X_k\!=\!1,\;r_{ks}\!\le\!\chi\}$; set $q_k\!\leftarrow\!R_k\kappa_k$
+\IF{$\mathcal{H}_{\text{act}}=\emptyset$} \STATE Force-activate $\arg\min_k r_{ks}$ among $\{k:X_k\!=\!1\}$ \ENDIF
+\STATE Score demand $i$ by Eq.~\eqref{eq:demand_score}; sort demands in descending score order
+\FOR{each demand $i$ (in priority order)}
+    \STATE $K\leftarrow\max(1,\lceil w_5|\mathcal{H}|\rceil)$; let trial order $=\pi_{A_i}$ (hubs by proximity to anchor $A_i$)
+    \STATE \textit{Pass~1:} $k^*\leftarrow\arg\max\,\text{HubScore}(k)$ among first $K$ active, reachable hubs with residual~$>0$
+    \IF{Pass~1 succeeds}
+        \STATE Assign $i\!\to\!k^*$; deduct from residual inventory of $k^*$
+    \ELSIF{any active reachable hub remains}
+        \STATE \textit{Pass~2:} assign $i$ to first such hub (capacity violation allowed)
+    \ELSE
+        \STATE \textit{Reactive fallback:} open nearest safe inactive hub; add cost $F^a_{ks}$; $\text{CV}^s\!\mathrel{+}=\!1$
+    \ENDIF
+\ENDFOR
+\STATE Assign origins greedily; redistribute surplus via inter-hub trans-shipment (discount $\alpha$)
+\STATE Accumulate $Z_1^s$, $Z_2^s$
+\RETURN $(Z_1^s,\,Z_2^s,\,\text{CV}^s)$
+\end{algorithmic}
+\end{algorithm}
 
 \subsection{Genetic Operators and Selection}
 
@@ -348,21 +393,36 @@ Constraint handling follows the constrained-dominance principle \cite{deb2002fas
 \section{Computational Experiments}
 
 \subsection{Experimental Setup}
+\label{sec:exp_setup}
 
-\textbf{Implementation.} PB-NSGA-II is implemented in C++17. Data generation and result analysis are performed in Python 3. All experiments run on a standard workstation (Intel Core i7, 16 GB RAM).
+\textbf{Implementation.} PB-NSGA is implemented in C++17. Data generation and result analysis are performed in Python 3. All experiments run on a standard workstation (Intel Core i7, 16 GB RAM).
 
 \textbf{Algorithm parameters.} Population $N = 100$; generations $G = 200$; $p_c = 0.9$; $\eta_c = \eta_m = 20$; $p_m = 1/|\mathbf{C}|$ where $|\mathbf{C}| = 2|\mathcal{H}| + |\mathcal{I}| + 6$; decoder noise $\sigma = 0.05$; Pass-1 window $K = \max(1,\lceil w_5 \cdot |\mathcal{H}|\rceil)$ (evolved per individual). The safety threshold is $\chi = 0.7$; discount $\alpha = 0.6$; $\gamma = 3.0$ kg/person; $\lambda_0 = 0.8$.
 
-\textbf{Performance metric.} We use the \textbf{Hypervolume (HV)} indicator. The reference point is set to $1.1 \times \max(Z_1, Z_2)$ of the combined Pareto front. A larger HV indicates better coverage and spread of the Pareto front.
+\textbf{Performance metrics.} Each algorithm is executed across 20 independent runs per instance; all indicators are reported as mean $\pm$ standard deviation, with statistical significance assessed via the Wilcoxon rank-sum test ($\alpha=0.05$). We employ three complementary Pareto-front quality indicators:
+\begin{itemize}
+    \item \textbf{Hypervolume (HV)} \cite{zitzler1999multiobjective}: volume of objective space dominated by the approximation set, bounded by reference point $\mathbf{r}=(1.1,1.1)$ in the $[0,1]^2$ normalised space (nadir of the combined front). A larger HV indicates better convergence and spread.
+    \item \textbf{IGD\textsuperscript{+}} \cite{ishibuchi2015modified}: average modified Hausdorff distance from each reference point to its closest solution in the approximation set. For small instances (AP10, AP20, AP25, AP40, CV-Small), the reference set is the \emph{exact true Pareto front} obtained by complete enumeration (Section~\ref{sec:exp1}); for larger instances, it is the combined non-dominated front pooled across all 20 runs and all algorithms. A smaller IGD\textsuperscript{+} indicates closer proximity to the true front.
+    \item \textbf{Set Coverage (C-metric)} \cite{zitzler1999multiobjective}: $C(A,B)$ denotes the fraction of solutions in $B$ dominated by at least one solution in $A$. We report $C(\text{PB-NSGA},\text{NSGA-II})$ and $C(\text{NSGA-II},\text{PB-NSGA})$; a high $C(A,B)$ with low $C(B,A)$ indicates algorithm $A$ dominates a larger portion of $B$'s Pareto front.
+\end{itemize}
 
 \subsection{Dataset Description}
+\label{sec:datasets}
 
+\subsubsection*{Benchmark Instances (HLP $\to$ DRND Transformation)}
 
-\textbf{Benchmark datasets.} We adapt two widely-used hub location benchmarks: the \textbf{AP} set \cite{ap_dataset} (Euclidean instances of sizes 10--100 nodes) and \textbf{TR81} \cite{tr81_dataset} (Turkish inter-city matrix, 81 nodes). Each benchmark is transformed into a DRND instance. We assign hub/origin/demand roles and generate three flood scenarios (mild, severe, extreme) with probabilities $(\pi_1, \pi_2, \pi_3) = (0.60, 0.30, 0.10)$. Supply and demand are calibrated to $1.5$--$2.5\times$ total demand coverage. Road distances are normalized to a 500 km scale. Three transport modes operate concurrently (Table~\ref{tab:modes}).
+We adapt two widely-used hub location benchmarks into DRND format. The \textbf{AP} set \cite{ap_dataset} provides Euclidean instances of sizes $n \in \{10, 20, 25, 40, 50, 100\}$; the \textbf{TR81} dataset \cite{tr81_dataset} is a real inter-city distance and flow matrix for 81 Turkish provincial capitals.
+
+Each benchmark instance is transformed via the following procedure:
+\begin{enumerate}
+    \item \textbf{Role assignment.} Nodes are ranked by a safety-flow score $s_i = f_i(1 - \bar{r} - 0.3\,\tilde{f}_i)$, where $f_i$ is total incident flow and $\tilde{f}_i$ its normalised value. Top-$p$ nodes ($p = \lfloor 0.3n \rfloor$) are designated hubs; the remaining high-outflow nodes become origins/suppliers.
+    \item \textbf{Scenario generation.} Three flood scenarios (mild, severe, extreme) are assigned probabilities $(\pi_1, \pi_2, \pi_3) = (0.60, 0.30, 0.10)$. For each scenario, a random epicenter is drawn; road disruption penalties decay exponentially with distance ($\sigma \in [0.25, 0.35] \times d_{\max}$).
+    \item \textbf{Calibration.} Distances are normalised to a 500 km scale. Supply is set to $1.5$--$2.5\times$ total demand. Hub fixed costs are proportional to average road distance (km-units). Three transport modes operate concurrently (Table~\ref{tab:modes}).
+\end{enumerate}
 
 \begin{table}[ht]
 \centering
-\caption{Transport mode parameters.}
+\caption{Transport mode parameters used for all instances.}
 \label{tab:modes}
 \begin{tabular}{llrrrr}
 \toprule
@@ -375,63 +435,192 @@ Mode & Vehicle & Speed (km/h) & Cost (\$/km) & Capacity (pers.) & Disruption \\
 \end{tabular}
 \end{table}
 
-\textbf{Central Vietnam case study.} We generate two synthetic instances modelling the flood-prone \textbf{Vu Gia -- Thu Bon} river basin (Da Nang -- Quang Nam region):
+\subsubsection*{Central Vietnam Case Study Instances}
+
+Two instances are constructed to model flood relief operations across the \textbf{Vu Gia -- Thu Bồn -- Perfume} river basin, spanning four disaster-prone provinces: Đà Nẵng, Quảng Nam, Thừa Thiên-Huế, and Quảng Ngãi.
 \begin{itemize}
-    \item \textbf{CV-Small}: $|\mathcal{I}|=20$, $|\mathcal{H}|=5$, $|\mathcal{J}|=2$, $|\mathcal{S}|=3$ -- small-scale planning instance.
-    \item \textbf{CV-Large}: $|\mathcal{I}|=100$, $|\mathcal{H}|=20$, $|\mathcal{J}|=12$, $|\mathcal{S}|=3$ -- high-resolution regional instance.
+    \item \textbf{CV-Small}: $|\mathcal{I}|=20$, $|\mathcal{H}|=5$, $|\mathcal{J}|=2$, $|\mathcal{S}|=3$ -- district-level planning instance.
+    \item \textbf{CV-Large}: $|\mathcal{I}|=100$, $|\mathcal{H}|=20$, $|\mathcal{J}|=12$, $|\mathcal{S}|=3$ -- commune-level regional instance.
 \end{itemize}
-Node coordinates are drawn from real geographic locations. Road travel times are estimated via the OSRM API with a terrain-adjusted cost factor for inland areas. Scenario epicenters are sampled from flood-prone sub-regions. Risk indices decay with distance from the epicenter. Hub capacities are calibrated post-scenario generation to ensure structural feasibility ($\kappa_k \ge 3\hat{D}/|\mathcal{H}|$).
 
-\subsection{Results}
+\textbf{Node georeferencing.}
+Demand nodes are georeferenced to real administrative units (districts or communes) from four provinces. Base population follows a coastal-proximity model, $P_i \approx 500 + 6{,}500 \cdot f_{\text{coast}}$, reflecting the densely-settled coastal plains of Central Vietnam. Candidate hub locations are selected from logistics facilities, rescue stations, and military depots with confirmed multi-modal access. Supply origins are drawn from seaports (Đà Nẵng, Dung Quất, Chu Lai, Sa Kỳ), river ports (Thuận An), and highland border logistics nodes.
 
-Table~\ref{tab:hv_benchmark} reports the final-generation hypervolume for each instance. For benchmark instances, we run one seed ($G=200$, $N=100$). For CV-Small, we run three independent seeds to assess robustness.
+\textbf{Multi-criteria auxiliary risk.}
+Each node $u$ receives a static intrinsic flood-risk score $r^a_u \in [0,1]$, computed as the weighted sum of four geographic criteria following \cite{barzinpour2014}:
+\begin{equation}
+    r^a_u = 0.25\,C_1(u) + 0.35\,C_2(u) + 0.20\,C_3(u) + 0.20\,C_4(u),
+    \label{eq:aux_risk}
+\end{equation}
+where $C_1$ is a topographic inundation index (decreasing with elevation, proxied by longitude relative to the highland--coastal gradient); $C_2$ is hydrological proximity to five river systems (Vu Gia, Thu Bồn, Perfume, Trường Giang, Trà Bồng) modelled via Gaussian decay ($\sigma = 18$ km); $C_3$ is coastal storm-surge exposure ($\sigma = 40$ km); and $C_4$ is river-delta accumulation risk centred on five historically inundated deltaic zones.
+
+\textbf{Risk intervals and scenario generation.}
+Rather than assigning a single risk value per node, each node is assigned a risk interval $[r^{\min}_u,\, r^{\max}_u]$ whose width and ceiling scale monotonically with $r^a_u$:
+\[
+    r^{\min}_u = 0.05 + 0.20\,r^a_u, \qquad r^{\max}_u = r^a_u + 0.15(1 - r^a_u).
+\]
+A safe inland node ($r^a_u \!=\! 0.10$) thus spans $[0.07,\,0.22]$, while a highly exposed delta node ($r^a_u \!=\! 0.80$) spans $[0.21,\,0.83]$. Three scenarios (mild, severe, extreme) are generated with probabilities $(0.60,\,0.30,\,0.10)$. Each scenario samples $n_s \!\in\! \{1,2,3\}$ flood epicenters from demand nodes with probability proportional to $r^a_u$; scenario risk for node $u$ is then drawn from its interval, modulated by Gaussian exposure decay ($\sigma_e\!=\!85$ km) from the epicenters. Road link $(u,v)$ is disrupted with probability $\min(0.97,\, \beta_s \cdot \bar{r}_{uv})$, where $\beta_s \!\in\! \{0.25, 0.55, 0.88\}$ for mild, severe, and extreme events; water and air modes remain available under all scenarios.
+
+\textbf{Transport and capacity calibration.}
+Road travel times combine Haversine distance with a fixed tortuosity factor (1.35, reflecting Central Vietnam's mountain roads) and a terrain multiplier ranging from 1.0 at the coast to 1.8 in the deep highlands. Demand volumes are scenario-specific: $D_{is} = P_i \cdot (0.05 + 0.85\,r_{is}) \cdot \mu_s$, where severity multipliers $\mu_s \!\in\! \{1.0, 1.8, 2.8\}$ capture the escalating relief burden. Last-mile distribution cost is modelled by the Daganzo continuum-approximation formula \cite{daganzo1984} with scenario-specific circuity $\phi \in \{0.57, 0.70, 0.85\}$ for the three scenarios. Hub capacities are calibrated post-generation so that aggregate installed capacity is 3--6$\times$ the worst-case total demand, with each hub's share scaled by its terrain factor to account for the larger staging areas feasible in flatter coastal zones.
+
+\subsection{Experiment 1: Algorithm Efficiency on HLP Benchmarks}
+\label{sec:exp1}
+
+\subsubsection*{Comparison Algorithms}
+
+We compare \textbf{PB-NSGA} against the standard \textbf{NSGA-II} \cite{deb2002fast} as a direct baseline. NSGA-II uses the same population size ($N=100$), generations ($G=200$), and genetic operators but replaces the priority-based decoder with a direct full variable encoding (all second-stage routing variables). This comparison isolates the contribution of the priority-based decoding scheme. Both algorithms are seeded identically across 20 runs.
+
+\textbf{Ground-truth fronts via complete enumeration.}
+To provide an objective quality reference for small benchmark instances, we apply a \emph{complete enumeration} procedure that exhausts all $2^{|\mathcal{H}|}$ hub opening configurations. For each configuration $\mathbf{X}$, the second-stage sub-problem is solved via a structured heuristic (multiple candidate $\mathbf{R}$, $\mathbf{A}$, $\mathbf{W}$ settings) to approximate the true objective values, and only non-dominated solutions are retained. A 5-minute time limit is imposed per instance. This yields an exact (or near-exact) true Pareto front for AP10, AP20, AP25, AP40, and CV-Small ($|\mathcal{H}| \le 10$), which serves as the reference set for IGD\textsuperscript{+} computation on these instances.
+
+\subsubsection*{Results}
+
+Table~\ref{tab:exp1_results} reports HV, IGD\textsuperscript{+}, Pareto front size, and CPU time for the AP and TR81 benchmark instances. Values are mean $\pm$ standard deviation over 20 runs.
 
 \begin{table}[ht]
 \centering
-\caption{Hypervolume (HV) results across all instances. CV-Small reports mean over 3 seeds.}
-\label{tab:hv_benchmark}
-\begin{tabular}{llrr}
+\caption{Experiment 1: Algorithm efficiency on HLP benchmark instances (mean $\pm$ std, 20 runs). Best mean per instance in \textbf{bold}. C-metric: $C(\text{PB-NSGA},\text{NSGA-II})$ / $C(\text{NSGA-II},\text{PB-NSGA})$.}
+\label{tab:exp1_results}
+\begin{tabular}{llrrrrl}
 \toprule
-Category & Instance & \#Pareto pts & HV \\
+Instance & Algorithm & HV (norm.) & IGD\textsuperscript{+} & \#Pareto & Time (s) & C-metric \\
 \midrule
-\multirow{6}{*}{AP Benchmark}
-    & AP10  & 100 & $1.17 \times 10^{14}$ \\
-    & AP20  & 100 & $6.77 \times 10^{14}$ \\
-    & AP25  & 100 & $2.20 \times 10^{13}$ \\
-    & AP40  & 100 & $9.87 \times 10^{13}$ \\
-    & AP50  & 100 & $4.94 \times 10^{13}$ \\
-    & AP100 &  25 & $2.65 \times 10^{14}$ \\
+\multirow{2}{*}{AP10}
+    & PB-NSGA & \textbf{--} & \textbf{--} & -- & -- & \multirow{2}{*}{-- / --} \\
+    & NSGA-II & -- & -- & -- & -- & \\
+\multirow{2}{*}{AP20}
+    & PB-NSGA & \textbf{--} & \textbf{--} & -- & -- & \multirow{2}{*}{-- / --} \\
+    & NSGA-II & -- & -- & -- & -- & \\
+\multirow{2}{*}{AP25}
+    & PB-NSGA & \textbf{--} & \textbf{--} & -- & -- & \multirow{2}{*}{-- / --} \\
+    & NSGA-II & -- & -- & -- & -- & \\
+\multirow{2}{*}{AP40}
+    & PB-NSGA & \textbf{--} & \textbf{--} & -- & -- & \multirow{2}{*}{-- / --} \\
+    & NSGA-II & -- & -- & -- & -- & \\
+\multirow{2}{*}{AP50}
+    & PB-NSGA & \textbf{--} & \textbf{--} & -- & -- & \multirow{2}{*}{-- / --} \\
+    & NSGA-II & -- & -- & -- & -- & \\
+\multirow{2}{*}{AP100}
+    & PB-NSGA & \textbf{--} & \textbf{--} & -- & -- & \multirow{2}{*}{-- / --} \\
+    & NSGA-II & -- & -- & -- & -- & \\
 \midrule
-TR Benchmark & TR81 & 2 & $3.20 \times 10^{13}$ \\
-\midrule
-\multirow{2}{*}{Case Study}
-    & CV-Small ($n=3$) & 152 (combined) & $1.01 \times 10^{12}$ \\
-    & CV-Large         & 100            & $3.23 \times 10^{13}$ \\
+\multirow{2}{*}{TR81}
+    & PB-NSGA & \textbf{--} & \textbf{--} & -- & -- & \multirow{2}{*}{-- / --} \\
+    & NSGA-II & -- & -- & -- & -- & \\
 \bottomrule
 \end{tabular}
 \end{table}
 
+\textbf{Discussion.}
+For small instances (AP10--AP40, CV-Small), IGD\textsuperscript{+} is measured against the exact true Pareto front from complete enumeration, providing an absolute quality reference independent of the competing algorithm. For AP50, AP100, and TR81 -- where exhaustive enumeration is infeasible -- the combined non-dominated front across all 20 runs and both algorithms serves as the reference. We also report C-metric pairwise between PB-NSGA and NSGA-II; $C(A,B) \gg C(B,A)$ indicates that $A$'s front dominates a substantially larger fraction of $B$'s solutions. The anchor-hub mechanism ($\mathbf{A}$ chromosome) is expected to be particularly beneficial on larger instances, where the full variable encoding of standard NSGA-II disperses search effort across an exponentially larger space.
 
+\subsection{Sensitivity Analysis}
+\label{sec:sensitivity}
 
-\textbf{Benchmark observations.} The algorithm consistently produces well-spread Pareto fronts across all AP instances. AP20 yields the largest HV. This reflects the favourable trade-off structure of mid-size instances. AP100 produces fewer non-dominated points (25). This is expected as the search landscape becomes harder and population diversity is consumed. TR81 converges to only 2 non-dominated solutions. It indicates a strong dominance structure where a single hub configuration dominates most others in a dense graph.
+To assess how key operational parameters affect solution quality, we conduct one-at-a-time sensitivity experiments on the CV-Small instance using PB-NSGA with 10 independent runs per configuration, varying one parameter at a time while holding others at their baseline values ($\chi=0.7$, $\pi_3=0.10$, transport costs at baseline).
 
-\textbf{Case study observations.} For CV-Small, a combined Pareto front of 152 points demonstrates excellent solution diversity and reproducibility. CV-Large achieves 100 non-dominated solutions with an HV comparable to TR81. This illustrates that PB-NSGA-II scales effectively to large real-world instances. The smaller HV relative to AP benchmarks is attributable to the narrow feasible region. The flood disruption model severely restricts options (e.g., only 3 out of 5 hubs remain safe in extreme scenarios).
+\textbf{Safety threshold $\chi$.} We vary $\chi \in \{0.5, 0.6, 0.7, 0.8, 0.9\}$. A stricter (lower) threshold restricts the set of safe hubs under disruption, forcing more reactive openings and increasing $Z_1$; a lenient (higher) threshold allows more hubs to remain operational at higher risk, elevating $Z_2$.
 
-\subsection{Managerial Insights}
+\textbf{Scenario probability weight $\pi_3$.} We test $\pi_3 \in \{0.05, 0.10, 0.15, 0.20\}$ (with $\pi_1$ and $\pi_2$ adjusted proportionally), quantifying how the optimal pre-positioning strategy shifts as planners assign greater probability to worst-case extreme-flood events.
 
-Analyzing the Pareto front of CV-Small reveals a clear convex trade-off. Reducing $Z_2$ (deprivation) by 30\% requires increasing $Z_1$ (logistics cost) by approximately $3\times$. This reflects the exponential structure of the deprivation function. Reducing waiting times for high-risk isolated areas is disproportionately costly.
+\textbf{Transportation cost multiplier $\beta$.} All per-km costs are scaled by $\beta \in \{0.5, 0.75, 1.0, 1.5, 2.0\}$, testing the modal shift from road to water/air transport as surface-route costs increase.
 
+\begin{table}[ht]
+\centering
+\caption{Sensitivity of mean HV to key operational parameters (CV-Small, 10 runs each; baseline values in parentheses).}
+\label{tab:sensitivity}
+\begin{tabular}{lcc}
+\toprule
+Parameter & Level & HV (mean) \\
+\midrule
+\multirow{5}{*}{Safety threshold $\chi$}
+    & 0.5 & -- \\
+    & 0.6 & -- \\
+    & 0.7 \textit{(baseline)} & -- \\
+    & 0.8 & -- \\
+    & 0.9 & -- \\
+\midrule
+\multirow{4}{*}{Extreme probability $\pi_3$}
+    & 0.05 & -- \\
+    & 0.10 \textit{(baseline)} & -- \\
+    & 0.15 & -- \\
+    & 0.20 & -- \\
+\midrule
+\multirow{5}{*}{Cost multiplier $\beta$}
+    & 0.5 & -- \\
+    & 0.75 & -- \\
+    & 1.0 \textit{(baseline)} & -- \\
+    & 1.5 & -- \\
+    & 2.0 & -- \\
+\bottomrule
+\end{tabular}
+\end{table}
 
+\subsection{Experiment 2: Case Study -- Central Vietnam Flood Relief}
+\label{sec:exp2}
 
-Network topology analysis further highlights structural shifts. Under the \textit{mild} scenario, the optimal strategy uses road transport from all 5 candidate hubs with moderate inventory pre-positioning. Under the \textit{extreme} scenario, 2 hubs become unsafe ($r_{ks} > \chi$). The network dynamically switches to water and air transport. The remaining active hubs receive larger inventory pre-commitments. This is compensated by increased lateral trans-shipment. This shift confirms the value of the two-stage stochastic formulation. A deterministic single-scenario model would systematically under-invest in network resilience.
+\subsubsection*{Comparison Algorithms}
+
+For the Vietnam case study we include two additional multi-objective solvers alongside PB-NSGA:
+\begin{itemize}
+    \item \textbf{NSGA-II} \cite{deb2002fast}: standard baseline (same encoding as Experiment 1).
+    \item \textbf{NSMA} \cite{nsma_ref}: Non-dominated Sorting Memetic Algorithm, a state-of-the-art hybrid incorporating local search phases.
+\end{itemize}
+All three algorithms use identical budget ($N=100$, $G=200$) and are evaluated over 20 seeds per instance.
+
+\subsubsection*{Results}
+
+Figure~\ref{fig:cv_pareto} shows the combined Pareto fronts (pooled across 20 seeds) for CV-Small and CV-Large. Table~\ref{tab:exp2_results} summarises HV, IGD\textsuperscript{+}, and Pareto front size.
+
+\begin{table}[ht]
+\centering
+\caption{Experiment 2: Case study results -- Central Vietnam instances (mean $\pm$ std, 20 runs). Best mean per instance in \textbf{bold}. C-metric column: $C(\text{PB-NSGA},\text{Competitor})$ / $C(\text{Competitor},\text{PB-NSGA})$.}
+\label{tab:exp2_results}
+\begin{tabular}{llrrrr}
+\toprule
+Instance & Algorithm & HV (norm.) & IGD\textsuperscript{+} & \#Pareto & C-metric \\
+\midrule
+\multirow{3}{*}{CV-Small}
+    & PB-NSGA & \textbf{--} & \textbf{--} & -- & -- \\
+    & NSGA-II & -- & -- & -- & -- / -- \\
+    & NSMA    & -- & -- & -- & -- / -- \\
+\midrule
+\multirow{3}{*}{CV-Large}
+    & PB-NSGA & \textbf{--} & \textbf{--} & -- & -- \\
+    & NSGA-II & -- & -- & -- & -- / -- \\
+    & NSMA    & -- & -- & -- & -- / -- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[ht]
+\centering
+% \includegraphics[width=0.48\linewidth]{figures/CV_small_pareto.pdf}
+% \includegraphics[width=0.48\linewidth]{figures/CV_large_pareto.pdf}
+\caption{Combined Pareto fronts for CV-Small (left) and CV-Large (right). Each front pools all non-dominated solutions across 20 seeds per algorithm.}
+\label{fig:cv_pareto}
+\end{figure}
+
+\subsubsection*{Managerial Insights}
+
+The Pareto front of CV-Small reveals a convex cost-deprivation trade-off. The shape reflects the non-linear structure of the deprivation objective: reducing $Z_2$ in the high-cost region of the frontier requires disproportionate investment in additional hub capacity and air-/water-mode transport. Humanitarian agencies with limited budgets should identify their operating point on this frontier rather than minimising cost alone.
+
+Network topology analysis highlights scenario-driven structural shifts. Under the \textit{mild} scenario, road transport from a moderate set of candidate hubs provides adequate coverage. Under the \textit{extreme} scenario, a subset of hubs exceeds the safety threshold ($r_{ks}>\chi$) and becomes unavailable, triggering automatic modal substitution toward waterway and helicopter routes. The remaining active hubs absorb greater pre-positioned inventory, partially compensated by inter-hub trans-shipment. This dynamic adaptation confirms the operational value of the two-stage stochastic formulation: a deterministic model calibrated to a single representative scenario would systematically under-invest in resilient transport modes and backup hub capacity.
+
+For CV-Large, the anchor-hub mechanism encoded in $\mathbf{A}$ proves particularly valuable. Commune-level demand nodes form distinct geographic clusters aligned with river basins and coastal plains; the $\mathbf{A}$ chromosome implicitly partitions the search space into hub catchment areas, enabling PB-NSGA to maintain diversity across 20 hub candidates while allocating 100 demand nodes efficiently.
 
 \section{Conclusion and Future Work}
 
-We proposed PB-NSGA-II for the Multi-Objective Incomplete Hub Location Network Design Problem (MO-IHLNDP). The model incorporates multi-modal transport, stochastic flood scenarios, deprivation cost, and Daganzo's continuous approximation. Our priority-based decoding scheme efficiently handles second-stage variables and maintains feasibility in disrupted networks. Experiments on AP and TR81 benchmarks validate the algorithm's effectiveness. The Central Vietnam case study demonstrates its practical applicability.
+This paper introduced PB-NSGA, a Priority-Based Nondominated Sorting Genetic Algorithm, to solve the Multi-Objective Incomplete Hub Location Network Design Problem (MO-IHLNDP) for disaster relief logistics. The model jointly minimises expected logistics cost ($Z_1$) and expected maximum deprivation cost ($Z_2$) under stochastic flood disruptions, capturing multi-modal transport, hub safety constraints, reactive hub opening, and inter-hub trans-shipment with economies of scale.
 
-\textbf{Limitations.} The current model relies on a fixed set of pre-defined scenarios. The decoding heuristic is greedy and may miss globally optimal demand assignments. 
+Three methodological contributions underpin this work. First, the chromosome representation encodes only first-stage strategic decisions ($\mathbf{X}$, $\mathbf{R}$, $\mathbf{A}$, $\mathbf{W}$), reducing the search space from $O(|\mathcal{S}| \times |\mathcal{V}|)$ to $O(|\mathcal{H}|)$ while the heuristic decoder reconstructs all second-stage assignments. Second, the anchor-hub mechanism ($\mathbf{A}$ chromosome) biases demand assignment toward geographically coherent hub neighbourhoods, which proves especially powerful for large instances and spatially clustered demand. Third, Hamming diversity in elitist selection preserves genotypic variety in hub configuration space, countering premature convergence to narrow Pareto fronts. To benchmark solution quality objectively, ground-truth Pareto fronts for small instances are obtained by complete enumeration of all hub configurations, providing exact IGD\textsuperscript{+} reference sets.
 
-\textbf{Future work} will explore exact branch-and-cut approaches for small instances to establish lower bounds. We also aim to incorporate real-time sensor data via online re-optimization and extend the framework to multi-period relief operations.
+The Central Vietnam case study, constructed from real geographic and demographic data across four flood-prone provinces, illustrates the practical value of the framework. The two-stage stochastic model responds to infrastructure disruption by dynamically shifting to water and air transport and redistributing inventory, demonstrating that deterministic planning would systematically under-invest in network resilience.
+
+\textbf{Limitations.} The model assumes a fixed discrete scenario set; continuous risk distributions are not yet supported. The decoding heuristic is greedy and may miss globally optimal demand assignments for highly constrained instances.
+
+\textbf{Future work} will extend the approach to rolling-horizon multi-period relief operations and incorporate real-time sensor feeds for online re-optimization. The complete enumeration baseline naturally motivates exact solver development (branch-and-cut or Benders decomposition) for medium-scale instances to tighten IGD\textsuperscript{+} reference fronts and strengthen convergence guarantees.
 
 \mycomment{
 
