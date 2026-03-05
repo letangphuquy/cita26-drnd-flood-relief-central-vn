@@ -18,6 +18,7 @@
 
 #include "nsga2.hpp"
 
+#include <chrono>
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
@@ -68,8 +69,14 @@ Args parse_args(int argc, char *argv[]) {
 // ---------------------------------------------------------------------------
 // Output: write Pareto front to JSON
 // ---------------------------------------------------------------------------
-void write_output(const vector<Individual> &pop, std::ostream &out) {
+void write_output(const vector<Individual> &pop, std::ostream &out,
+                  double elapsed_s, const Args &args) {
   json j;
+  j["meta"]["elapsed_s"]   = elapsed_s;
+  j["meta"]["seed"]        = args.seed_iter;
+  j["meta"]["pop_size"]    = args.pop_size;
+  j["meta"]["num_gen"]     = args.num_gen;
+  j["meta"]["solver"]      = string(args.use_local_search ? "PB-NSMA" : "PB-NSGA");
   j["pareto_front"] = json::array();
   for (const auto &ind : pop) {
     if (ind.rank == 1) {
@@ -136,18 +143,22 @@ int main(int argc, char *argv[]) {
   cfg.use_local_search = args.use_local_search;
   cfg.ls_iters = args.ls_iters;
 
+  auto t_start   = std::chrono::steady_clock::now();
   auto population = run_nsga2(inst, cfg);
+  auto t_end     = std::chrono::steady_clock::now();
+  double elapsed_s = std::chrono::duration<double>(t_end - t_start).count();
+  cerr << "[Time] " << elapsed_s << " s\n";
 
   // Output results
   if (args.output_path.empty()) {
-    write_output(population, cout);
+    write_output(population, cout, elapsed_s, args);
   } else {
     std::ofstream fout(args.output_path);
     if (!fout.is_open()) {
       cerr << "Cannot open output file: " << args.output_path << "\n";
       return 1;
     }
-    write_output(population, fout);
+    write_output(population, fout, elapsed_s, args);
     cerr << "[Output] Written to: " << args.output_path << "\n";
   }
 
