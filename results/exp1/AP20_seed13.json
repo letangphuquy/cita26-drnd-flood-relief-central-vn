@@ -4202,7 +4202,7 @@
     }
   ],
   "meta": {
-    "elapsed_s": 0.563956,
+    "elapsed_s": 0.453021,
     "num_gen": 200,
     "pop_size": 100,
     "seed": 13,
