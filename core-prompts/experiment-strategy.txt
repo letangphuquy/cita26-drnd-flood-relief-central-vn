@@ -61,7 +61,7 @@ We should re-arrange the below contents to like this (Experiment: HLP benchmarks
 4.2 Dataset description
 Benchmark dataset: Present the method to transform the HLP instances to DRND instances
 
-Central Vietname case study: Present the methodology.
+Central Vietname case study: Present the methodology (highly detailed but limit to 70% of a page).
 
 4.3 Experiment 1: Algorithm efficiency 
 - Baseline: complete enumeration (can go for branch \& bound approach)

@@ -4,7 +4,13 @@
       "Bash(ls:*)",
       "Bash(find:*)",
       "Bash(source:*)",
-      "Bash(head:*)"
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(g++:*)",
+      "Bash(solver_cpp/bb_solver.exe:*)",
+      "Bash(py:*)",
+      "Bash(\"solver_cpp/bb_solver.exe\":*)",
+      "Bash(grep:*)"
     ]
   }
 }

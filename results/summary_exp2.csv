@@ -1,0 +1,5 @@
+experiment,instance,algorithm,n_runs,pareto_combined,pareto_mean,pareto_std,HV_mean,HV_std,IGDplus_mean,IGDplus_std,runtime_s_mean,runtime_s_std,igd_ref
+Exp2-CaseStudy,CV_large,PB-NSGA-II,3,14,8.3,2.5,0.759588,0.077535,0.170968,0.027260,N/A,N/A,
+Exp2-CaseStudy,CV_small,PB-NSGA-II,3,7,5.7,1.5,0.520931,0.000760,0.393910,0.000110,N/A,N/A,
+Exp2-CaseStudy,CV_small,NSGA-II,1,3,14.0,0.0,1.098499,0.000000,0.074026,0.000000,N/A,N/A,
+Exp2-CaseStudy,CV_small,NSMA,1,2,28.0,0.0,1.096568,0.000000,0.074036,0.000000,N/A,N/A,
