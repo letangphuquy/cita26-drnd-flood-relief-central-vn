@@ -98,9 +98,7 @@ def pick_solutions(pareto_front: list) -> dict:
                    key=lambda s: ((s["Z1"] - z1_min) / rng1) ** 2
                                  + ((s["Z2"] - z2_min) / rng2) ** 2)
     return {
-        "min_cost":   by_z1[0],
         "balanced":   balanced,
-        "min_depriv": by_z2[0],
     }
 
 

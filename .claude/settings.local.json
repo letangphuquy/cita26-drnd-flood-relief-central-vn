@@ -15,7 +15,8 @@
       "Bash(./bb_solver:*)",
       "Bash(python:*)",
       "Bash(cat:*)",
-      "Bash(\"solver_cpp/solver.exe\":*)"
+      "Bash(\"solver_cpp/solver.exe\":*)",
+      "Bash(\".venv/Scripts/python.exe\":*)"
     ]
   }
 }
