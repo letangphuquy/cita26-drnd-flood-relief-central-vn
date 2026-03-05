@@ -6,5 +6,5 @@ if /I "%run_patch%"=="y" (
     python data_prep\patch_coords.py
 )
 
-python data_prep\generate_drnd.py
+python scripts\generate_cv.py --outdir data\cv
 python data_prep\dataset_visualizer.py

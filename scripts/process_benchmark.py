@@ -554,6 +554,10 @@ def main():
         help=f"Random seed for synthetic parameter generation (default: {DEFAULT_SEED}). "
              "Run with different seeds to assess statistical robustness."
     )
+    parser.add_argument(
+        "--outdir", type=str, default=None,
+        help="Output directory for generated DRND JSON files (default: same as script)."
+    )
     args = parser.parse_args()
     seed = args.seed
 
@@ -561,7 +565,8 @@ def main():
     project_dir = os.path.dirname(script_dir)
     ap_folder   = os.path.join(project_dir, "hlp-benchmark", "AP")
     tr_excel    = os.path.join(project_dir, "hlp-benchmark", "Turkish network.xls")
-    out_dir     = script_dir
+    out_dir     = args.outdir if args.outdir else script_dir
+    os.makedirs(out_dir, exist_ok=True)
 
     print("=" * 60)
     print(f"Processing benchmark datasets → DRND JSON format  (seed={seed})")
