@@ -342,13 +342,26 @@ def exp1_benchmark(bench_groups, fig_dir):
         all_runs_flat = [run for runs in algo_runs.values() for run in runs]
         _, bounds = normalize_points(all_runs_flat)
 
-        # ── Reference front for IGD+: BB-Exact if available, else combined PB-NSGA-II ──
+        # ── Reference front for IGD+ ──────────────────────────────────────
+        # BB exhaustively enumerates hub configurations X, but the inner
+        # (R, A, W) sub-problem is solved heuristically.  PB-NSGA jointly
+        # evolves all variables and may find better (R, A, W) solutions.
+        # Using BB alone as reference would penalise PB-NSGA for finding
+        # genuinely better solutions.  We therefore use the COMBINED
+        # non-dominated front (BB ∪ PB-NSGA) as the IGD+ reference —
+        # the best approximation of the true Pareto front available.
         bb_pts = dominant_pareto(algo_runs.get("BB-Exact", []))
         pb_pts_all = algo_runs.get("PB-NSGA-II", [])
         pb_combined = dominant_pareto(pb_pts_all) if pb_pts_all else []
 
-        # Normalise reference
-        ref_raw = bb_pts if bb_pts else pb_combined
+        # Combined reference: non-dominated union of BB and PB-NSGA fronts
+        all_ref_runs = []
+        if bb_pts:      all_ref_runs.append(bb_pts)
+        if pb_combined: all_ref_runs.append(pb_combined)
+        ref_raw = dominant_pareto(all_ref_runs) if all_ref_runs else []
+        ref_source = ("BB+PB-NSGA combined" if (bb_pts and pb_combined)
+                      else "BB-Exact" if bb_pts else "PB-NSGA-II combined")
+
         ref_norm, _ = normalize_points([ref_raw], bounds=bounds)
         reference_norm = ref_norm[0] if ref_norm else []
         ref_pt = (1.1, 1.1)
@@ -410,7 +423,7 @@ def exp1_benchmark(bench_groups, fig_dir):
                 "IGDplus_std":     f"{igd_std:.6f}",
                 "runtime_s_mean":  f"{rt_mean:.2f}" if rt_list else "N/A",
                 "runtime_s_std":   f"{rt_std:.2f}"  if rt_list else "N/A",
-                "igd_ref":         "BB-Exact" if bb_pts else "PB-NSGA-II combined",
+                "igd_ref":         ref_source,
             })
 
     return rows

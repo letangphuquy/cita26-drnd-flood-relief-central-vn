@@ -112,13 +112,23 @@ struct BoundsCache {
         }
 
         // omega_sorted[ii][si]: sorted by min_omega = τ_ks + 2 * min_time
+        // Only includes hubs that are RISK-SAFE in scenario si (risk[k] <= chi).
+        // BUG FIX: hubs with risk > chi are never activated by the decoder;
+        // including them in the lower bound makes lb_Z2 falsely optimistic,
+        // causing incorrect dominance pruning of valid subtrees.
         omega_sorted.assign(I, vector<vector<pair<double,int>>>(S));
         for (int ii = 0; ii < I; ii++) {
             for (int si = 0; si < S; si++) {
+                const Scenario& sc = inst.scenarios[si];
                 for (int ki = 0; ki < H; ki++) {
+                    int k = inst.hub_idx[ki];
+                    // Skip hubs that exceed the risk threshold in this scenario:
+                    // the decoder never activates them, so they cannot contribute
+                    // to a valid solution's omega.
+                    if (sc.risk[k] > inst.chi) continue;
                     double t = min_time_ki[ki][ii][si];
                     double omega = (t < inst.big_M)
-                        ? inst.scenarios[si].hub_process_time[ki] + 2.0 * t
+                        ? sc.hub_process_time[ki] + 2.0 * t
                         : inst.big_M;
                     omega_sorted[ii][si].push_back({omega, ki});
                 }
@@ -148,9 +158,11 @@ struct BoundsCache {
 
     // Lower bound on Z2 for partial X.
     // lb_Z2 = Σ_s π_s * max_ii { min_{feasible ki} D_i * expm1(λ_is * min_omega_is) }
-    // "Feasible" = committed-open ∪ undecided (ki >= depth).
-    // Valid because: min-deprivation per demand ≤ actual deprivation,
-    //   and max of minimums ≤ max of actuals.
+    // "Feasible" = (committed-open OR undecided) AND risk[k] <= chi in scenario si.
+    // Valid lower bound: for every solution in the subtree, each demand's actual
+    //   omega is >= the best omega over the same (risk-safe) feasible set, so
+    //   max_ii(actual omega) >= lb, and thus actual Z2 >= lb_Z2.
+    // Note: omega_sorted[ii][si] already excludes risk-unsafe hubs (see constructor).
     double lb_Z2(const vector<int>& X, int depth) const {
         const int I = inst.num_I, S = inst.num_S;
         double lb = 0.0;
@@ -160,13 +172,15 @@ struct BoundsCache {
             for (int ii = 0; ii < I; ii++) {
                 double D = sc.demand[inst.demand_idx[ii]];
                 if (D < EPS) continue;
-                // Find the minimum omega among feasible hubs (committed-open ∪ undecided)
-                // omega_sorted[ii][si] is sorted by omega, so first feasible entry wins
+                // omega_sorted[ii][si] already contains only risk-safe hubs.
+                // First entry that is committed-open OR undecided wins.
                 double best_omega = inst.big_M;
                 for (const auto& [omega, ki] : omega_sorted[ii][si]) {
                     bool feasible = (ki >= depth) || (X[ki] == 1);
                     if (feasible) { best_omega = omega; break; }
                 }
+                // If no risk-safe hub is available: forced fallback in decoder
+                // will still produce some omega; use 0 as floor (conservative).
                 if (best_omega >= inst.big_M) best_omega = 0.0;
                 double lam     = inst.lambda[ii][si];
                 double exp_arg = std::min(lam * best_omega, 20.0);
@@ -180,8 +194,37 @@ struct BoundsCache {
 };
 
 // ---------------------------------------------------------------------------
+// Helper: try one (R, A, W) combination; add to archive if feasible.
+// ---------------------------------------------------------------------------
+static void try_one(const vector<int>& X, const vector<double>& R,
+                    const vector<int>& A, const vector<double>& W,
+                    const DRNDInstance& inst, ParetoArchive& archive) {
+    Individual ind(inst.num_H, inst.num_I);
+    ind.X = X; ind.R = R; ind.A = A; ind.W = W;
+    decode(ind, inst);
+    if (ind.CV < EPS) {
+        Solution sol;
+        sol.Z1 = ind.Z1; sol.Z2 = ind.Z2;
+        sol.X = X; sol.R = R; sol.A = A; sol.W = W;
+        archive.add(std::move(sol));
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Sub-problem: given X, find diverse Pareto-good (R, A, W) solutions
-// via structured enumeration + random sampling, all via decode().
+// via structured enumeration + random sampling + archive perturbation.
+//
+// FIX (sub-problem quality): The original evaluate_leaf used only uniform
+// R vectors (same fill fraction for all open hubs) and a small fixed W set,
+// leaving the per-hub R and W[5] dimensions almost unexplored.  PB-NSGA
+// evolves non-uniform R and diverse W, so it found better (R,A,W) than BB.
+// We now add:
+//   1. Per-hub spotlight R: for each open hub, maximise that hub's inventory
+//      while minimising others — explores the non-uniform R frontier.
+//   2. Expanded W grid including W[5] extremes.
+//   3. Substantially more random trials (num_trials governs the total budget).
+//   4. Perturbation phase: Gaussian noise around each archive member to
+//      exploit the best found solutions.
 // ---------------------------------------------------------------------------
 static void evaluate_leaf(const vector<int>&  X,
                            const DRNDInstance& inst,
@@ -196,12 +239,10 @@ static void evaluate_leaf(const vector<int>&  X,
     const int n_open = (int)open_ki.size();
 
     // ── Build A strategies ─────────────────────────────────────────────────
-    // A_near[rank][ii] = ki of rank-th nearest open hub to demand ii
     const int A_RANKS = std::min(n_open, 3);
     vector<vector<int>> A_by_rank(A_RANKS, vector<int>(I));
     for (int ii = 0; ii < I; ii++) {
         int di = inst.demand_idx[ii];
-        // Compute distance from demand di to each open hub
         vector<pair<double,int>> dists;
         dists.reserve(n_open);
         for (int ki : open_ki) {
@@ -215,52 +256,57 @@ static void evaluate_leaf(const vector<int>&  X,
             A_by_rank[r][ii] = dists[r].second;
     }
 
-    // ── R strategies (structured) ──────────────────────────────────────────
-    // Covers low-Z1 (min inventory), high-Z2 quality (max inventory), and
-    // intermediate trade-offs.
-    auto make_R = [&](double val) {
+    // ── R strategies ──────────────────────────────────────────────────────
+    // Uniform fills
+    auto make_R_uniform = [&](double val) {
         vector<double> R(H, 0.0);
         for (int ki : open_ki) R[ki] = val;
         return R;
     };
     vector<vector<double>> R_set = {
-        make_R(1.0),   // max inventory: low Z2, high holding cost
-        make_R(0.5),   // mid
-        make_R(0.25),  // low inventory: low holding cost, higher Z2
-        make_R(0.1),   // minimal inventory
+        make_R_uniform(1.0),
+        make_R_uniform(0.75),
+        make_R_uniform(0.5),
+        make_R_uniform(0.25),
+        make_R_uniform(0.1),
     };
+    // Per-hub spotlight: one hub gets full inventory, others get minimal.
+    // This explores non-uniform R solutions that PB-NSGA can find via evolution.
+    for (int focus : open_ki) {
+        vector<double> R(H, 0.0);
+        for (int ki : open_ki) R[ki] = (ki == focus) ? 1.0 : 0.1;
+        R_set.push_back(R);
+    }
 
     // ── W strategies ──────────────────────────────────────────────────────
+    // Expanded set: covers W[5] extremes (Pass-1 window depth) which were
+    // missing from the original fixed set.
     vector<vector<double>> W_set = {
         {0.5, 0.5, 0.5, 0.5, 0.5, 0.5},  // balanced
         {0.8, 0.3, 0.3, 0.7, 0.8, 0.7},  // urgency-heavy
         {0.2, 0.8, 0.6, 0.2, 0.3, 0.3},  // speed-heavy
         {0.5, 0.5, 0.8, 0.5, 0.5, 0.5},  // capacity-aware
         {1.0, 1.0, 0.5, 1.0, 1.0, 0.5},  // aggressive
+        {0.5, 0.5, 0.5, 0.5, 0.5, 1.0},  // wide Pass-1 window
+        {0.5, 0.5, 0.5, 0.5, 0.5, 0.1},  // narrow Pass-1 window (reactive)
+        {1.0, 0.5, 0.5, 1.0, 0.5, 0.8},  // isolation + wide window
+        {0.3, 1.0, 0.3, 0.3, 1.0, 0.5},  // speed + planned preference
     };
 
-    // ── Evaluate all structured combinations ──────────────────────────────
+    // ── Phase 1: Structured enumeration ───────────────────────────────────
     int structured_count = 0;
     for (const auto& R : R_set) {
         for (int r = 0; r < A_RANKS; r++) {
             for (const auto& W : W_set) {
-                Individual ind(H, I);
-                ind.X = X; ind.R = R; ind.A = A_by_rank[r]; ind.W = W;
-                decode(ind, inst);
-                if (ind.CV < EPS) {
-                    Solution sol;
-                    sol.Z1 = ind.Z1; sol.Z2 = ind.Z2;
-                    sol.X = X; sol.R = R; sol.A = A_by_rank[r]; sol.W = W;
-                    archive.add(std::move(sol));
-                }
+                try_one(X, R, A_by_rank[r], W, inst, archive);
                 structured_count++;
             }
         }
     }
 
-    // ── Random trials for additional diversity ─────────────────────────────
-    const int extra_trials = std::max(0, num_trials - structured_count);
-    for (int t = 0; t < extra_trials; t++) {
+    // ── Phase 2: Random trials ─────────────────────────────────────────────
+    const int random_budget = std::max(0, num_trials - structured_count);
+    for (int t = 0; t < random_budget; t++) {
         vector<double> R(H, 0.0);
         for (int ki : open_ki) R[ki] = rand01();
 
@@ -271,14 +317,32 @@ static void evaluate_leaf(const vector<int>&  X,
         vector<double> W(6);
         for (auto& w : W) w = rand01();
 
-        Individual ind(H, I);
-        ind.X = X; ind.R = R; ind.A = A; ind.W = W;
-        decode(ind, inst);
-        if (ind.CV < EPS) {
-            Solution sol;
-            sol.Z1 = ind.Z1; sol.Z2 = ind.Z2;
-            sol.X = X; sol.R = std::move(R); sol.A = std::move(A); sol.W = std::move(W);
-            archive.add(std::move(sol));
+        try_one(X, R, A, W, inst, archive);
+    }
+
+    // ── Phase 3: Perturbation around archive members ───────────────────────
+    // Take each Pareto-archive solution found for this X and apply small
+    // Gaussian perturbations to (R, W) to exploit the neighbourhood.
+    // Use 5 perturbations per archive member, σ = 0.15.
+    const int PERTURB_PER_SOL = 5;
+    const double SIGMA_PERTURB = 0.15;
+    // snapshot current archive (may grow during loop — iterate over snapshot)
+    vector<Solution> snap = archive.front;
+    for (const auto& base : snap) {
+        // Only perturb solutions that share this X
+        if (base.X != X) continue;
+        for (int p = 0; p < PERTURB_PER_SOL; p++) {
+            vector<double> R = base.R;
+            for (int ki : open_ki) {
+                R[ki] = std::max(0.0, std::min(1.0,
+                    R[ki] + rand_gauss(SIGMA_PERTURB)));
+            }
+            vector<double> W = base.W;
+            for (auto& w : W) {
+                w = std::max(0.0, std::min(1.0,
+                    w + rand_gauss(SIGMA_PERTURB)));
+            }
+            try_one(X, R, base.A, W, inst, archive);
         }
     }
 }
@@ -400,7 +464,7 @@ int main(int argc, char* argv[]) {
 
     string inst_path  = argv[1];
     string out_path   = "";
-    int    num_trials = 80;   // sub-problem evaluations per leaf
+    int    num_trials = 500;  // sub-problem evaluations per leaf (structured + random + perturbation)
     double time_limit = 3600.0;
 
     for (int i = 2; i < argc; i++) {
