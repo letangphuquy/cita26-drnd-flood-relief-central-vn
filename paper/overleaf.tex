@@ -4,68 +4,74 @@
 %
 \documentclass{llncs}
 
-%
-% \usepackage{graphicx}
-% Used for displaying a sample figure. If possible, figure files should
-% be included in EPS format.
-%
-% If you use the hyperref package, please uncomment the following line
-% to display URLs in blue roman font according to Springer's eBook style:
-% \renewcommand\UrlFont{\color{blue}\rmfamily}
+% ─── Encoding & Fonts ─────────────────────────────────────────────────────────
 \usepackage[utf8]{inputenc}
-\usepackage{indentfirst}
-\usepackage{hyperref}
-\usepackage{graphicx}
-\usepackage{lmodern}  % Use a scalable font (lmodern)
-\usepackage{float}
-\usepackage{multirow,tabularx}
-\usepackage{seqsplit}
+\usepackage{lmodern}              % Scalable font
+
+% ─── Mathematics ──────────────────────────────────────────────────────────────
 \usepackage{amsmath}
-\usepackage{regexpatch}
-% \usepackage{amsthm}
-\usepackage{array} % table
-\usepackage{multirow} % dung cho table
-\usepackage{arydshln} % Gói hỗ trợ đường nét đứt trong bảng
-\usepackage{longtable}
+% \usepackage{amsthm}             % Uncomment if theorem environments needed
+
+% ─── Tables ───────────────────────────────────────────────────────────────────
+\usepackage{array}
+\usepackage{multirow}
 \usepackage{tabularx}
 \usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{arydshln}             % Dashed lines in tables
 \usepackage{adjustbox}
-\usepackage{multirow}
-\usepackage{algorithm,algorithmic} 
-\usepackage{algpseudocode}
-\usepackage{indentfirst}
-\usepackage{etoolbox} % Ensure etoolbox package is included
 
-\usepackage{marvosym} % for \Letter
+% ─── Figures & Floats ─────────────────────────────────────────────────────────
+\usepackage{graphicx}
+\usepackage{float}
+
+% ─── Algorithms ───────────────────────────────────────────────────────────────
+\usepackage{algorithm, algorithmic}
+\usepackage{algpseudocode}
+
+% ─── Layout & Formatting ──────────────────────────────────────────────────────
+\usepackage{indentfirst}
+\usepackage{seqsplit}
+
+% ─── Patching & Utilities ─────────────────────────────────────────────────────
+\usepackage{etoolbox}
+\usepackage{regexpatch}
+
+% ─── Symbols & Icons ──────────────────────────────────────────────────────────
+\usepackage{marvosym}             % \Letter and other symbols
+
+% ─── References & Links ───────────────────────────────────────────────────────
 \usepackage{cite}
+\usepackage{hyperref}
+% \renewcommand\UrlFont{\color{blue}\rmfamily}  % Springer eBook URL style
+% \bibliographystyle{splncs04}
+
+% ─── Custom Commands ──────────────────────────────────────────────────────────
 \newcommand{\quo}[1]{``#1''}
 \newcommand{\mycomment}[1]{}
+\newcommand{\Indent}{\hspace{1.5em}}
+\newcommand{\EndIndent}{}
 
-
-\newcommand{\Indent}{\hspace{1.5em}} % Define indentation
-\newcommand{\EndIndent}{} % No special ending required
 \makeatletter
 \newcommand{\printfnsymbol}[1]{%
   \textsuperscript{\@fnsymbol{#1}}%
 }
-% \usepackage{vntex}
-% \usepackage[utf8]{inputenc}
-% \bibliographystyle{splncs04}
-
+\makeatother
 
 \begin{document}
-%
 % \title{Developing a Multi-Objective Evolutionary Algorithm for Disaster Relief Hub Network Design}
-\title{Modeling the disaster relief hub network design problem: A case of Central Vietnam}
-%
-\titlerunning{MOEA for Disaster Relief HLP}
+% \title{Modeling and solving the disaster relief hub network design problem: A case of Central Coastal Vietnam}
+\title{Humanitarian Logistics Hub Network Design Under Uncertainty: A Multi-Objective Model and Priority-Based Genetic Algorithm for Central Coastal Vietnam}
+
+% \titlerunning{MOEA for Disaster Relief HLP}
+\titlerunning{Multi-Objective Flood Relief Hub Network Design via PB-NSGA}
 % If the paper title is too long for the running head, you can set
 % an abbreviated paper title here
 %
 \author{
     Phu-Quy Le-Tang\inst{1} \and
     Quang-Vu Nguyen \inst{1} \and
-    Sunarin Chanta \inst{2}\thanks{Corresponding author.}
+    Sunarin Chanta \inst{2} \thanks{Corresponding author.}
 }
 
     %
@@ -107,12 +113,63 @@ In 2025 alone, a relentless sequence of typhoons and record-breaking floods in C
 Natural disasters are becoming more frequent and violent. Extreme floods in 2025 caused over 1,100 fatalities across Southeast Asia \cite{CDP2025}. These disasters expose supply chain weaknesses and cause massive economic losses \cite{ASEAN2021}. As a coastal country, Vietnam is vulnerable to typhoons and heavy floods. Climate change has made the weather events become more extreme. The year 2025 witnesses a relentless sequence of 15 typhoons and 6 tropical depressions for Vietnam, resulting in a total economic loss estimated at nearly 98.7 trillion VND (approximately 4 billion USD) and leaving 468 people dead or missing by year-end \cite{VOV2025, HanoiTimes2025}. Multiple meteorological records were broken. Central Vietnam and Nghe An provinces faced a record flood peak of 12,800 m3/s at the Ban Ve reservoir. At the Bach Ma peak, daily rainfall reached 1,740 mm, marking the highest level ever recorded in Vietnam's meteorological history. Additionally, rainfall in Dak Lak and the South Central region reached 1,900 mm, causing river levels to surpass the historical flood marks previously set in 1986 and 1993 \cite{VOV2025}.
 }
 
-There were many great challenges in humanitarian operations during this period, one of them being the severe disruption of national logistics infrastructure. The North-South Railway -- backbone of Vietnam's transport network was paralyzed due to track erosion and submersion, forcing the cancellation of 170 trains \cite{HanoiTimes2025}. Simultaneously, key arteries such as the National Highway 1 and routes in the Central Highlands were severed by landslides, isolating communities for days \cite{ReliefWeb2020}. These events demonstrate that during a major catastrophe, the assumption of a fully connected transport network is fundamentally flawed. The physical network becomes \quo{incomplete}, characterized by broken links and isolated nodes. 
-Another challenge is resource scarcity resulting from poor planning and uncertain supply and demand. Disaster management involves four phases: mitigation, preparedness, response, and recovery \cite{altay2006or}. Disaster Relief Network Design (DRND) bridges the preparedness and response phases by optimizing facility locations and relief routing.
+There were many great challenges in humanitarian operations during this period.
+Most critically, national logistics infrastructure suffered severe disruption: the North-South Railway was paralyzed by track erosion and submersion, forcing the cancellation of 170 trains~\cite{HanoiTimes2025}, while key arteries such as National Highway 1 were severed by landslides, isolating communities for days~\cite{ReliefWeb2020}.
+These events demonstrate that during a major catastrophe, the assumption of a fully connected transport network is fundamentally flawed -- the physical network becomes \quo{incomplete}, characterized by broken links and isolated nodes.
+Compounding this, resource scarcity arising from poor planning and uncertain supply and demand further strains relief efforts.
+Disaster management involves four phases: mitigation, preparedness, response, and recovery~\cite{altay2006or}; Disaster Relief Network Design (DRND) bridges the preparedness and response phases by optimizing facility locations and relief routing.
+
+% There were many great challenges in humanitarian operations during this period, one of them being the severe disruption of national logistics infrastructure. The North-South Railway -- backbone of Vietnam's transport network was paralyzed due to track erosion and submersion, forcing the cancellation of 170 trains \cite{HanoiTimes2025}. Simultaneously, key arteries such as the National Highway 1 and routes in the Central Highlands were severed by landslides, isolating communities for days \cite{ReliefWeb2020}. These events demonstrate that during a major catastrophe, the assumption of a fully connected transport network is fundamentally flawed. The physical network becomes \quo{incomplete}, characterized by broken links and isolated nodes. 
+% Another challenge is resource scarcity resulting from poor planning and uncertain supply and demand. Disaster management involves four phases: mitigation, preparedness, response, and recovery \cite{altay2006or}. Disaster Relief Network Design (DRND) bridges the preparedness and response phases by optimizing facility locations and relief routing.
 % Another great challenge is the lack of resources due to improper planning in the preparedness phase. Furthermore, both the demand and the supply are unknown in advance. According to the CITATION, there are four phases in disaster management: mitigation, preparedness, response, and recovery. The task of locating the rescue centers and designing a network to efficiently evacuate victims, or route the relief items to the affected areas, is termed Disaster Relief Network Design (DRND), and it is an important bridge between the Preparedness and Response phases.
 
+% ============================================================
+%  DROP THIS BLOCK INTO YOUR INTRODUCTION SECTION
+%  (replacing the existing \subsection{Related Works})
+%
+%  NEW .bib entries required (append to cite-class.bib):
+%    alumur2009incomplete, sangsawang2020capacitated,
+%    elci2018chance, gen2006priority
+%  All other \cite{} keys already exist in your .bib.
+% ============================================================
 
+\subsection{Related Works}
 
+\textbf{Humanitarian logistics and facility location.}
+Humanitarian logistics differs fundamentally from its commercial counterpart in that speed and equity dominate over cost minimisation~\cite{van2006humanitarian, kovacs2007humanitarian}.
+A comprehensive review of humanitarian facility location under uncertainty~\cite{donmez2021humanitarian} identifies stochastic programming and robust optimisation as the dominant paradigms, while Boonmee et al.~\cite{boonmee2017facility} document the growing need for models that jointly capture disruption, uncertainty, and equity.
+Critically, Holgu{\'i}n-Veras et al.~\cite{HolguinVeras2012, holguin2013appropriate} argued that purely cost-based objectives neglect social welfare, and proposed \emph{deprivation cost} -- an exponential penalty on victim waiting time -- as the appropriate humanitarian objective.
+
+\textbf{Hub location and incomplete networks.}
+Hub-and-spoke structures consolidate flows efficiently and have been studied extensively since Campbell's seminal formulations~\cite{campbell1994integer}.
+For disaster settings, the \emph{incomplete} hub network -- in which infrastructure damage severs inter-hub arcs -- is a more realistic topology than the classical fully-connected graph~\cite{alumur2009incomplete}.
+Sangsawang and Chanta~\cite{sangsawang2020capacitated} proposed a pioneering flood-specific hub location model, a single-objective deterministic formulation for Thailand, establishing that hub-and-spoke structures yield measurable gains in relief distribution efficiency.
+Multi-modal hub networks further address the heterogeneous transport modes (road, waterway, air) that characterise disaster response~\cite{Li2023}.
+
+\textbf{Stochastic and robust optimisation for relief networks.}
+The two-stage stochastic programming framework naturally separates pre-disaster strategic decisions from post-disaster recourse~\cite{elci2018chance, tofighi2016humanitarian}.
+Under demand and supply uncertainty, robust formulations~\cite{Yahyaei2019, sun2022novel} and prepositioning models~\cite{abazari2021prepositioning} have been shown to outperform deterministic baselines.
+Disruption of transportation infrastructure compounds this uncertainty by rendering pre-planned routes infeasible~\cite{salman2015emergency}, a condition endemic to Central Vietnam's flood disasters.
+
+\textbf{Multi-objective evolutionary algorithms.}
+NSGA-II~\cite{deb2002fast} is the standard framework for multi-objective
+combinatorial problems in humanitarian logistics, owing to its parameter-free
+Pareto ranking and elitist selection.
+Zhou et al.~\cite{Zhou2017} applied a multi-objective evolutionary algorithm
+to multi-period dynamic emergency resource scheduling under uncertain road
+networks, demonstrating the effectiveness of population-based search when
+scenario-dependent decisions are coupled to shared strategic variables.
+Li et al.~\cite{Li2023} designed a bi-objective multimodal hub-and-spoke
+network for emergency relief using a meta-heuristic approach, showing that
+problem-specific customized operators are essential for maintaining feasibility
+across complex network topologies.
+
+\textbf{Research gap and contributions.}
+No existing work simultaneously addresses incomplete hub network design, two-stage stochastic programming, multi-objective humanitarian objectives (logistics cost and deprivation cost), and a flood-disaster case study.
+Sangsawang and Chanta~\cite{sangsawang2020capacitated} is the closest precedent, yet it is deterministic and single-objective.
+The present paper closes this gap by proposing MO-IHLNDP -- a two-stage stochastic multi-objective incomplete hub location model integrating Daganzo's CA for last-mile cost estimation -- and PB-NSGA-II, a priority-based~\cite{gen2006priority} evolutionary algorithm that efficiently reconstructs second-stage decisions across flood scenarios in Central Coastal Vietnam.
+
+\mycomment{
 \subsection{Related Works}
 
 The design of disaster relief networks differs fundamentally from commercial logistics. Commercial models prioritize profit maximization. Humanitarian logistics prioritizes human lives and rapid response \cite{van2006humanitarian}. Facility location is a critical component of disaster preparedness. A comprehensive review by Boonmee et al. \cite{boonmee2017facility} highlights the growing need for facility location models under severe uncertainty. 
@@ -127,7 +184,7 @@ The design of disaster relief networks differs fundamentally from commercial log
 
 \textbf{Research Gap and Our Contribution.} Existing literature contains a significant gap. Very few studies integrate incomplete hub networks, Daganzo's continuous approximation, and exponential deprivation costs under a two-stage stochastic framework. Solving such a combined model is computationally prohibitive for exact solvers. Our study addresses this gap. We formulate the MO-IHLNDP and propose a meta-heuristic algorithm named Priority-Based NSGA-II, which can handle large-scale instances effectively.
 
-\mycomment{
+
 \subsection{My Draft}
 \textbf{I rethought carefully. I'd develop a more manageable and approachable model}.
 \begin{figure}
@@ -146,32 +203,11 @@ The design of disaster relief networks differs fundamentally from commercial log
 
 \section{Problem Description and Mathematical Model}
 
-% TO-DO: Draw a figure for the model and insert it here
+To design an efficient disaster relief network (DRND) for flood disaster response in Central Vietnam, we frame the problem as a multi-objective incomplete hub location network design problem (MO-IHLNDP) -- the capacitated, single-allocation variant of the HLP. The network comprises three main components: origins, hubs, and demands. Hubs refer to rescue stations of two kinds: the first is established in advance of the disaster, strategically positioned and pre-inventoried with amenities; the second is opened dynamically during response, prioritizing approachability to affected areas. \textbf{Demands} refer to victim groups discovered progressively during operations, while \textbf{origins} represent both government-planned forces and spontaneous volunteers.
 
-To design an efficient disaster relief network (DRND), specifically adjusted for flood disaster response in Central Vietnam, we framed the problem as a multi-objective incomplete hub location network design problem (MO-IHLNDP). This model is the capacitated, single-allocation variant of the HLP. 
+From a practical standpoint, DRND involves two critical uncertainty factors. First, infrastructure disruption -- damaged roads and buildings -- can disable pre-programmed plans, urging the need for a dynamic solution~\cite{Yahyaei2019}. Second, the exact locations of demands, the total number of victims, and the availability of origins are all highly uncertain during rescue operations~\cite{tofighi2016humanitarian}. To account for these, we employ a two-stage stochastic programming approach across multiple scenarios, each assigning a specific risk factor per area, and assume that SAR operations rely heavily on dynamic external supply sources, as pre-positioned hubs may not fully satisfy uncertain demands under extreme scenarios.
 
-The main components of our network are origins, hubs, and demands. In our practical settings, hubs refer to the rescue stations. There are two kinds of hubs, corresponding to two kinds of strategies. The first type is established in advance of the disasters, strategically positioned, and inventoried with amenities. The second type is opened dynamically for disaster response and has high approachability to affected areas. Lastly, during the disaster response, we gradually discover the victim groups, which are referred to as \textbf{demands}. Besides the government's planned forces, some volunteers spontaneously offer to help; these are referred to as \textbf{origins}.
-
-From a practical point of view, DRND involves multiple critical uncertainty factors. 
-Firstly, the disruption of transportation infrastructure (e.g., damaged roads and buildings) can easily disable pre-programmed plans, urging the need for a dynamic solution \cite{Yahyaei2019}. 
-Secondly, the exact locations of the demands, the total number of victims, and the availability of supply origins are highly uncertain during the rescue process \cite{tofighi2016humanitarian}. 
-
-\mycomment{
-From a practical point of view, we can observe many uncertainty factors involved. 
-Firstly, traffic infrastructure such as roads or buildings may be damaged and unavailable. 
-The disruption of the transportation network may disable many programmed plans, urging the need for a dynamic solution \cite{Yahyaei2019}. 
-Secondly, we cannot know in advance the exact positions of demands and may not identify all the victims during the rescue process. 
-Furthermore, the exact number of people who need help, as well as the availability of origins, is highly uncertain \cite{tofighi2016humanitarian}.
-}
-
-To account for these uncertainties, we employ a two-stage stochastic programming approach utilizing multiple scenarios. 
-In each scenario, a specific risk factor is assigned to each area. We also assume that search and rescue (SAR) operations rely heavily on dynamic external supply sources, as pre-positioned hubs may not fully satisfy the uncertain demands under extreme scenarios.
-
-Finally, the model places a strong emphasis on \textit{social equity} by integrating the deprivation cost \cite{holguin2013appropriate}. To obtain a robust approximation of the rescue time from an established hub to its assigned demand points without causing computational intractability, we utilize Daganzo's continuous approximation formula \cite{daganzo2005logistics}, a technique widely adopted in routing problems.
-
-% To account for this, we use a two-stage stochastic programming approach, in which multiple scenarios are considered. In each scenario, a risk factor is assigned to each area. We also assume that the search and rescue (SAR) operations rely on a large proportion of supply coming from external sources, as it is not always the case that the pre-positioned hubs can satisfy all the uncertain demands under extreme scenarios.
-
-% The model also puts \textit{social equity} as one of the main objectives to be optimized by considering the deprivation cost \cite{holguin2013appropriate}. Furthermore, to obtain a robust approximation of the rescue time from an established hub to its assigned demand points, we utilized Daganzo's continuous approximation formula \cite{daganzo2005logistics}, which is widely adopted in the Vehicle Routing Problem.
+Finally, the model places strong emphasis on \textit{social equity} by integrating the deprivation cost~\cite{holguin2013appropriate}, and adopts Daganzo's continuous approximation~\cite{daganzo2005logistics} to obtain a tractable yet robust estimate of rescue time from each hub to its assigned demand points.
 
 \subsection{Sets and Indices}
 \noindent
@@ -202,6 +238,8 @@ $\tau_{ks}$ & Processing time for each rescue round trip at hub $k$ in scenario 
 $a_{uvms}$ & Accessibility of arc $(u,v)$ via mode $m$ in scenario $s$ (1 if traversable, 0 otherwise) \\
 $r_{us}, \lambda_{is}$ & Risk index of node $u$, and deprivation sensitivity coefficient for demand $i$ in scenario $s$ \\
 $D_{is}, O_{js}$ & Demand (number of people to evacuate) at $i$, and relief items provided at origin $j$ in scenario $s$ \\
+$c_{jks}$             & Pre-computed cheapest transport cost from origin $j$ to hub $k$ in scenario $s$:
+                        $c_{jks} = \min_{m \in \mathcal{M} \mid a_{jkms}=1} C_{jkm}$, ($+\infty$ if no available mode) \\
 $\Theta_{kis}$ & Pre-computed CA routing cost to execute the evacuation from grid $i$ to hub $k$ in scenario $s$ \\
 $\Phi, \eta, A_i$ & Daganzo's circuity factor, average group size per distress location, and area of grid cell $i$ \\
 \end{tabular}
@@ -224,7 +262,8 @@ $f_{khms} \ge 0$ & Lateral trans-shipment flow volume from hub $k$ to hub $h$ vi
 \begin{aligned}
     \text{Min } Z_1 = & \underbrace{\sum_{k \in \mathcal{H}} F_k x_k + \sum_{k \in \mathcal{H}} c_k q_k}_{\text{Pre-disaster strategic costs}} \\
     & + \sum_{s \in \mathcal{S}} \pi_s \Bigg[ \underbrace{\sum_{k \in \mathcal{H}} F_{ks}^a y_{ks}}_{\text{Reactive setup}} 
-    + \underbrace{\sum_{j \in \mathcal{J}} \sum_{k \in \mathcal{H}} \left( \min_{m \in \mathcal{M} \mid a_{jkms}=1} C_{jkm} \right) O_{js} z_{jks}}_{\text{Origin to Hub supply flow}} \\
+    + \underbrace{\sum_{j \in \mathcal{J}} \sum_{k \in \mathcal{H}} c_{jks} \cdot O_{js} z_{jks}}_{\text{Origin to Hub supply flow}} \\
+    % + \underbrace{\sum_{j \in \mathcal{J}} \sum_{k \in \mathcal{H}} \left( \min_{m \in \mathcal{M} \mid a_{jkms}=1} C_{jkm} \right) O_{js} z_{jks}}_{\text{Origin to Hub supply flow}} \\
     % + \underbrace{\sum_{j \in \mathcal{J}} \sum_{k \in \mathcal{H}} \sum_{m \in \mathcal{M}} C_{jkm} O_{js} z_{jks}}_{\text{Origin to Hub supply flow}} \\
     & + \underbrace{\sum_{k \in \mathcal{H}} \sum_{h \in \mathcal{H}} \sum_{m \in \mathcal{M}} \alpha C_{khm} f_{khms}}_{\text{Inter-hub lateral trans-shipment}} 
     + \underbrace{\sum_{k \in \mathcal{H}} \sum_{i \in \mathcal{I}} \Theta_{kis} z_{iks}}_{\text{Grid-based Last-Mile CA}} 
@@ -291,48 +330,211 @@ Constraint \eqref{eq:trans_path} restricts flow to be trans-shipped on intact pa
 Constraints \eqref{eq:flow_balance} and \eqref{eq:throughput_cap} maintain flow conservation and capacity limits. Specifically, \eqref{eq:flow_balance} ensures that total supply, comprising inventory ($q_k$), external origins ($O_{js}$), and incoming flows -- satisfies both victim demand (converted by $\gamma$) and outgoing trans-shipments.
 Variable domains are defined in \eqref{eq:binary_vars}-\eqref{eq:nonneg_vars}.
 
-\section{Proposed Algorithm: PB-NSGA-II}
+% ============================================================
+%  REPLACE YOUR EXISTING \section{Proposed Algorithm: PB-NSGA}
+% ============================================================
 
-The MO-IHLNDP is NP-hard due to its combinatorial structure and non-linear $Z_2$. Exact solvers are intractable beyond small instances. We therefore propose the \textbf{Priority-Based NSGA-II (PB-NSGA-II)}. It integrates a custom decoding heuristic into the NSGA-II framework \cite{deb2002fast}. 
+\section{Proposed Algorithm: PB-NSGA}
 
-The key design principle is \emph{implicit encoding}. Only first-stage strategic variables are encoded in the chromosome. All second-stage variables are reconstructed deterministically by the decoder for each scenario $s \in \mathcal{S}$. This drastically reduces the search space from $O(|\mathcal{S}| \times |\mathcal{V}|)$ to $O(|\mathcal{H}|)$.
+The MO-IHLNDP is NP-hard, as its single-objective, single-scenario relaxation subsumes the uncapacitated facility location problem~\cite{cornuejols1990exceptional}. 
+We therefore propose \textbf{PB-NSGA} (Priority-Based Nondominated Sorting Genetic Algorithm), which embeds the NSGA-II framework~\cite{deb2002fast} with a custom heuristic encoder-decoder scheme.
 
-\subsection{Chromosome Encoding}
+\subsection{Chromosome Encoding Scheme}
 
-
-Each chromosome $\mathbf{C} = (\mathbf{X}, \mathbf{R}, \mathbf{W})$ encodes three segments:
-\begin{itemize}
-    \item $\mathbf{X} \in \{0,1\}^{|\mathcal{H}|}$: binary hub activation vector. $X_k=1$ if and only if hub $k$ is planned before the disaster.
-    \item $\mathbf{R} \in [0,1]^{|\mathcal{H}|}$: inventory ratio vector. The absolute pre-positioned inventory is decoded as:
-    \begin{equation*}
-        q_k = R_k \cdot \frac{\hat{D}}{n_{\text{open}}}, \quad n_{\text{open}} = \textstyle\sum_{k} X_k,
-    \end{equation*}
-    where $\hat{D} = \gamma \cdot \max_{s}\sum_{i} D_{is}$ is the worst-case total demand in kg. This encoding ensures complete coverage. When $R_k = 1$ for all open hubs, the combined inventory exactly covers the worst-case demand. Capacity $\kappa_k$ acts as a soft upper bound.
-    \item $\mathbf{W} = (w_1, w_2, w_3) \in [0,1]^3$: heuristic weight vector. It governs the priority scoring during decoding.
-\end{itemize}
+Each chromosome $\mathbf{C} = (\mathbf{X}, \mathbf{R}, \mathbf{A}, \mathbf{W})$ consists of four segments. The binary vector $\mathbf{X} \in \{0,1\}^{|\mathcal{H}|}$ determines planned hub establishment. The continuous vector $\mathbf{R} \in [0,1]^{|\mathcal{H}|}$ defines the inventory fill fraction, setting $q_k = R_k \cdot \kappa_k$. The integer vector $\mathbf{A} \in \{0,\ldots,|\mathcal{H}|-1\}^{|\mathcal{I}|}$ encodes the preferred anchor hub for each demand $i$. The continuous vector $\mathbf{W} \in [0,1]^6$ contains six heuristic weights governing the decoder: $w_0$ and $w_3$ dictate demand sorting priority by urgency ($\lambda \cdot D$) and isolation; $w_1$, $w_2$, $w_4$ score candidate hubs by travel time, residual inventory, and preference for planned over reactive hubs; $w_5$ controls conservatism towards opening new reactive hubs.
 
 \subsection{Priority-Based Decoding Heuristic}
+\label{sec:decoder}
 
+The decoder is invoked once per chromosome per scenario $s \in \mathcal{S}$, reconstructing all second-stage decisions from $\mathbf{C}$ in four steps.
 
-The decoder is invoked for each scenario $s$. It proceeds through four steps:
+\textbf{Step 1 -- Initialisation.} Planned hubs with $X_k = 1$ and $r_{ks} \le \chi$ are activated with pre-positioned inventory $q_k = R_k \cdot \kappa_k$; if none qualify, the safest hub is forced active. The proximity order $\pi_k$, ranking all hubs by ascending distance from anchor hub $k$, is pre-computed once.
 
-\textbf{Step 1 -- Hub Activation.} Planned hubs ($X_k=1$) with risk $r_{ks} \le \chi$ are activated. If no planned hub is safe, the hub with the lowest risk is activated reactively. Additional reactive hubs ($y_{ks}=1$) may be activated later for unserviceable demand nodes.
+\textbf{Step 2 -- Demand Prioritisation.} Each demand node $i$ receives a composite score
+\begin{equation}
+    \text{Score}_i = w_0\,\widetilde{\text{urgency}}_i + w_3\,\widetilde{\text{isolation}}_i - w_1\,\widetilde{\text{dist}}_i + \varepsilon_i,
+    \label{eq:demand_score}
+\end{equation}
+where urgency $= \lambda_{is}D_{is}$, isolation $= 1/|\mathcal{H}_{\text{act},i}|$, and dist $=$ minimum travel time to any active hub, each normalised to $[0,1]$; $\varepsilon_i \sim \mathcal{N}(0,\sigma)$ prevents premature convergence. Demands are processed in descending score order.
 
-\textbf{Step 2 -- Priority-Based Demand Assignment.} Each demand node $i$ is assigned a priority score:
-\begin{equation*}
-    \text{Score}_i = w_1 \cdot (\lambda_{is} \cdot D_{is}) - w_2 \cdot \min_{k \in \text{active}} \tau_{ikm^*},
-\end{equation*}
-where $m^* = \arg\min_m \tau_{ikm}$ subject to $a_{ikms}=1$. Demands are sorted descendingly. They are assigned greedily to the highest-scoring active hub reachable via at least one mode. If no active hub can reach demand $i$, a reactive hub is opened from among safe candidates. Failing that, a constraint violation (CV) penalty of $\gamma D_{is}$ is incurred.
+\textbf{Step 3 -- Tiered Hub Assignment.} For each demand $i$, the trial order follows $\pi_{A_i}$. Let $K = \max(1, \lceil w_5 \cdot |\mathcal{H}| \rceil)$. \textit{Pass 1} selects the hub maximising $\text{HubScore}(k) = w_1/\tau_{ikm^*} + w_2 \cdot \text{residual}_k + w_4 \cdot \mathbf{1}[X_k=1]$ among the $K$ closest-to-anchor hubs that are active, reachable, and have positive residual inventory. If Pass~1 fails, \textit{Pass~2} assigns $i$ to the first active reachable hub from the remaining candidates (capacity violation permitted). If both passes fail, a \textit{reactive fallback} opens the nearest safe inactive hub at cost $F^a_{ks}$; irrecoverable infeasibility accumulates as constraint violation.
 
-\textbf{Step 3 -- Origin Assignment and Flow Balancing.} Each origin $j$ is routed to the nearest active hub. A greedy trans-shipment loop then iteratively routes relief from surplus hubs to deficit hubs. It uses the cheapest available mode and incorporates the economies-of-scale discount $\alpha$. Remaining deficits contribute proportionally to the CV score.
+\textbf{Step 4 -- Supply Routing and Objective Accumulation.} Origins are greedily assigned to the most under-supplied active hub. Surplus inventory is redistributed via inter-hub trans-shipment with discount $\alpha$. $Z_1$ and $Z_2$ are accumulated as probability-weighted expectations over all $s \in \mathcal{S}$. Algorithm~\ref{alg:decoder} formalises Steps 1--4.
 
-\textbf{Step 4 -- Objective Evaluation.} $Z_1$ and $Z_2$ are accumulated as weighted expectations over scenarios using Equations (\ref{eq:obj1}) and (\ref{eq:obj2}). The deprivation waiting time is $\Omega_{is} = \tau_{ks} + 2\tau_{ikm^*}$. It is capped to prevent numerical overflow.
+\begin{algorithm}[htbp]
+\caption{Priority-Based Decoder (single scenario $s$)}
+\label{alg:decoder}
+\begin{algorithmic}[1]
+\REQUIRE Chromosome $\mathbf{C}=(\mathbf{X},\mathbf{R},\mathbf{A},\mathbf{W})$, scenario $s$, instance data
+\ENSURE $(Z_1^s,\,Z_2^s,\,\text{CV}^s)$
+\STATE Activate $\mathcal{H}_{\text{act}}\leftarrow\{k:X_k\!=\!1,\;r_{ks}\!\le\!\chi\}$; set $q_k\!\leftarrow\!R_k\kappa_k$
+\IF{$\mathcal{H}_{\text{act}}=\emptyset$} \STATE Force-activate $\arg\min_k r_{ks}$ among $\{k:X_k\!=\!1\}$ \ENDIF
+\STATE Score each demand $i$ by Eq.~\eqref{eq:demand_score}; sort in descending order
+\FOR{each demand $i$ (in priority order)}
+    \STATE $K\leftarrow\max(1,\lceil w_5|\mathcal{H}|\rceil)$; trial order $\leftarrow\pi_{A_i}$
+    \STATE \textit{Pass~1:} $k^*\leftarrow\arg\max\,\text{HubScore}(k)$ over first $K$ active, reachable hubs with residual~$>0$
+    \IF{Pass~1 succeeds}
+        \STATE Assign $i\!\to\!k^*$; deduct demand from residual inventory of $k^*$
+    \ELSIF{any active reachable hub remains}
+        \STATE \textit{Pass~2:} assign $i$ to first such hub (capacity violation allowed)
+    \ELSE
+        \STATE \textit{Reactive fallback:} open nearest safe inactive hub; add $F^a_{ks}$; $\text{CV}^s\!\mathrel{+}=\!1$
+    \ENDIF
+\ENDFOR
+\STATE Assign origins greedily; redistribute surplus via inter-hub trans-shipment (discount $\alpha$)
+\STATE Accumulate $Z_1^s$, $Z_2^s$
+\RETURN $(Z_1^s,\,Z_2^s,\,\text{CV}^s)$
+\end{algorithmic}
+\end{algorithm}
 
 \subsection{Genetic Operators and Selection}
 
-The mixed-type chromosome requires mode-specific operators. \emph{Selection} uses a binary tournament on rank and crowding distance. \emph{Crossover} ($p_c = 0.9$) utilizes Uniform Crossover for $\mathbf{X}$ and Simulated Binary Crossover (SBX, $\eta_c = 20$) for $\mathbf{R}$ and $\mathbf{W}$. \emph{Mutation} ($p_m \propto 1/|\mathbf{C}|$) applies Bit-flip for $\mathbf{X}$ and Polynomial mutation ($\eta_m = 20$) for $\mathbf{R}$ and $\mathbf{W}$. 
+\emph{Selection} uses binary tournament on Pareto rank with crowding distance as tiebreaker. \emph{Crossover} ($p_c = 0.9$) applies Uniform Crossover to $\mathbf{X}$ and $\mathbf{A}$, and SBX ($\eta_c = 20$) to $\mathbf{R}$ and $\mathbf{W}$. \emph{Mutation} ($p_m = 1/|\mathbf{C}|$) applies Bit-flip to $\mathbf{X}$, random-reset to $\mathbf{A}$, and Polynomial mutation ($\eta_m = 20$) to $\mathbf{R}$ and $\mathbf{W}$. Constraint handling follows the constrained-dominance principle~\cite{deb2002fast}: feasible solutions always dominate infeasible ones; among infeasible solutions, lower CV dominates. When a partial Pareto front must be split, tiebreaking proceeds by (1) Pareto rank, (2) crowding distance, (3) minimum Hamming distance in $\mathbf{X}$-space -- preserving genotypic diversity in hub configuration and countering premature convergence.
 
-Constraint handling follows the constrained-dominance principle. Infeasible solutions (CV $> 0$) are always dominated by feasible ones. Among infeasible solutions, a lower CV dominates. The Pareto archive uses fast non-dominated sorting with crowding distance tie-breaking.
+\mycomment{
+\section{Proposed Algorithm: PB-NSGA}
+The proposed model MO-IHLNDP is NP-hard.
+% [TO-DO: Briefly prove this via equivalent reduction cite{21 NP hard problems}].
+In this work, we propose a meta-heuristic named \textbf{PB-NSGA} -- Priority-based Nondominated Soring Genetic Algorithm, which combines the NSGA-II framework \cite{deb2002fast} with a custom heuristic encoder-decoder scheme. 
+
+\subsection{Chromosome encoding scheme}
+
+In GA \cite{holland1992genetic}, a chromosome encodes the decision variables (thus, the implied solution) in its representation. In PB-NSGA, only first-stage strategic decisions are carried in the chromosome and optimized via evolution, while second-stage variables are reconstructed for each scenario $s \in \mathcal{S}$ using the heuristic decoder. 
+
+Specifically, each chromosome $\mathbf{C} = (\mathbf{X}, \mathbf{R}, \mathbf{A}, \mathbf{W})$ consists of four encoded segments. The binary vector $\mathbf{X} \in \{0,1\}^{|\mathcal{H}|}$ determines the establishment of planned hubs ($X_k = 1$). The continuous vector $\mathbf{R} \in [0,1]^{|\mathcal{H}|}$ defines the inventory fill fraction,  setting the pre-positioned inventory as $q_k = R_k \cdot \kappa_k$. The integer vector $\mathbf{A} \in \{0,\ldots,|\mathcal{H}|-1\}^{|\mathcal{I}|}$ defines the preferred group of proximate hubs for each demand $i$. 
+
+Lastly, the continuous vector $\mathbf{W} \in [0,1]^6$ contains six heuristic weights governing the decoder's behavior.
+% For each individual, the weight vector $\mathbf{W}$ encodes the strategy of the decoder. 
+$w_0$ and $w_3$ dictate the demand sorting priority, favoring demands with high urgency ($\lambda \cdot D$) and severe isolation (fewer reachable hubs). During the assignment phase, $w_1$, $w_2$, and $w_4$ score the candidate hubs by prioritizing faster travel times, higher residual inventory, and a preference for planned hubs over reactive ones. Finally,  $w_5$ controls the conservatism towards opening new reactive hubs. This approach effectively reduces the search space from $O(|\mathcal{S}| \times |\mathcal{V}|)$ to $O(|\mathcal{H}|)$. 
+
+% BIG TO-DO: Fix the algorithm according to new $A$ definition
+
+\subsection{Priority-based heuristic decoder}
+\label{sec:decoder}
+
+For evaluation of objective values $Z_1, Z_2$, the decoder is invoked once per chromosome per scenario $s$. We pre-compute, for each demand node $i$, the list of all hubs sorted by increasing Euclidean distance: $\text{order}[i] = (k_{(1)}, k_{(2)}, \ldots, k_{(|\mathcal{H}|)})$.
+
+\textbf{Step 1 -- Hub Activation.} Planned hubs with $X_k = 1$ and risk $r_{ks} \le \chi$ are activated. If none qualify, the safest planned hub is forced active as a fallback.
+
+\textbf{Step 2 -- Inventory Allocation.} Each active hub $k$ receives inventory $q_k = R_k \cdot \kappa_k$.
+
+\textbf{Step 3 -- Demand Priority Scoring.} For each demand node $i$, three raw components are computed and independently normalised to $[0,1]$ across the demand set:
+\begin{equation}
+    \text{urgency}_i = \lambda_{is} \cdot D_{is}, \quad
+    \text{isolation}_i = \frac{1}{|\{k \in \mathcal{H}_{\text{act}} : \exists m,\; a_{ikms}=1\}|}, \quad
+    \text{dist}_i = \min_{\substack{k \in \mathcal{H}_{\text{act}},\, m:\\ a_{ikms}=1}} \tau_{ikm}.
+    \label{eq:raw_components}
+\end{equation}
+The composite priority score incorporates Gaussian noise $\varepsilon_i \sim \mathcal{N}(0, \sigma)$ to prevent phenotype collapse across generations:
+\begin{equation}
+    \text{Score}_i = w_0 \cdot \widetilde{\text{urgency}}_i + w_3 \cdot \widetilde{\text{isolation}}_i - w_1 \cdot \widetilde{\text{dist}}_i + \varepsilon_i.
+    \label{eq:demand_score}
+\end{equation}
+Demands are sorted in descending order by $\text{Score}_i$.
+
+\textbf{Step 4 -- Tiered Hub Selection.} For each demand $i$ (in priority order), a hub is selected via a two-pass rotation procedure anchored at offset $A_i$:
+
+\textit{Pass 1 (best-in-window).} Let $K = 3$. Examine the first $K$ candidates in the rotation:
+\begin{equation*}
+    \text{candidate}_j = \text{order}[i][(A_i + j) \bmod |\mathcal{H}|], \quad j = 0, \ldots, K-1.
+\end{equation*}
+Among candidates that are active, reachable ($a_{ikms}=1$ for some $m$), and have positive residual inventory, select the hub maximising:
+\begin{equation}
+    \text{HubScore}(k) = \frac{w_1}{\tau_{ikm^*} + \varepsilon} + w_2 \cdot \text{residual}_k + w_4 \cdot \mathbf{1}[X_k = 1].
+    \label{eq:hub_score}
+\end{equation}
+
+\textit{Pass 2 (fallback).} If Pass~1 yields no eligible hub, scan the remaining candidates ($j = K, \ldots, |\mathcal{H}|-1$) and assign the first active, reachable hub regardless of residual capacity (this may incur a constraint violation).
+
+\textit{Reactive check.} After selecting hub $k^*$ with travel time $\tau^*$, inspect all inactive safe hubs $k'$. If $\tau_{ik'} < (1 - w_5) \cdot \tau^*$, open $k'$ reactively (incurring fixed cost $F^a_{k's}$) and reassign demand $i$. If no hub is reachable at all, a reactive hub is opened as a last resort; failing that, a constraint violation penalty $\gamma D_{is}$ is incurred.
+
+\textbf{Step 5 -- Origin Routing and Trans-shipment.} Each origin $j$ is assigned to the nearest active hub. A greedy trans-shipment loop then routes surplus relief from over-stocked hubs to deficit hubs, using the cheapest available mode and applying the volume discount $\alpha$.
+
+\textbf{Step 6 -- Objective Evaluation.} $Z_1$ and $Z_2$ are accumulated as probability-weighted expectations over all scenarios $s \in \mathcal{S}$ using Equations~\eqref{eq:obj1}--\eqref{eq:obj2}.
+
+\subsection{Genetic Operators and Selection}
+
+The mixed-type chromosome requires mode-specific operators applied per segment. \emph{Selection} uses binary tournament on Pareto rank with crowding distance as a tiebreaker. \emph{Crossover} ($p_c = 0.9$) applies Uniform Crossover to $\mathbf{X}$ and $\mathbf{A}$, and Simulated Binary Crossover (SBX, $\eta_c = 20$) to $\mathbf{R}$ and $\mathbf{W}$. \emph{Mutation} ($p_m = 1/|\mathbf{C}|$, where $|\mathbf{C}| = 2|\mathcal{H}| + |\mathcal{I}| + 6$) applies Bit-flip to $\mathbf{X}$, random-reset to $\mathbf{A}$, and Polynomial mutation ($\eta_m = 20$) to $\mathbf{R}$ and $\mathbf{W}$.
+
+Constraint handling follows the constrained-dominance principle \cite{deb2002fast}: feasible solutions ($\text{CV} = 0$) always dominate infeasible ones; among infeasible solutions, lower CV dominates.
+
+\textbf{Elitist selection with Hamming diversity.} At each generation, the combined parent--offspring pool of $2N$ individuals is trimmed to $N$ via fast non-dominated sorting. When a partial Pareto front must be split, tiebreaking proceeds as: (1) Pareto rank, (2) crowding distance, (3) minimum Hamming distance to the nearest neighbour in $\mathbf{X}$-space. This third criterion preserves genotypic diversity in hub configuration space and counters premature convergence. Hamming distances are recomputed each generation over the $2N$ pool in $O(N^2 |\mathcal{H}|)$ time.
+}
+
+\mycomment{
+UP-NEXT: Experiments
+We should re-arrange the below contents to like this (Experiment: HLP benchmarks -- talk both dataset method and exp. set-up, as well as results) (Experiment: Case study -- present dataset methodology, then the settings, then the results) 
+
+4.1 Experimental Set-up (slight modifications)
+- Implementation
+- Algorithm/ Problem instance parameters
+- Performance metric (add cite for HV and IGD)
+- Results is averaged from 20 runs, taking mean and stddev value
+
+4.2 Dataset description
+Benchmark dataset: Present the method to transform the HLP instances to DRND instances
+
+Central Vietname case study: Present the methodology.
+
+4.3 Experiment 1: Algorithm efficiency 
+- Baseline: complete enumeration (can go for branch \& bound approach)
+- Proposed: PB-NSGA
+- Metrics: HV, IGD, pareto size, algorithm running time.
+
+4.4 Experiment 2: Case study in Vietnam
+- Figure: Pareto Front
+- Solution visualization on Map
+- Insights from the solutions
+}
+
+\section{My draft -- experiments}
+\subsection{Experimental Setup}
+\begin{itemize}
+    \item \textbf{Programming language and machine configuration}. Plan to use the DIMACS 2011 benchmark for machine speed measurement, if space allows.
+    \item Algorithm parameters, and parameters for problem instances.
+    \item Evaluation metrics. Cite Hypervolume and IGD, and explain briefly in just 1-2 sentences for each
+    \item For statistical stability, each experiment is run for 20 times. Then the mean and standard deviation of metric values are recorded. Each run use a consistent random seed per iteration.
+\end{itemize}
+
+\subsection{Dataset Description}
+
+\textbf{Benchmark dataset}. As no benchmark dataset is available for the MO-IHLNDP, we transformed HLP benchmarks. We adapt two widely-used hub location benchmarks: the \textbf{AP} set \cite{ap_dataset} (Euclidean instances of sizes 10--100 nodes) and \textbf{TR81} \cite{tr81_dataset} (Turkish inter-city matrix, 81 nodes).
+Have a very brief paragraph that summarize the data calibration process (please based on our \`process\_benchmark.py\` file)
+
+% INSERT THE FIGURE CV_Vietnam_Large_with three scenarios
+
+% This snippet should explain the methodology with enough details
+\textbf{Synthetic dataset for Central Region} Several coastal cities and provinces at the Central Vietnam, namely Da Nang, Hue, Quang Tri and Quang Ngai are considered. 
+
+\begin{itemize}
+\item Coordinates collection
+\item Building auxiliary risk matrix
+\item Constructing distance and travel time matrix
+\item Scenarios generation (epicenter strategy)
+\item Large instance and Small instance
+\item What's more?
+\end{itemize}
+
+\subsection{Experiment 1: Algorithms benchmarking}
+\begin{itemize}
+    \item Dataset: Standard benchmark dataset (HLP -> DRND)
+    \item Compare the proposed algorithm against complete enumeration technique (speed up with branch and bound solver). Prove that the PG-NSGA produces optimal results for small instance
+    \item Stress-testing (measuring runnning time in seconds) and showcasing algorithm's efficiency 
+\end{itemize}
+
+\subsection{Experiment 2: Case study in Vietnam}
+\begin{itemize}
+    \item Dataset: Our synthetic dataset. Only run the proposed algorithm on the dataset.
+    \item Sensitivity analysis. How does the solution structure change between different scenarios.
+    \item Managerial insights
+\end{itemize}
+
+The figures that need to be inserted:
+\begin{itemize}
+    \item Pareto front (used for trade-off analysis)
+    \item Solutions found by the algorithm, plotted on the Vietnamese map. What are the implications and managerial insights?
+    \item Do a slight sensitivity analysis from the same figure (solution visualized on map)
+\end{itemize}
 
 \section{Computational Experiments}
 
