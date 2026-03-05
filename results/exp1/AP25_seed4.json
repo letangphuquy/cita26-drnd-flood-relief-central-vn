@@ -4802,7 +4802,7 @@
     }
   ],
   "meta": {
-    "elapsed_s": 0.644091,
+    "elapsed_s": 0.573187,
     "num_gen": 200,
     "pop_size": 100,
     "seed": 4,

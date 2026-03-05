@@ -3102,7 +3102,7 @@
     }
   ],
   "meta": {
-    "elapsed_s": 0.385701,
+    "elapsed_s": 0.338496,
     "num_gen": 200,
     "pop_size": 100,
     "seed": 3,
