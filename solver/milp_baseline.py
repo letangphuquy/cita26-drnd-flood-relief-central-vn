@@ -283,47 +283,57 @@ def build_and_solve_milp(inst, eps_z1=None, eps_z2=None, time_limit_s=600):
     else:
         return {"status": "INFEASIBLE"}
 
-def run_epsilon_constraint(inst, steps=5, time_limit=300):
-    print("Finding extremes...")
+def run_epsilon_constraint(inst, steps=9, time_limit=600):
+    """Run epsilon-constraint MILP. Each solve has a 10-minute time limit.
+    steps=9 gives 9 epsilon-constrained runs for better Pareto coverage.
+    """
+    print("Finding Z1 extreme (min Z1)...")
     sol_min_z1 = build_and_solve_milp(inst, time_limit_s=time_limit)
     if not sol_min_z1 or sol_min_z1["status"] == "INFEASIBLE":
+        print("[MILP] Min-Z1 solve returned infeasible or failed.")
         return []
-        
-    # to find min Z2, we need a loose upper bound on Z1
-    sol_min_z2 = build_and_solve_milp(inst, eps_z1=sol_min_z1["Z1"] * 5, time_limit_s=time_limit)
-    
-    front = []
-    front.append(sol_min_z1)
-    
+
+    # Use a 10x upper bound on Z1 to give the min-Z2 solve more freedom
+    print("Finding Z2 extreme (min Z2 within Z1 <= 10x min_Z1)...")
+    sol_min_z2 = build_and_solve_milp(
+        inst, eps_z1=sol_min_z1["Z1"] * 10.0, time_limit_s=time_limit
+    )
+
+    front = [sol_min_z1]
+
     z2_upper = sol_min_z1["Z2"]
-    z2_lower = sol_min_z2["Z2"] if sol_min_z2 and sol_min_z2["status"] != "INFEASIBLE" else z2_upper * 0.5
-    
-    print(f"Z1 Extreme: {sol_min_z1['Z1']:.2f}, Z2 Extreme: {sol_min_z1['Z2']:.2f}")
+    z2_lower = (
+        sol_min_z2["Z2"]
+        if sol_min_z2 and sol_min_z2["status"] != "INFEASIBLE"
+        else z2_upper * 0.5
+    )
+
+    print(f"Z1 Extreme: {sol_min_z1['Z1']:.2f}, Z2={sol_min_z1['Z2']:.2f}")
     if sol_min_z2 and sol_min_z2["status"] != "INFEASIBLE":
-         print(f"Z2 Min Extreme: {sol_min_z2['Z1']:.2f}, Z2 Extreme: {sol_min_z2['Z2']:.2f}")
-         front.append(sol_min_z2)
-         
-    # Generate epsilon steps
+        print(f"Z2 Min Extreme: Z1={sol_min_z2['Z1']:.2f}, Z2={sol_min_z2['Z2']:.2f}")
+        front.append(sol_min_z2)
+
+    # Generate interior epsilon steps
     if steps > 2 and z2_upper > z2_lower:
         step_sz = (z2_upper - z2_lower) / (steps - 1)
         for i in range(1, steps - 1):
             eps = z2_upper - i * step_sz
-            print(f"Solving eps-constraint: Z2 <= {eps:.2f}")
+            print(f"  Solving eps-constraint {i}/{steps-2}: Z2 <= {eps:.2f}")
             sol = build_and_solve_milp(inst, eps_z2=eps, time_limit_s=time_limit)
             if sol and sol["status"] != "INFEASIBLE":
                 front.append(sol)
-                
-    # Filter pure dominance
+
+    # Filter dominated solutions
     filtered = []
     for s1 in front:
-        dom = False
-        for s2 in front:
-            if s2["Z1"] <= s1["Z1"] and s2["Z2"] <= s1["Z2"] and (s2["Z1"] < s1["Z1"] or s2["Z2"] < s1["Z2"]):
-                dom = True
-                break
+        dom = any(
+            s2["Z1"] <= s1["Z1"] and s2["Z2"] <= s1["Z2"]
+            and (s2["Z1"] < s1["Z1"] or s2["Z2"] < s1["Z2"])
+            for s2 in front
+        )
         if not dom:
             filtered.append(s1)
-            
+
     return filtered
 
 def main():

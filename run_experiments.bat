@@ -206,6 +206,12 @@ echo.
 echo --- Exp2 Analysis ---
 python "%SCRIPT_EXP2%" "%RES2%" "%RES2%" "%DATA_CV%"
 
+echo.
+echo --- CV-Small Baseline Evaluation (Greedy / MILP / BB vs PB-NSGA) ---
+python "%PROJECT%scripts\evaluate_cv_small.py" ^
+    --results-exp1 "%RES1%" ^
+    --results-exp2 "%RES2%"
+
 :end
 echo.
 echo ============================================================

@@ -382,22 +382,29 @@ The first baseline is a two-phased \textbf{Greedy Heuristic} that constructs upp
 
 \begin{table}[ht]
 \centering
-\caption{Baseline comparison on the CV-Small instance. \textit{HV is normalized}.}
+\caption{Baseline comparison on the CV-Small instance. HV is normalized w.r.t.\ the combined non-dominated reference front (BB $\cup$ Greedy $\cup$ PB-NSGA). $-$: no feasible solution returned.}
 \label{tab:exp1_results}
 \begin{tabular}{lrrr}
 \toprule
 Algorithm & HV (norm.) $\uparrow$ & IGD\textsuperscript{+} $\downarrow$ & CPU Time (s) $\downarrow$ \\
 \midrule
-Greedy Heuristic                & $0.000$ & $5.471$ & $\mathbf{<0.1}$ \\
-MILP ($\epsilon$-constraint)    & $0.000$ & -       & $1800.0^*$ \\
-Exact Enum (BB)                 & $0.893$ & $0.123$ &  $18.5$ \\
-\textbf{PB-NSGA (Ours)}         & $\mathbf{0.882 \pm 0.141}$ & $\mathbf{0.238 \pm 0.247}$ & $1.2$ \\
+Greedy Heuristic                & $0.000$ & $2.700$ & $\mathbf{<0.1}$ \\
+MILP ($\epsilon$-constraint)    & $-$     & $-$     & $1800.0^*$ \\
+Exact Enum (BB)                 & $\mathbf{0.471}$ & $\mathbf{0.311}$ & $0.3$ \\
+\textbf{PB-NSGA (Ours)}         & $0.079 \pm 0.239$ & $1.983 \pm 1.749$ & $0.5$ \\
 \bottomrule
-\multicolumn{4}{l}{\footnotesize $^*$ Terminated early due to Big-M induced numerical instability/complexity.} \\
+\multicolumn{4}{l}{\footnotesize $^*$ No feasible Pareto solution found within 1800\,s (SCIP/Big-M instability).} \\
 \end{tabular}
 \end{table}
 
-As summarized in Table~\ref{tab:exp1_results}, PB-NSGA consistently recovers the near-optimal configurations found by the exact solvers. While the $\epsilon$-constraint MILP struggles with exponential complexity and Big-M induced numerical instability, PB-NSGA converges within seconds on small instances. The greedy baselines, unable to anticipate simultaneous capacity constraints and extreme scenario risk, are systematically strictly dominated by the metaheuristic populations.
+% As summarized in Table~\ref{tab:exp1_results}, PB-NSGA consistently recovers the near-optimal configurations found by the exact solvers. While the $\epsilon$-constraint MILP struggles with exponential complexity and Big-M induced numerical instability, PB-NSGA converges within seconds on small instances. The greedy baselines, unable to anticipate simultaneous capacity constraints and extreme scenario risk, are systematically strictly dominated by the metaheuristic populations.
+Table~\ref{tab:exp1_results} reveals an instructive pattern for the small instance.
+The greedy heuristic, bound to at most two configurations, produces solutions entirely dominated by the more flexible solvers.
+The MILP $\epsilon$-constraint solver failed to return any feasible Pareto solution within 1800\,s, consistent with known Big-M numerical difficulties on non-linear deprivation objectives linearized via big coefficients.
+The BB complete enumerator, which exhaustively explores all $2^{|\mathcal{H}|}=32$ hub subsets, achieves the highest hypervolume ($0.471$) on CV-Small and constitutes the reference front.
+PB-NSGA exhibits high variance ($0.079\pm0.239$) on this five-hub instance: the search space is small enough that the evolutionary heuristic sometimes converges to the BB-optimal region but sometimes does not within 200 generations.
+This is consistent with the well-known behavior of population-based algorithms on micro-instances where near-exhaustive search space coverage is feasible by exact solvers.
+Critically, the scalability advantage of PB-NSGA becomes clear in Experiment~2 (Sec.~\ref{sec:exp2}), where it efficiently handles the large-scale CV-Large instance ($|\mathcal{H}|=20$, $2^{20}>10^6$ configurations) within seconds.
 
 \subsection{Experiment 2: Deep Case Study Analysis \& SAA Verification}
 \label{sec:exp2}
