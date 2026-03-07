@@ -165,18 +165,35 @@ def compute_igd_plus(approx_norm, ref_norm):
 
 def main():
     parser = argparse.ArgumentParser(description="Evaluate CV-Small baselines")
-    parser.add_argument("--results-exp1", default=None,
-                        help="Path to results/exp1/")
-    parser.add_argument("--results-exp2", default=None,
-                        help="Path to results/exp2/")
+    parser.add_argument("--results-exp1", default=None, help="Path to results/exp1/")
+    parser.add_argument("--results-exp2", default=None, help="Path to results/exp2/")
+    parser.add_argument("--bb",      default=None, help="Explicit path to BB result JSON")
+    parser.add_argument("--greedy",  default=None, help="Explicit path to Greedy result JSON")
+    parser.add_argument("--milp",    default=None, help="Explicit path to MILP result JSON")
+    parser.add_argument("--ours",    default=None, help="Explicit path to PB-NSGA (ours) result JSON or glob pattern")
     args = parser.parse_args()
 
-    # Auto-discover project root
     script_dir   = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.dirname(script_dir)
-
     exp1_dir = args.results_exp1 or os.path.join(project_root, "results", "exp1")
     exp2_dir = args.results_exp2 or os.path.join(project_root, "results", "exp2")
+
+    bb_path = args.bb or os.path.join(exp1_dir, "cv_small_bb.json")
+    if not args.bb and (not os.path.exists(bb_path) or os.path.getsize(bb_path) < 200):
+        bb_path = os.path.join(exp2_dir, "CV_small_bb.json")
+
+    greedy_path = args.greedy or os.path.join(exp1_dir, "cv_small_greedy.json")
+    milp_path   = args.milp   or os.path.join(exp1_dir, "cv_small_milp.json")
+
+    if args.ours:
+        if "*" in args.ours:
+            pbnsga_paths = sorted(glob.glob(args.ours))
+        else:
+            pbnsga_paths = [args.ours]
+    else:
+        pbnsga_paths = sorted(glob.glob(os.path.join(exp2_dir, "CV_small_seed*.json")))
+        if not pbnsga_paths:
+             pbnsga_paths = sorted(glob.glob(os.path.join(exp1_dir, "*nsga*.json")))
 
     # ── Load data ───────────────────────────────────────────────────────────
     # BB: prefer exp1 (which should be a copy of exp2 after fix), fall back to exp2
@@ -187,8 +204,7 @@ def main():
     greedy_path = os.path.join(exp1_dir, "cv_small_greedy.json")
     milp_path   = os.path.join(exp1_dir, "cv_small_milp.json")
 
-    # PB-NSGA seeds from exp2
-    pbnsga_paths = sorted(glob.glob(os.path.join(exp2_dir, "CV_small_seed*.json")))
+    # PB-NSGA seeds (already handled by CLI args or default logic above)
 
     def safe_load(path):
         if path and os.path.exists(path) and os.path.getsize(path) > 100:

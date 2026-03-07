@@ -1,0 +1,9 @@
+{
+  "meta": {
+    "restarts": 500,
+    "seed": 42,
+    "solver": "GreedyBaseline_SweepStochastic",
+    "sweep_k": 5
+  },
+  "pareto_front": []
+}
