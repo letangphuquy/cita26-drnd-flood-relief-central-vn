@@ -7,15 +7,15 @@
       "Bash(head:*)",
       "Bash(tail:*)",
       "Bash(g++:*)",
-      "Bash(solver_cpp/bb_solver.exe:*)",
+      "Bash(solver/bb_solver.exe:*)",
       "Bash(py:*)",
-      "Bash(\"solver_cpp/bb_solver.exe\":*)",
+      "Bash(\"solver/bb_solver.exe\":*)",
       "Bash(grep:*)",
-      "Bash(./solver_cpp/bb_solver.exe:*)",
+      "Bash(./solver/bb_solver.exe:*)",
       "Bash(./bb_solver:*)",
       "Bash(python:*)",
       "Bash(cat:*)",
-      "Bash(\"solver_cpp/solver.exe\":*)",
+      "Bash(\"solver/solver.exe\":*)",
       "Bash(\".venv/Scripts/python.exe\":*)"
     ]
   }
