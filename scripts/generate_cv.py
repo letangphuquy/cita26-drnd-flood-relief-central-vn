@@ -497,7 +497,7 @@ def generate_scenarios(coords, aux_risk, r_intervals,
                     a[0][v][u] = 0
                 # Water (m=1): only enabled if there's significant flood risk (flood areas)
                 # Prose: "water mode will be enabled on flood areas"
-                if avg_risk_uv > 0.30:
+                if risk[u] > 0.30 and risk[v] > 0.30:
                     a[1][u][v] = 1
                     a[1][v][u] = 1
                 else:

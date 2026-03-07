@@ -157,7 +157,7 @@
     }
   ],
   "meta": {
-    "elapsed_s": 0.027986,
+    "elapsed_s": 0.025219,
     "leaves_evaluated": 7,
     "mode": "enum",
     "nodes_visited": 14,
