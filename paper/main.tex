@@ -353,7 +353,7 @@ The decoder is invoked once per chromosome per scenario $s \in \mathcal{S}$, rec
 
 \subsection{Genetic Operators and Selection}
 
-\emph{Selection} uses binary tournament on Pareto rank with crowding distance as tiebreaker. \emph{Crossover} ($p_c = 0.9$) applies Uniform Crossover to $\mathbf{X}$ and $\mathbf{A}$, and SBX ($\eta_c = 20$) to $\mathbf{R}$ and $\mathbf{W}$. \emph{Mutation} ($p_m = 1/|\mathbf{C}|$) applies Bit-flip to $\mathbf{X}$, random-reset to $\mathbf{A}$, and Polynomial mutation ($\eta_m = 20$) to $\mathbf{R}$ and $\mathbf{W}$. Constraint handling follows the constrained-dominance principle~\cite{deb2002fast}: feasible solutions always dominate infeasible ones; among infeasible solutions, lower CV dominates. When a partial Pareto front must be split, tiebreaking proceeds by (1) Pareto rank, (2) crowding distance, (3) minimum Hamming distance in $\mathbf{X}$-space -- preserving genotypic diversity in hub configuration and countering premature convergence.
+\emph{Selection} uses binary tournament on Pareto rank with crowding distance as tiebreaker. \emph{Crossover} applies Uniform Crossover to $\mathbf{X}$ and $\mathbf{A}$, and SBX to $\mathbf{R}$ and $\mathbf{W}$. \emph{Mutation} ($p_m = 1/|\mathbf{C}|$) applies Bit-flip to $\mathbf{X}$, random-reset to $\mathbf{A}$, and Polynomial mutation to $\mathbf{R}$ and $\mathbf{W}$. Constraint handling follows the constrained-dominance principle~\cite{deb2002fast}: feasible solutions always dominate infeasible ones; among infeasible solutions, lower CV dominates. When a partial Pareto front must be split, tiebreaking proceeds by (1) Pareto rank, (2) crowding distance, (3) minimum Hamming distance in $\mathbf{X}$-space -- preserving genotypic diversity in hub configuration and countering premature convergence.
 
 % ============================================================
 %  REPLACE YOUR EXISTING \section{Computational Experiments}
@@ -364,26 +364,25 @@ The decoder is invoked once per chromosome per scenario $s \in \mathcal{S}$, rec
 \subsection{Experimental Setup}
 \label{sec:exp_setup}
 
-PB-NSGA is implemented in C++17; dataset construction and post-processing are performed in Python~3, on a workstation with an 11th Gen Intel Core i5-1135G7 @ 2.40~GHz and 16~GB RAM. Fixed for all runs: $N = 100$, $G = 200$, $p_c = 0.9$, $\eta_c = \eta_m = 20$, $p_m = 1/|\mathbf{C}|$, decoder noise $\sigma = 0.05$. Problem constants are $\chi = 0.7$, $\alpha = 0.6$, $\gamma = 3.0$~kg/person, $\lambda_0 = 0.8$. Each configuration is executed for 20 independent runs, reporting mean~$\pm$~std. We use \textbf{Hypervolume (HV)}~\cite{zitzler1999multiobjective} and \textbf{IGD\textsuperscript{+}}~\cite{ishibuchi2015modified} for performance metrics, utilizing exact Pareto fronts from complete enumeration as the ground truth for small instances.
+PB-NSGA is implemented in C++17; dataset construction and post-processing are performed in Python~3, on a workstation with an 11th Gen Intel Core i5-1135G7 @ 2.40~GHz and 16~GB RAM. Algorithm parameters are fixed for all runs: $N = 100$, $G = 200$, $p_c = 0.9$, $\eta_c = \eta_m = 20$, $p_m = 1/|\mathbf{C}|$, decoder noise $\sigma = 0.05$. Problem constants are $\chi = 0.7$, $\alpha = 0.6$, $\gamma = 3.0$~kg/person, $\lambda_0 = 0.8$. Each configuration is executed for 20 independent runs, reporting mean~$\pm$~std. We use \textbf{Hypervolume (HV)}~\cite{zitzler1999multiobjective} and \textbf{IGD\textsuperscript{+}}~\cite{ishibuchi2015modified} for performance metrics. Pareto union across all algorithms served as a proxy ground truth for small instances.
 
 \subsection{Dataset Description}
 \label{sec:datasets}
 
-\textbf{Central Vietnam Case Study.}
-We construct two instances modelling four flood-prone provinces: Da Nang, Quang Nam, Thua Thien-Hue, and Quang Ngai. \textbf{CV-Small} uses district-level demand nodes ($|\mathcal{I}|=20$, $|\mathcal{H}|=5$, $|\mathcal{J}|=2$, $|\mathcal{S}|=3$); \textbf{CV-Large} uses commune-level resolution ($|\mathcal{I}|=100$, $|\mathcal{H}|=20$, $|\mathcal{J}|=12$, $|\mathcal{S}|=3$). Node coordinates are drawn from real administrative centroids; hub candidates correspond to confirmed logistics facilities and rescue stations; supply origins include seaports, river terminals, and highland border nodes. Scenario risk indices and road disruption probabilities are calibrated from a flood vulnerability score combining topographic, hydrological, and coastal exposure criteria~\cite{barzinpour2014}. Three transport modes (truck, motorboat, helicopter) with varying capacities (60, 25, 10 persons) and speeds are employed. Roads are subject to disruption, while air and water modes remain available. To reflect practical operational constraints, emergency airspace utilization is strictly limited such that helicopter connections cannot exceed 15\% of all actively established routing links in any scenario.
-
-% [REMOVED standalone cv_network_map.pdf per new narrative]
-
+\textbf{Central Vietnam Dataset.}
+We construct two instances modelling four flood-prone provinces: Da Nang, Quang Nam, Thua Thien-Hue, and Quang Ngai. \textbf{CV-Small} uses district-level demand nodes ($|\mathcal{I}|=20$, $|\mathcal{H}|=5$, $|\mathcal{J}|=2$, $|\mathcal{S}|=3$); \textbf{CV-Large} uses commune-level resolution ($|\mathcal{I}|=100$, $|\mathcal{H}|=20$, $|\mathcal{J}|=12$, $|\mathcal{S}|=3$). 
+Node coordinates map to real administrative centroids, confirmed logistics facilities, and vital supply origins. Scenario risks and road disruptions are calibrated using a multi-criteria flood vulnerability score~\cite{barzinpour2014}. Three transport modes---trucks, motorboats, and helicopters---with varying capacities and speeds are considered. Roads are subject to disruption, while water mode will be enabled on flood areas. Reflecting realistic constraints, helicopter links (air mode) are strictly capped at 15\% of all active routing connections per scenario.
 
 \subsection{Experiment 1: Baseline Comparison on Central Vietnam}
 \label{sec:exp1}
 
 To rigorously evaluate PB-NSGA's optimization capabilities against the structural complexity of MO-IHLNDP, we benchmarked the algorithm against two custom baselines on the exact same risk-calibrated \textbf{CV-Small} sub-instance ($|\mathcal{H}|=5, |\mathcal{I}|=20$).
-The first baseline is a two-phased \textbf{Greedy Heuristic} that constructs upper bounds by selecting the cheapest or safest hubs and assigns demands via nearest-neighbour logic. The second is an exact \textbf{Mixed-Integer Linear Programming (MILP)} formulation solved via OR-Tools SCIP with the $\epsilon$-constraint method. Furthermore, to guarantee solution quality without relying on relaxations, we deployed a custom Branch-and-Bound (BB) solver for complete enumeration to extract the absolute proxy Pareto front.
+The first baseline is a two-phased \textbf{Greedy Heuristic} that constructs upper bounds by selecting the cheapest or safest hubs and assigns demands via nearest-neighbour logic. The second is an exact \textbf{Mixed-Integer Linear Programming (MILP)} formulation solved via OR-Tools~\cite{ortools} with the $\epsilon$-constraint method.
+% Furthermore, to guarantee solution quality without relying on relaxations, we deployed a custom Branch-and-Bound (BB) solver for complete enumeration to extract the absolute proxy Pareto front.
 
 \begin{table}[ht]
 \centering
-\caption{Baseline comparison on the CV-Small instance. Performance metrics are reported over 20 independent runs for stochastic algorithms. HV is normalized to the proxy reference front.}
+\caption{Baseline comparison on the CV-Small instance. \textit{HV is normalized}.}
 \label{tab:exp1_results}
 \begin{tabular}{lrrr}
 \toprule
