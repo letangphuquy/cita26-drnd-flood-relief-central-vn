@@ -8,6 +8,23 @@
 #include "template.hpp"
 
 // ---------------------------------------------------------------------------
+// Flow Details (for detailed mapping/analysis)
+// ---------------------------------------------------------------------------
+struct TransshipmentFlow {
+  int src_ki, dst_ki, m;
+  double flow;
+};
+struct FlowDetails {
+  vector<vector<int>> z_iks;                // [S][I] -> ki
+  vector<vector<int>> z_iks_m;              // [S][I] -> m (mode)
+  vector<vector<int>> z_jks;                // [S][J] -> ki
+  vector<vector<int>> z_jks_m;              // [S][J] -> m (mode)
+  vector<vector<TransshipmentFlow>> f_khms; // [S] -> list of transshipments
+  vector<vector<bool>> y_ks;             // [S][H] -> true if reactive hub at ki
+  vector<vector<double>> inventory_held; // [S][H] -> held inventory
+};
+
+// ---------------------------------------------------------------------------
 // Individual (chromosome + phenotype + NSGA-II bookkeeping)
 // ---------------------------------------------------------------------------
 struct Individual {
@@ -20,13 +37,14 @@ struct Individual {
          //   A_i = preferred hub index for demand node i.
          //   Decoder uses A_i as first candidate; if infeasible, falls
          //   back to remaining hubs ordered by increasing distance to i.
-  vector<double> W; // [6]   heuristic weights w0..w5 ∈ [0,1]
-                    // W[0]: demand urgency weight (λ·D) in priority score
-                    // W[1]: hub speed weight (1/τ) in hub selection score
-                    // W[2]: residual capacity weight in hub selection score
-                    // W[3]: demand isolation weight (1/num_reachable) in priority score
-                    // W[4]: planned hub preference bonus in hub selection score
-                    // W[5]: reactive eagerness threshold (0=aggressive, 1=conservative)
+  vector<double>
+      W; // [6]   heuristic weights w0..w5 ∈ [0,1]
+         // W[0]: demand urgency weight (λ·D) in priority score
+         // W[1]: hub speed weight (1/τ) in hub selection score
+         // W[2]: residual capacity weight in hub selection score
+         // W[3]: demand isolation weight (1/num_reachable) in priority score
+         // W[4]: planned hub preference bonus in hub selection score
+         // W[5]: reactive eagerness threshold (0=aggressive, 1=conservative)
 
   // ── Phenotype (computed by decoder) ──────────────────────────────────
   double Z1 = 0, Z2 = 0; // objective values (minimise both)
@@ -35,7 +53,8 @@ struct Individual {
   // ── NSGA-II bookkeeping ────────────────────────────────────────────────
   int rank = 0;
   double crowding = 0.0;
-  int hamming_diversity = 0; // min Hamming distance to nearest neighbour in X space
+  int hamming_diversity =
+      0; // min Hamming distance to nearest neighbour in X space
 
   // ── Constructor ────────────────────────────────────────────────────────
   Individual() = default;
