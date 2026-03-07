@@ -197,9 +197,9 @@ void decode(Individual &ind, const DRNDInstance &inst,
     // Weighted score + Gaussian noise
     vector<double> demand_score(num_I);
     for (int ii = 0; ii < num_I; ii++) {
-      demand_score[ii] =
-          ind.W[0] * raw_urgency[ii] + ind.W[3] * raw_isolation[ii] -
-          ind.W[1] * raw_dist[ii] + rand_gauss(DECODER_NOISE_SIGMA);
+      demand_score[ii] = ind.W[0] * raw_urgency[ii] +
+                         ind.W[3] * raw_isolation[ii] -
+                         ind.W[1] * raw_dist[ii] + (ii * 1e-6);
     }
 
     // ── STEP 4: Tiered demand allocation ──────────────────────────────
@@ -242,7 +242,8 @@ void decode(Individual &ind, const DRNDInstance &inst,
         double best_t = inst.big_M;
         bool reachable = false;
         int b_m = -1;
-        for (int m = 0; m < num_M; m++) {
+        // Priority 1: Non-air modes (Road=0, Water=1)
+        for (int m : {0, 1}) {
           if (sc.acc(m, i, k)) {
             reachable = true;
             if (inst.C_time[m][i][k] < best_t) {
@@ -250,6 +251,12 @@ void decode(Individual &ind, const DRNDInstance &inst,
               b_m = m;
             }
           }
+        }
+        // Priority 2: Air mode (Helicopter=2) as last resort
+        if (b_m == -1 && sc.acc(2, i, k)) {
+          reachable = true;
+          best_t = inst.C_time[2][i][k];
+          b_m = 2;
         }
         if (!reachable)
           continue;
@@ -277,7 +284,8 @@ void decode(Individual &ind, const DRNDInstance &inst,
           double best_t = inst.big_M;
           bool reachable = false;
           int b_m = -1;
-          for (int m = 0; m < num_M; m++) {
+          // Priority 1
+          for (int m : {0, 1}) {
             if (sc.acc(m, i, k)) {
               reachable = true;
               if (inst.C_time[m][i][k] < best_t) {
@@ -285,6 +293,12 @@ void decode(Individual &ind, const DRNDInstance &inst,
                 b_m = m;
               }
             }
+          }
+          // Priority 2
+          if (b_m == -1 && sc.acc(2, i, k)) {
+            reachable = true;
+            best_t = inst.C_time[2][i][k];
+            b_m = 2;
           }
           if (!reachable)
             continue;
@@ -305,31 +319,33 @@ void decode(Individual &ind, const DRNDInstance &inst,
           if (sc.risk[k] > inst.chi)
             continue;
           bool reachable = false;
-          for (int m = 0; m < num_M; m++)
-            if (sc.acc(m, i, k)) {
-              reachable = true;
-              break;
-            }
-          if (!reachable)
-            continue;
-          y[ki] = true;
-          inventory[ki] = (ind.R[ki] > 0 ? ind.R[ki] : 0.5) * inst.kappa[ki];
-          Z1_s += sc.hub_reactive_cost[ki];
-          best_ki = ki;
+          int b_m = -1;
           double best_t = inst.big_M;
           int bk = inst.hub_idx[ki];
-          int b_m = -1;
-          for (int m = 0; m < num_M; m++) {
+
+          for (int m : {0, 1}) {
             if (sc.acc(m, i, bk)) {
+              reachable = true;
               if (inst.C_time[m][i][bk] < best_t) {
                 best_t = inst.C_time[m][i][bk];
                 b_m = m;
               }
             }
           }
+          if (b_m == -1 && sc.acc(2, i, bk)) {
+            reachable = true;
+            best_t = inst.C_time[2][i][bk];
+            b_m = 2;
+          }
+          if (!reachable)
+            continue;
+
+          y[ki] = true;
+          inventory[ki] = (ind.R[ki] > 0 ? ind.R[ki] : 0.5) * inst.kappa[ki];
+          Z1_s += sc.hub_reactive_cost[ki];
+          best_ki = ki;
           chosen_m = b_m;
           best_travel_time = best_t;
-          chosen_m = b_m;
           break;
         }
       }
@@ -415,24 +431,34 @@ void decode(Individual &ind, const DRNDInstance &inst,
       }
       if (best_ki != -1) {
         int k = inst.hub_idx[best_ki];
-        double best_c = inst.best_cost(j, k, si);
-        Z1_s += best_c * O;
-        net_inv[best_ki] += O;
 
+        // Find best mode among non-air first, then fallback to air if necessary
         int cm = -1;
-        for (int m = 0; m < num_M; m++) {
-          if (sc.acc(m, j, k) && abs(inst.C_cost[m][j][k] - best_c) < 1e-6) {
-            cm = m;
-            break;
+        double best_c = inst.big_M;
+        for (int m : {0, 1}) {
+          if (sc.acc(m, j, k)) {
+            if (inst.C_cost[m][j][k] < best_c) {
+              best_c = inst.C_cost[m][j][k];
+              cm = m;
+            }
           }
         }
-        act_num_links++;
-        if (cm == 2)
-          act_heli_links++;
+        if (cm == -1 && sc.acc(2, j, k)) {
+          best_c = inst.C_cost[2][j][k];
+          cm = 2;
+        }
 
-        if (flow_out) {
-          flow_out->z_jks[si][jj] = best_ki;
-          flow_out->z_jks_m[si][jj] = cm;
+        if (cm != -1) {
+          Z1_s += best_c * O;
+          net_inv[best_ki] += O;
+          act_num_links++;
+          if (cm == 2)
+            act_heli_links++;
+
+          if (flow_out) {
+            flow_out->z_jks[si][jj] = best_ki;
+            flow_out->z_jks_m[si][jj] = cm;
+          }
         }
       }
     }
@@ -457,24 +483,29 @@ void decode(Individual &ind, const DRNDInstance &inst,
         break;
       int k = inst.hub_idx[src_ki];
       int h = inst.hub_idx[dst_ki];
+
+      int cm = -1;
       double best_c = inst.big_M;
-      for (int m = 0; m < num_M; m++)
-        if (sc.acc(m, k, h))
-          umin(best_c, inst.C_cost[m][k][h]);
-      if (best_c >= inst.big_M)
+      for (int m : {0, 1}) {
+        if (sc.acc(m, k, h)) {
+          if (inst.C_cost[m][k][h] < best_c) {
+            best_c = inst.C_cost[m][k][h];
+            cm = m;
+          }
+        }
+      }
+      if (cm == -1 && sc.acc(2, k, h)) {
+        best_c = inst.C_cost[2][k][h];
+        cm = 2;
+      }
+
+      if (cm == -1)
         break;
+
       double flow = std::min(max_surplus, max_deficit);
       Z1_s += inst.alpha * best_c * flow;
       net_inv[src_ki] -= flow;
       net_inv[dst_ki] += flow;
-
-      int cm = -1;
-      for (int m = 0; m < num_M; m++) {
-        if (sc.acc(m, k, h) && abs(inst.C_cost[m][k][h] - best_c) < 1e-6) {
-          cm = m;
-          break;
-        }
-      }
       act_num_links++;
       if (cm == 2)
         act_heli_links++;
@@ -484,17 +515,43 @@ void decode(Individual &ind, const DRNDInstance &inst,
       }
     }
 
-    // Residual deficits → CV
-    for (int ki = 0; ki < num_H; ki++)
-      if (net_inv[ki] < -EPS)
-        ind.CV += -net_inv[ki];
+    // ── Constraints & Penalties ─────────────────────────────────────────
+
+    // 1. Capacity constraint: total load cannot exceed physical capacity +
+    // supply
+    // 2. Unmet demand penalty: if load > inventory + supply, we must
+    // emergency-purchase
+    for (int ki = 0; ki < num_H; ki++) {
+      if (net_inv[ki] < -EPS) {
+        // net_inv = inventory - load + supply
+        // -> deficit = load - (inventory + supply)
+        double deficit = -net_inv[ki];
+
+        // Z1 penalty: emergency purchase of deficit at 10x holding cost
+        Z1_s += deficit * inst.c_hold[ki] * 10.0;
+
+        // CV: mathematical infeasibility if load strictly exceeds max physical
+        // capacity + supply
+        double max_possible_inv = inst.kappa[ki];
+        double total_in = max_possible_inv; // plus supply, but transshipment
+                                            // already moved supply around
+        // A stricter, correct way to check physical bounds without re-tracing
+        // flow: Did the base load + transshipments exceed kappa + incoming
+        // supply? Since net_inv[ki] = inventory[ki] - (load +
+        // transshipment_net), the max possible net_inv would be kappa - (load +
+        // transshipment_net).
+        double max_net_inv = inst.kappa[ki] - inventory[ki] + net_inv[ki];
+        if (max_net_inv < -EPS) {
+          ind.CV += -max_net_inv;
+        }
+      }
+    }
 
     // Helicopter links constraint → CV
-    double max_heli = std::ceil(0.15 * act_num_links);
+    // Match MILP relaxation: heli_links <= 0.15 * total + 0.999
+    double max_heli = 0.15 * act_num_links + 0.999;
     if (act_heli_links > max_heli) {
-      // Severe scaling to ensure solutions breaking the 15% rule are thoroughly
-      // dominated
-      ind.CV += (act_heli_links - max_heli) * 1000.0;
+      ind.CV += (act_heli_links - max_heli) * 10.0;
     }
 
     if (flow_out) {

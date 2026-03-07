@@ -10,19 +10,35 @@
 #pragma once
 
 #include "decoder.hpp"
+#include <algorithm>
+#include <cmath>
+#include <iomanip>
+#include <sstream>
+#include <string>
+#include <utility>
 
 // ── Algorithm parameters (defaults, overridable from main) ──────────────────
 struct NSGAConfig {
-  int pop_size = 100;
-  int num_gen = 200;
-  double pc = 0.90;      // crossover probability
-  double pm_base = 0.20; // base mutation prob (actual = pm_base / gene_count)
-  double sbx_eta = 20.0; // SBX distribution index
-  double pm_eta = 20.0;  // polynomial mutation index
-  int log_every = 10;    // generations between progress logs
-  int seed_iter = 0;     // for set_rolling_seed
-  bool use_local_search = false; // true  → PB-NSMA; false → plain NSGA-II
+  int pop_size = 200; // ↑ from 100 — better coverage
+  int num_gen = 300;  // ↑ from 200 — more refinement time
+  double pc = 0.90;   // crossover probability
+  // Adaptive mutation: decays linearly from pm_high → pm_low over generations.
+  // High early exploration, tight late exploitation.
+  double pm_high = 0.40;         // initial mutation rate base
+  double pm_low = 0.10;          // final mutation rate base
+  double sbx_eta = 20.0;         // SBX distribution index
+  double pm_eta = 20.0;          // polynomial mutation index
+  int log_every = 10;            // generations between progress logs
+  int seed_iter = 0;             // for set_rolling_seed
+  bool use_local_search = false; // true → PB-NSMA; false → plain NSGA-II
   int ls_iters = 5;              // local search perturbations per generation
+  // Stagnation-driven selection pressure boost:
+  // If the Pareto-front X-configuration set does not grow for
+  // stagnation_threshold generations, switch to a 3-way tournament
+  // (stronger pressure) and apply W-hypermutation (double rate on W-weights)
+  // for one generation to escape the local basin.
+  int stagnation_threshold = 20; // gens without new X-config in rank-1
+  int tournament_size = 2;       // base tournament size (binary)
 };
 
 // ── Constrained comparison (crowded comparison with CV) ─────────────────────
@@ -115,18 +131,23 @@ crossover(const Individual &p1, const Individual &p2, const NSGAConfig &cfg) {
 
 // ── Mutation
 // ──────────────────────────────────────────────────────────────────
-void mutate(Individual &ind, const NSGAConfig &cfg) {
+// current_pm_base: adaptive value passed by run_nsga2 (linearly decayed).
+// w_scale:         multiplier for W-segment mutation (1.0 normally, 2.0 on
+//                  stagnation-triggered W-hypermutation).
+void mutate(Individual &ind, const NSGAConfig &cfg,
+            double current_pm_base = -1.0, double w_scale = 1.0) {
   int num_H = (int)ind.X.size();
   int num_I = (int)ind.A.size();
   int gene_count = num_H + num_H + num_I + (int)ind.W.size(); // X + R + A + W
-  double pm = cfg.pm_base / gene_count;
+  double pm_base = (current_pm_base >= 0) ? current_pm_base : cfg.pm_high;
+  double pm = pm_base / gene_count;
 
   // X: bit-flip
   for (int k = 0; k < num_H; k++) {
     if (rand01() < pm)
       ind.X[k] ^= 1;
   }
-  // Repair
+  // Repair: ensure at least 1 open hub
   bool any_open = false;
   for (int k = 0; k < num_H; k++)
     if (ind.X[k]) {
@@ -141,14 +162,15 @@ void mutate(Individual &ind, const NSGAConfig &cfg) {
     if (rand01() < pm)
       ind.R[k] = poly_mutate(ind.R[k], cfg.pm_eta);
   }
-  // A: random replacement (reassign to a random hub)
+  // A: random replacement
   for (int i = 0; i < num_I; i++) {
     if (rand01() < pm)
       ind.A[i] = (int)rand_int(0, num_H - 1);
   }
-  // W: polynomial mutation (all weights)
+  // W: polynomial mutation with optional hyper-scale (stagnation escape)
+  double pm_w = (pm * w_scale > 1.0) ? 1.0 : (pm * w_scale);
   for (int w = 0; w < (int)ind.W.size(); w++) {
-    if (rand01() < pm)
+    if (rand01() < pm_w)
       ind.W[w] = poly_mutate(ind.W[w], cfg.pm_eta);
   }
 }
@@ -230,12 +252,18 @@ void crowding_distance(vector<Individual> &pop, vector<int> &front) {
   }
 }
 
-// ── Binary tournament selection
-// ───────────────────────────────────────────────
-const Individual &tournament(const vector<Individual> &pop) {
-  int a = (int)rand_int(0, (int)pop.size() - 1);
-  int b = (int)rand_int(0, (int)pop.size() - 1);
-  return constrained_better(pop[a], pop[b]) ? pop[a] : pop[b];
+// ── Tournament selection (size-k, k >= 2)
+// ────────────────────────────────────────
+// Picks k random candidates and returns the best by constrained dominance.
+// k=2 → classic binary tournament; k=3 → stronger selection pressure.
+const Individual &tournament(const vector<Individual> &pop, int k = 2) {
+  int best = (int)rand_int(0, (int)pop.size() - 1);
+  for (int t = 1; t < k; t++) {
+    int cand = (int)rand_int(0, (int)pop.size() - 1);
+    if (constrained_better(pop[cand], pop[best]))
+      best = cand;
+  }
+  return pop[best];
 }
 
 // ── Hamming diversity (Fix D) ────────────────────────────────────────────────
@@ -243,16 +271,18 @@ const Individual &tournament(const vector<Individual> &pop) {
 // any other individual in the pool. Used as a tiebreaker in elitist selection
 // to prefer genotypically isolated solutions. O(N^2 * |H|).
 void compute_hamming_diversity(vector<Individual> &pop) {
-  int N     = (int)pop.size();
+  int N = (int)pop.size();
   int num_H = (N > 0) ? (int)pop[0].X.size() : 0;
   for (int i = 0; i < N; i++) {
     int min_h = num_H; // worst case: all bits differ
     for (int j = 0; j < N; j++) {
-      if (i == j) continue;
+      if (i == j)
+        continue;
       int h = 0;
       for (int k = 0; k < num_H; k++)
         h += (pop[i].X[k] != pop[j].X[k]);
-      if (h < min_h) min_h = h;
+      if (h < min_h)
+        min_h = h;
     }
     pop[i].hamming_diversity = min_h;
   }
@@ -274,7 +304,8 @@ void elitist_select(vector<Individual> &combined, int target_size) {
       // Tiebreaker order: rank → crowding distance → Hamming diversity
       std::sort(all(front_idx), [&](int a, int b) {
         const Individual &ia = combined[a], &ib = combined[b];
-        if (ia.rank != ib.rank) return ia.rank < ib.rank;
+        if (ia.rank != ib.rank)
+          return ia.rank < ib.rank;
         if (std::abs(ia.crowding - ib.crowding) > 1e-9)
           return ia.crowding > ib.crowding;
         return ia.hamming_diversity > ib.hamming_diversity;
@@ -287,69 +318,120 @@ void elitist_select(vector<Individual> &combined, int target_size) {
   combined = std::move(new_pop);
 }
 
+// ── Stagnation detection helper
+// ──────────────────────────────────────────────
+// Returns a fingerprint string of all unique X-configs in rank-1 front.
+// Used to detect when the Pareto front has stopped evolving.
+string rank1_fingerprint(const vector<Individual> &pop) {
+  // Collect all rank-1 (Z1, Z2) pairs as strings for canonical identification.
+  vector<string> configs;
+  for (const auto &ind : pop) {
+    if (ind.rank != 1)
+      continue;
+    std::stringstream ss;
+    ss << std::fixed << std::setprecision(2) << ind.Z1 << "," << ind.Z2;
+    configs.push_back(ss.str());
+  }
+  std::sort(configs.begin(), configs.end());
+  configs.erase(std::unique(configs.begin(), configs.end()), configs.end());
+  string fp;
+  for (const auto &c : configs) {
+    fp += c;
+    fp += '|';
+  }
+  return fp;
+}
+
 // ── Main loop (NSGA-II or PB-NSMA depending on cfg.use_local_search)
-// ───────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────────────────
 vector<Individual> run_nsga2(const DRNDInstance &inst, const NSGAConfig &cfg) {
   set_rolling_seed(cfg.seed_iter);
   int POP = cfg.pop_size;
-  const char *algo_name = cfg.use_local_search ? "PB-NSMA" : "NSGA-II";
+  const char *algo_name = cfg.use_local_search ? "PB-NSMA" : "PB-NSGA";
 
-  // Initial population
+  // ── Initial population ───────────────────────────────────────────────────
   vector<Individual> pop;
   pop.reserve(POP);
-  cerr << "[" << algo_name << "] Initialising population (N=" << POP
-       << ")...\n";
+  cerr << "[" << algo_name << "] Init pop N=" << POP << " gen=" << cfg.num_gen
+       << " pm=" << cfg.pm_high << "→" << cfg.pm_low << "\n";
   while ((int)pop.size() < POP) {
     Individual ind = random_individual(inst);
     decode(ind, inst);
     pop.push_back(ind);
   }
   elitist_select(pop, POP);
-  cerr << "[" << algo_name << "] Init done. Starting " << cfg.num_gen
-       << " generations.\n";
 
   TimeVar t_start = time_now();
 
+  // ── Stagnation tracking ──────────────────────────────────────────────────
+  string last_fp = rank1_fingerprint(pop);
+  int stag_gens = 0;     // consecutive gens without Pareto-front change
+  bool boosting = false; // currently in pressure-boost mode
+
+  // ── Main loop ─────────────────────────────────────────────────────────────
   for (int gen = 1; gen <= cfg.num_gen; gen++) {
-    // Generate offspring
-    vector<Individual> offspring;
-    offspring.reserve(POP);
-    while ((int)offspring.size() < POP) {
-      const Individual &p1 = tournament(pop);
-      const Individual &p2 = tournament(pop);
-      if (rand01() < cfg.pc) {
-        auto [c1, c2] = crossover(p1, p2, cfg);
-        if (rand01() < cfg.pm_base)
-          mutate(c1, cfg);
-        if (rand01() < cfg.pm_base)
-          mutate(c2, cfg);
-        decode(c1, inst);
-        decode(c2, inst);
-        offspring.push_back(c1);
-        offspring.push_back(c2);
-      } else {
-        Individual c1 = p1, c2 = p2;
-        if (rand01() < cfg.pm_base)
-          mutate(c1, cfg);
-        if (rand01() < cfg.pm_base)
-          mutate(c2, cfg);
-        decode(c1, inst);
-        decode(c2, inst);
-        offspring.push_back(c1);
-        offspring.push_back(c2);
+
+    // ── Adaptive mutation rate (linear decay pm_high → pm_low) ────────────
+    double progress = (double)(gen - 1) / std::max(1, cfg.num_gen - 1);
+    double cur_pm = cfg.pm_high - (cfg.pm_high - cfg.pm_low) * progress;
+
+    // ── Stagnation: check & decide tournament size / W-hypermutation ───────
+    string cur_fp = rank1_fingerprint(pop);
+    if (cur_fp == last_fp) {
+      ++stag_gens;
+    } else {
+      stag_gens = 0;
+      last_fp = cur_fp;
+      boosting = false;
+    }
+    bool w_hyper = false;
+    int tourney = cfg.tournament_size;
+    if (stag_gens >= cfg.stagnation_threshold) {
+      tourney =
+          std::min(cfg.tournament_size + 1, 4); // 3-way (or 4 if already 3)
+      w_hyper = true; // double W mutation this generation
+      if (!boosting) {
+        cerr << "[Gen " << gen
+             << "] Stagnation detected — boosting tourney=" << tourney
+             << " W-hypermut on\n";
+        boosting = true;
       }
     }
 
-    // Combine and select
+    // ── Generate offspring ─────────────────────────────────────────────────
+    vector<Individual> offspring;
+    offspring.reserve(POP);
+    while ((int)offspring.size() < POP) {
+      const Individual &p1 = tournament(pop, tourney);
+      const Individual &p2 = tournament(pop, tourney);
+      Individual c1, c2;
+      if (rand01() < cfg.pc) {
+        auto [cx1, cx2] = crossover(p1, p2, cfg);
+        c1 = cx1;
+        c2 = cx2;
+      } else {
+        c1 = p1;
+        c2 = p2;
+      }
+      // Adaptive mutation — W-hypermutation on stagnation
+      double w_scale = w_hyper ? 2.0 : 1.0;
+      // Apply mutation with per-offspring probability proportional to cur_pm
+      // (we always mutate now; pm_base is baked into per-gene probability)
+      mutate(c1, cfg, cur_pm, w_scale);
+      mutate(c2, cfg, cur_pm, w_scale);
+      decode(c1, inst);
+      decode(c2, inst);
+      offspring.push_back(c1);
+      if ((int)offspring.size() < POP)
+        offspring.push_back(c2);
+    }
+
+    // ── Combine and elitist select ─────────────────────────────────────────
     for (auto &o : offspring)
       pop.push_back(o);
     elitist_select(pop, POP);
 
-    // ── NSMA-style Local Search (active only when use_local_search = true) ──
-    // Perturb each Pareto-front (rank-1) solution with n_ls random moves;
-    // accept the neighbour if it is not dominated by the original (Pareto-
-    // improving). Accepted neighbours are added and the population is
-    // re-pruned to maintain size POP.
+    // ── NSMA-style local search (only when use_local_search = true) ─────────
     if (cfg.use_local_search) {
       vector<Individual> ls_children;
       for (auto &sol : pop) {
@@ -359,12 +441,11 @@ vector<Individual> run_nsga2(const DRNDInstance &inst, const NSGAConfig &cfg) {
           Individual nbr = sol;
           int num_H = (int)nbr.X.size();
           int num_I = (int)nbr.A.size();
-          // Perturbation: 50% chance flip a random X bit, 50% reassign a random
-          // A
-          if (rand01() < 0.5) {
+          // 33% flip X, 33% nudge A, 33% perturb W
+          double r = rand01();
+          if (r < 0.33) {
             int k = (int)rand_int(0, num_H - 1);
             nbr.X[k] ^= 1;
-            // repair: ensure at least 1 open
             bool any = false;
             for (int kk = 0; kk < num_H; kk++)
               if (nbr.X[kk]) {
@@ -373,13 +454,16 @@ vector<Individual> run_nsga2(const DRNDInstance &inst, const NSGAConfig &cfg) {
               }
             if (!any)
               nbr.X[(int)rand_int(0, num_H - 1)] = 1;
-          } else {
-            // Perturb rotation offset A[ii] by ±1 step (wraps in {0..|H|-1})
+          } else if (r < 0.66) {
             int ii = (int)rand_int(0, num_I - 1);
-            nbr.A[ii] = ((nbr.A[ii] + (rand01() < 0.5 ? 1 : -1) + num_H) % num_H);
+            nbr.A[ii] =
+                ((nbr.A[ii] + (rand01() < 0.5 ? 1 : -1) + num_H) % num_H);
+          } else {
+            // Perturb one W weight
+            int ww = (int)rand_int(0, (int)nbr.W.size() - 1);
+            nbr.W[ww] = poly_mutate(nbr.W[ww], cfg.pm_eta);
           }
           decode(nbr, inst);
-          // Accept if nbr is non-dominated by sol (Pareto-improving)
           if (!sol.constrained_dominates(nbr))
             ls_children.push_back(nbr);
         }
@@ -391,30 +475,29 @@ vector<Individual> run_nsga2(const DRNDInstance &inst, const NSGAConfig &cfg) {
       }
     }
 
-    // Logging
+    // ── Progress logging ───────────────────────────────────────────────────
     if (gen % cfg.log_every == 0 || gen == cfg.num_gen) {
-      int r1_count = 0;
+      int r1_cnt = 0, feas = 0;
       double best_z1 = 1e18, best_z2 = 1e18;
-      int feas = 0;
       for (auto &ind : pop) {
-        if (ind.rank == 1)
-          r1_count++;
-        if (ind.CV == 0)
-          feas++;
         if (ind.rank == 1) {
+          r1_cnt++;
           umin(best_z1, ind.Z1);
           umin(best_z2, ind.Z2);
         }
+        if (ind.CV == 0)
+          feas++;
       }
-      cerr << "[Gen " << std::setw(4) << gen << "] Pareto=" << r1_count
-           << " Feas=" << feas << "/" << POP << " bestZ1=" << std::scientific
-           << std::setprecision(3) << best_z1 << " bestZ2=" << best_z2 << " "
-           << std::fixed << std::setprecision(1)
+      cerr << "[Gen " << std::setw(4) << gen << "] Pareto=" << r1_cnt
+           << " Feas=" << feas << "/" << POP << " pm=" << std::fixed
+           << std::setprecision(3) << cur_pm << " stag=" << stag_gens
+           << " Z1=" << std::scientific << std::setprecision(3) << best_z1
+           << " Z2=" << best_z2 << " " << std::fixed << std::setprecision(1)
            << duration_ms(time_now() - t_start) / 1000.0 << "s\n";
     }
   }
 
-  cerr << "[" << algo_name << "] Done. Total time: " << std::fixed
+  cerr << "[" << algo_name << "] Done in " << std::fixed << std::setprecision(2)
        << duration_ms(time_now() - t_start) / 1000.0 << "s\n";
   return pop;
 }

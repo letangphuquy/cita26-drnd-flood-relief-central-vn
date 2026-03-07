@@ -495,7 +495,18 @@ def generate_scenarios(coords, aux_risk, r_intervals,
                 if random.random() < p_road:
                     a[0][u][v] = 0
                     a[0][v][u] = 0
-                # Water (m=1) and Air (m=2) remain 1
+                # Water (m=1): only enabled if there's significant flood risk (flood areas)
+                # Prose: "water mode will be enabled on flood areas"
+                if avg_risk_uv > 0.30:
+                    a[1][u][v] = 1
+                    a[1][v][u] = 1
+                else:
+                    a[1][u][v] = 0
+                    a[1][v][u] = 0
+                    
+                # Air (m=2) remains 1
+                a[2][u][v] = 1
+                a[2][v][u] = 1
 
         # -- Demand D_{is}: risk-driven fraction of base population
         demand = {}

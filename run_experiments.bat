@@ -2,7 +2,7 @@
 REM run_experiments.bat — Full experiment pipeline
 REM
 REM Usage:
-REM   run_experiments.bat          — full paper run (pop=100, gen=200, 20 seeds)
+REM   run_experiments.bat          — full paper run (pop=200, gen=300, 20 seeds)
 REM   run_experiments.bat quick    — smoke test      (pop=30,  gen=50,  3 seeds)
 REM   run_experiments.bat data     — regenerate datasets only
 REM   run_experiments.bat analyze  — re-run analysis on existing results
@@ -50,16 +50,20 @@ if not exist "%RES2%\figures"       mkdir "%RES2%\figures"
 if not exist "%RES2%\maps"          mkdir "%RES2%\maps"
 
 REM ── Parameter mode ─────────────────────────────────────────────────────────
-set "POP=100"
-set "GEN=200"
+set "POP=200"
+set "GEN=300"
 set "SEEDS=0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19"
 set "BB_TIME=1800"
+set "PM_HIGH=0.40"
+set "PM_LOW=0.10"
 
 if "%1"=="quick" (
     set "POP=30"
     set "GEN=50"
     set "SEEDS=0 1 2"
     set "BB_TIME=120"
+    set "PM_HIGH=0.40"
+    set "PM_LOW=0.10"
     echo [Mode] Quick smoke test: pop=!POP! gen=!GEN! seeds=3
     goto :dataset_check
 )
@@ -71,19 +75,24 @@ if "%1"=="analyze" (
     echo [Mode] Analysis only — skipping solver runs.
     goto :analyze
 )
-echo [Mode] Full run: pop=%POP% gen=%GEN% seeds=20
+echo [Mode] Full run: pop=%POP% gen=%GEN% pm=%PM_HIGH%^>%PM_LOW% seeds=20
 
 REM ── Solver availability check ───────────────────────────────────────────────
 :dataset_check
 if not exist "%SOLVER%" (
     echo [Error] solver.exe not found.
-    echo         Compile: cd solver ^& g++ -O2 -std=c++17 main.cpp -o solver
+    echo         Compile: g++ -O2 -std=c++17 solver\main.cpp -o solver\solver.exe
     exit /b 1
 )
 if not exist "%BB%" (
     echo [Error] bb_solver.exe not found.
-    echo         Compile: cd solver ^& g++ -O2 -std=c++17 bb_solver.cpp -o bb_solver
+    echo         Compile: g++ -O2 -std=c++17 solver\bb_solver.cpp -o solver\bb_solver.exe
     exit /b 1
+)
+set "GREEDY=%PROJECT%solver\greedy_baseline.exe"
+if not exist "%GREEDY%" (
+    echo [Warning] greedy_baseline.exe not found - greedy runs will be skipped.
+    echo           Compile: g++ -O2 -std=c++17 solver\greedy_baseline.cpp -o solver\greedy_baseline.exe
 )
 
 REM ══════════════════════════════════════════════════════════════════════════

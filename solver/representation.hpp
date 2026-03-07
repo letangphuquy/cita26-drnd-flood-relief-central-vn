@@ -78,8 +78,11 @@ struct Individual {
       return true;
     if (!f1 && f2)
       return false;
-    if (!f1 && !f2)
+    if (!f1 && !f2) {
+      if (std::abs(CV - o.CV) < EPS)
+        return dominates(o);
       return CV < o.CV;
+    }
     return dominates(o);
   }
 

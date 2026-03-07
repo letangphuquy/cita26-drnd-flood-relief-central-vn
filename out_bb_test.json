@@ -1,0 +1,14 @@
+{
+  "all_feasible": [],
+  "meta": {
+    "elapsed_s": 0.260324,
+    "leaves_evaluated": 31,
+    "mode": "enum",
+    "nodes_visited": 62,
+    "pareto_size": 0,
+    "pruned_dominance": 0,
+    "pruned_infeasible": 1,
+    "solver": "BB-CompleteEnum"
+  },
+  "pareto_front": []
+}
