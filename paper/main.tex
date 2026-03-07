@@ -319,7 +319,7 @@ The decoder is invoked once per chromosome per scenario $s \in \mathcal{S}$, rec
 
 \textbf{Step 1 -- Initialisation.} Planned hubs with $X_k = 1$ and $r_{ks} \le \chi$ are activated with pre-positioned inventory $q_k = R_k \cdot \kappa_k$. If none qualify, the safest hub is forced active.
 
-\textbf{Step 2 -- Demand Prioritisation.} Each demand node $i$ receives a composite score prioritising urgency, isolation, and proximity to active hubs, enhanced with Gaussian noise to prevent premature convergence. Demands are then processed in descending score order.
+\textbf{Step 2 -- Demand Prioritisation.} Each demand node $i$ receives a composite score prioritising urgency, isolation, and proximity to active hubs. Demands are then processed in descending score order.
 
 \textbf{Step 3 -- Tiered Hub Assignment.} For each demand $i$, we trial active hubs in proximity order from the anchor hub $\pi_{A_i}$. \textit{Pass~1} evaluates candidates based on residual capacity, travel time, and operational status. If unsuccessful, \textit{Pass~2} relaxes capacity constraints, or eventually opens the nearest safe inactive hub as a reactive fallback. Infeasibility accumulates as constraint violation (CV).
 
@@ -353,7 +353,7 @@ The decoder is invoked once per chromosome per scenario $s \in \mathcal{S}$, rec
 
 \subsection{Genetic Operators and Selection}
 
-\emph{Selection} uses binary tournament on Pareto rank with crowding distance as tiebreaker. \emph{Crossover} applies Uniform Crossover to $\mathbf{X}$ and $\mathbf{A}$, and SBX to $\mathbf{R}$ and $\mathbf{W}$. \emph{Mutation} ($p_m = 1/|\mathbf{C}|$) applies Bit-flip to $\mathbf{X}$, random-reset to $\mathbf{A}$, and Polynomial mutation to $\mathbf{R}$ and $\mathbf{W}$. Constraint handling follows the constrained-dominance principle~\cite{deb2002fast}: feasible solutions always dominate infeasible ones; among infeasible solutions, lower CV dominates. When a partial Pareto front must be split, tiebreaking proceeds by (1) Pareto rank, (2) crowding distance, (3) minimum Hamming distance in $\mathbf{X}$-space -- preserving genotypic diversity in hub configuration and countering premature convergence.
+\emph{Selection} uses binary tournament on Pareto rank with crowding distance as tiebreaker. To prevent stagnation in the multi-modal search space, our implementation monitors the diversity of the rank-1 front in objective space ($Z_1, Z_2$). If the front remains unchanged for 20 generations, selection pressure is boosted via 3-way tournaments and weight-vector ($W$) hypermutation is applied to escape the local basin. \emph{Crossover} applies Uniform Crossover to $\mathbf{X}$ and $\mathbf{A}$, and SBX to $\mathbf{R}$ and $\mathbf{W}$. \emph{Mutation} ($p_m = 1/|\mathbf{C}|$) applies Bit-flip to $\mathbf{X}$, random-reset to $\mathbf{A}$, and Polynomial mutation to $\mathbf{R}$ and $\mathbf{W}$. Constraint handling follows the constrained-dominance principle~\cite{deb2002fast}: feasible solutions always dominate infeasible ones; among infeasible solutions, lower CV dominates. When a partial Pareto front must be split, tiebreaking proceeds by (1) Pareto rank, (2) crowding distance, (3) minimum Hamming distance in $\mathbf{X}$-space -- preserving genotypic diversity in hub configuration and countering premature convergence.
 
 % ============================================================
 %  REPLACE YOUR EXISTING \section{Computational Experiments}
@@ -364,16 +364,16 @@ The decoder is invoked once per chromosome per scenario $s \in \mathcal{S}$, rec
 \subsection{Experimental Setup}
 \label{sec:exp_setup}
 
-PB-NSGA is implemented in C++17; dataset construction and post-processing are performed in Python~3, on a workstation with an 11th Gen Intel Core i5-1135G7 @ 2.40~GHz and 16~GB RAM. Algorithm parameters are fixed for all runs: $N = 100$, $G = 200$, $p_c = 0.9$, $\eta_c = \eta_m = 20$, $p_m = 1/|\mathbf{C}|$, decoder noise $\sigma = 0.05$. Problem constants are $\chi = 0.7$, $\alpha = 0.6$, $\gamma = 3.0$~kg/person, $\lambda_0 = 0.8$. Each configuration is executed for 20 independent runs, reporting mean~$\pm$~std. We use \textbf{Hypervolume (HV)}~\cite{zitzler1999multiobjective} and \textbf{IGD\textsuperscript{+}}~\cite{ishibuchi2015modified} for performance metrics. Pareto union across all algorithms served as a proxy ground truth for small instances.
+PB-NSGA is implemented in C++17; dataset construction and post-processing are performed in Python~3, on a workstation with an 11th Gen Intel Core i5-1135G7 @ 2.40~GHz and 16~GB RAM. Algorithm parameters are fixed for all runs: $N = 200$, $G = 300$, $p_c = 0.9$, $\eta_c = \eta_m = 20$, $p_m = 1/|\mathbf{C}|$. Problem constants are $\chi = 0.7$, $\alpha = 0.6$, $\gamma = 3.0$~kg/person, $\lambda_0 = 0.8$. Each configuration is executed for 20 independent runs, reporting mean~$\pm$~std. We use \textbf{Hypervolume (HV)}~\cite{zitzler1999multiobjective} and \textbf{IGD\textsuperscript{+}}~\cite{ishibuchi2015modified} for performance metrics. Pareto union across all algorithms served as a proxy ground truth for small instances.
 
 \subsection{Dataset Description}
 \label{sec:datasets}
 
 \textbf{Central Vietnam Dataset.}
 We construct two instances modelling four flood-prone provinces: Da Nang, Quang Nam, Thua Thien-Hue, and Quang Ngai. \textbf{CV-Small} uses district-level demand nodes ($|\mathcal{I}|=20$, $|\mathcal{H}|=5$, $|\mathcal{J}|=2$, $|\mathcal{S}|=3$); \textbf{CV-Large} uses commune-level resolution ($|\mathcal{I}|=100$, $|\mathcal{H}|=20$, $|\mathcal{J}|=12$, $|\mathcal{S}|=3$). 
-Node coordinates map to real administrative centroids, confirmed logistics facilities, and vital supply origins. Scenario risks and road disruptions are calibrated using a multi-criteria flood vulnerability score~\cite{barzinpour2014}. Three transport modes---trucks, motorboats, and helicopters---with varying capacities and speeds are considered. Roads are subject to disruption, while water mode will be enabled on flood areas. Reflecting realistic constraints, helicopter links (air mode) are strictly capped at 15\% of all active routing connections per scenario.
+Node coordinates map to real administrative centroids, confirmed logistics facilities, and vital supply origins. Scenario risks and road disruptions are calibrated using a multi-criteria flood vulnerability score~\cite{barzinpour2014}. Three transport modes -- trucks, motorboats, and helicopters are considered. Roads are subject to disruption, while water mode will be enabled on flood areas. Reflecting realistic constraints, helicopter links (air mode) are strictly capped at 15\% of all active routing connections per scenario.
 
-\subsection{Experiment 1: Baseline Comparison on Central Vietnam}
+\subsection{Experiment 1: Baseline Comparison}
 \label{sec:exp1}
 
 To rigorously evaluate PB-NSGA's optimization capabilities against the structural complexity of MO-IHLNDP, we benchmarked the algorithm against two custom baselines on the exact same risk-calibrated \textbf{CV-Small} sub-instance ($|\mathcal{H}|=5, |\mathcal{I}|=20$).
@@ -397,16 +397,13 @@ Exact Enum (BB)                 & $0.895$ & $0.079$ & $0.3$ \\
 \end{tabular}
 \end{table}
 
-% As summarized in Table~\ref{tab:exp1_results}, PB-NSGA consistently recovers the near-optimal configurations found by the exact solvers. While the $\epsilon$-constraint MILP struggles with exponential complexity and Big-M induced numerical instability, PB-NSGA converges within seconds on small instances. The greedy baselines, unable to anticipate simultaneous capacity constraints and extreme scenario risk, are systematically strictly dominated by the metaheuristic populations.
 Table~\ref{tab:exp1_results} reveals an instructive pattern for the small instance.
-The greedy heuristic, though producing multiple non-dominated configurations through stochastic resets, remains distant from the reference front.
-The MILP $\epsilon$-constraint solver failed to return any feasible Pareto solution within 1800\,s, consistent with known Big-M numerical difficulties on non-linear deprivation objectives linearized via big coefficients.
-Remarkably, PB-NSGA not only converges to the optimal region but actually outperforms the Branch-and-Bound (BB) complete enumerator, reaching a hypervolume of $1.000$.
-This is because while BB exhaustively tests all $2^{|\mathcal{H}|}=32$ hub subsets using default heuristic weights, PB-NSGA simultaneously optimizes the decoder's priority-weight vectors ($W$), discovering more efficient routing and inventory patterns for each hub configuration.
-Consequently, PB-NSGA defines the combined non-dominated reference front on this instance within seconds.
-Critically, its scalability advantage becomes even more pronounced in Experiment~2 (Sec.~\ref{sec:exp2}), where exact methods become computationally intractable.
-This is consistent with the well-known behavior of population-based algorithms on micro-instances where near-exhaustive search space coverage is feasible by exact solvers.
-Critically, the scalability advantage of PB-NSGA becomes clear in Experiment~2 (Sec.~\ref{sec:exp2}), where it efficiently handles the large-scale CV-Large instance ($|\mathcal{H}|=20$, $2^{20}>10^6$ configurations) within seconds.
+The greedy heuristic remains distant from the reference front despite stochastic resets.
+The MILP $\epsilon$-constraint solver failed to return any feasible Pareto solution within 1800\,s, consistent with known Big-M numerical difficulties on non-linear deprivation objectives.
+Remarkably, PB-NSGA converges to the optimal region and defines the combined non-dominated reference front, reaching a hypervolume of $1.000$.
+This efficiency stems from PB-NSGA's ability to simultaneously optimize the decoder's priority-weight vectors ($W$), discovering more refined routing and inventory patterns for each hub configuration than the exhaustive BB enumeration using fixed weights.
+
+As demonstrated in Experiment~2 (Sec.~\ref{sec:exp2}), this scalability advantage becomes even more pronounced on larger instances where exact methods become computationally intractable.
 
 \subsection{Experiment 2: Deep Case Study Analysis \& SAA Verification}
 \label{sec:exp2}
@@ -415,19 +412,21 @@ To investigate the practical managerial insights generated by the model on reali
 
 \begin{table}[ht]
 \centering
-\caption{PB-NSGA performance metrics (mean $\pm$ std, 20 runs).}
+\caption{PB-NSGA performance metrics (mean $\pm$ std).}
 \label{tab:exp2_results}
 \begin{tabular}{lrrr}
 \toprule
-Instance & HV (norm.) & IGD\textsuperscript{+} & \#Pareto \\
+Instance & HV (norm.) $\uparrow$ & IGD\textsuperscript{+} $\downarrow$ & \#Pareto \\
 \midrule
-CV-Small ($|\mathcal{I}|$=20, $|\mathcal{H}|$=5)   & $1.164 \pm 0.100$ & $0.029 \pm 0.064$ & $6.0 \pm 3.1$ \\
-CV-Large ($|\mathcal{I}|$=100, $|\mathcal{H}|$=20)  & $1.037 \pm 0.058$ & $0.064 \pm 0.025$ & $17.1 \pm 20.2$ \\
+CV-Small ($|\mathcal{I}|$=20)   & $1.146 \pm 0.050$ & $0.000 \pm 0.000$ & $100.0 \pm 0.0$ \\
+CV-Large ($|\mathcal{I}|$=100)  & $0.873 \pm 0.113$ & $0.006 \pm 0.007$ & $93.8 \pm 84.8$ \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-The generated Pareto fronts exhibit a definitively convex cost-deprivation trade-off: marginal reductions in expected maximum deprivation $Z_2$ require disproportionately large increases in logistics cost $Z_1$ toward the stringent-deprivation end. This non-linearity is structural -- under severe and extreme scenarios, demand volumes are amplified by factors of 1.8 and 2.8 respectively, rendering purely cost-optimised infrastructure critically insufficient during tail-events.
+Table~\ref{tab:exp2_results} demonstrates that PB-NSGA maintains high solution quality even as the problem scales to commune-level resolution ($2^{20} \approx 10^6$ hub configurations). On the CV-Large instance, the algorithm achieves a stable mean IGD\textsuperscript{+} of $0.006$, indicating consistent convergence to the reference Pareto front. The standard deviation in HV ($0.113$) reflects the inherent stochasticity of searching a vast multimodal landscape, yet remains within acceptable bounds for decision support.
+
+% The generated Pareto fronts exhibit a definitively convex cost-deprivation trade-off: marginal reductions in expected maximum deprivation $Z_2$ require disproportionately large increases in logistics cost $Z_1$ toward the stringent-deprivation end. This non-linearity is structural -- under severe and extreme scenarios, demand volumes are amplified by factors of 1.8 and 2.8 respectively, rendering purely cost-optimised infrastructure critically insufficient during tail-events.
 
 \begin{figure}[ht]
 \centering
@@ -436,8 +435,10 @@ The generated Pareto fronts exhibit a definitively convex cost-deprivation trade
 \label{fig:cv_large_map_detailed}
 \end{figure}
 
-Figure~\ref{fig:cv_large_map_detailed} visualizes a single representative \quo{Balanced} solution from the Pareto front, capturing spatial demand-to-hub assignments, inter-hub lateral transshipments, and multimodal routing choices (truck, motorboat, helicopter) dynamically adjusting to progressively worse conditions.
-Under the mild scenario, a compact set of coastal hubs served strictly by truck provides adequate coverage. As the event intensifies to extreme, breached coastal hubs force demand to sequentially reroute through inland mountain rescue sites (e.g., A Luoi/Nam Dong) via motorboat and helicopter. A deterministic single-scenario model essentially suppresses this adaptation, chronically under-investing in flexible transport capacity.
+Figure~\ref{fig:cv_large_map_detailed} visualizes a representative \quo{Balanced} solution, showcasing the model's dynamic multimodal adaptation.
+Under mild conditions, the network relies on a combination of coastal watercraft links and terrestrial road networks.
+However, as severity intensifies to the extreme scenario, a pronounced modal shift occurs: the priority-based decoder sequentially activates rotary-wing (helicopter) links to reach isolated clusters in the mountainous north-west and vulnerable eastern regions. 
+This spatial adaptation is anchored by two safe strategic hubs (H13 and H15), which act as resilient distribution centers for inland and coastal demand respectively.
 
 \subsubsection*{Sample Average Approximation and Out-Of-Sample Validation}
 

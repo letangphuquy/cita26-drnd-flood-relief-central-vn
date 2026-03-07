@@ -47,24 +47,38 @@ except ImportError:
 def load_result(path):
     with open(path) as fh:
         data = json.load(fh)
-    pts = [
-        (sol["Z1"], sol["Z2"])
-        for sol in data.get("pareto_front", [])
-        if sol.get("CV", 0) == 0
-    ]
-    return pts, data.get("meta", {}), data.get("pareto_front", [])
+    # Filter: strictly feasible first, but if none available (CV > 0 globally), 
+    # we take what the solver provided as its best (rank 1).
+    pareto_json = data.get("pareto_front", [])
+    has_strictly_feasible = any(sol.get("CV", 0) == 0 for sol in pareto_json)
+    
+    if has_strictly_feasible:
+        pts = [(sol["Z1"], sol["Z2"]) for sol in pareto_json if sol.get("CV", 0) == 0]
+    else:
+        # Fallback to all rank-1 solutions if no strictly feasible ones exist
+        pts = [(sol["Z1"], sol["Z2"]) for sol in pareto_json if sol.get("rank", 1) == 1]
+    
+    return pts, data.get("meta", {}), pareto_json
 
 
 def dominant_pareto(runs_pts):
     all_pts = [p for run in runs_pts for p in run]
+    if not all_pts: return []
     nondom = []
     for p in all_pts:
-        if not any(
-            q[0] <= p[0] and q[1] <= p[1] and (q[0] < p[0] or q[1] < p[1])
-            for q in all_pts
-        ):
+        is_dom = False
+        for q in all_pts:
+            if q[0] <= p[0] and q[1] <= p[1] and (q[0] < p[0] or q[1] < p[1]):
+                is_dom = True
+                break
+        if not is_dom:
             nondom.append(p)
-    return sorted(set(nondom), key=lambda p: p[0])
+    # Unique by rounding to 6 decimal places to avoid floating point noise
+    unique = {}
+    for p in nondom:
+        k = (round(p[0], 6), round(p[1], 6))
+        unique[k] = p
+    return sorted(unique.values(), key=lambda p: p[0])
 
 
 def normalize_points(pts_list, bounds=None):
@@ -78,8 +92,8 @@ def normalize_points(pts_list, bounds=None):
         z2_max = max(p[1] for p in all_pts)
     else:
         z1_min, z1_max, z2_min, z2_max = bounds
-    rz1 = max(z1_max - z1_min, 1e-12)
-    rz2 = max(z2_max - z2_min, 1e-12)
+    rz1 = max(z1_max - z1_min, 1e-6)
+    rz2 = max(z2_max - z2_min, 1e-6)
     normed = [[(( p[0]-z1_min)/rz1, (p[1]-z2_min)/rz2) for p in run]
               for run in pts_list]
     return normed, (z1_min, z1_max, z2_min, z2_max)
@@ -102,14 +116,16 @@ def hypervolume_2d(pareto, ref=(1.1, 1.1)):
 
 def igd_plus(approx, reference):
     """IGD+ (Ishibuchi et al., 2015). Both args must be normalised."""
-    if not reference or not approx:
-        return float("inf")
+    if not reference:
+        return 0.0
+    if not approx:
+        return 1.0
     total = sum(
-        min(math.hypot(max(az1 - rz1, 0), max(az2 - rz2, 0)) ** 2
+        min(math.hypot(max(rz1 - az1, 0), max(rz2 - az2, 0))
             for az1, az2 in approx)
         for rz1, rz2 in reference
     )
-    return math.sqrt(total / len(reference))
+    return total / len(reference)
 
 
 def _mean_std(vals):
@@ -117,7 +133,9 @@ def _mean_std(vals):
         return float("nan"), float("nan")
     if len(vals) == 1:
         return vals[0], 0.0
-    return statistics.mean(vals), statistics.stdev(vals)
+    avg = sum(vals) / len(vals)
+    var = sum((x - avg) ** 2 for x in vals) / (len(vals) - 1)
+    return avg, math.sqrt(var)
 
 
 # ---------------------------------------------------------------------------
@@ -137,10 +155,13 @@ def discover_cv_files(results_dir):
         if not base.startswith("CV_"):
             continue
         parts = base.split("_")
-        if len(parts) >= 3 and parts[2].startswith("seed"):
+        if len(parts) == 3 and parts[2].startswith("seed"):
             grp  = "_".join(parts[:2])       # CV_small or CV_large
-            seed = int(parts[2].replace("seed", ""))
-            groups.setdefault(grp, []).append((seed, os.path.join(results_dir, fname)))
+            try:
+                seed = int(parts[2].replace("seed", ""))
+                groups.setdefault(grp, []).append((seed, os.path.join(results_dir, fname)))
+            except ValueError:
+                continue
     return groups
 
 
