@@ -1,3 +1,5 @@
+NOTE: THIS IS OUTDATED.
+
 \mycomment{
 UP-NEXT: Experiments
 We should re-arrange the below contents to like this (Experiment: HLP benchmarks -- talk both dataset method and exp. set-up, as well as results) (Experiment: Case study -- present dataset methodology, then the settings, then the results) 

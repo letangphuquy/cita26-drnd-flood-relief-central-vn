@@ -364,7 +364,7 @@ The decoder is invoked once per chromosome per scenario $s \in \mathcal{S}$, rec
 \subsection{Experimental Setup}
 \label{sec:exp_setup}
 
-PB-NSGA is implemented in C++17; dataset construction and post-processing are performed in Python~3, on a workstation with an Intel Core i7-12700 (2.1~GHz, 12 cores) and 16~GB RAM. Fixed for all runs: $N = 100$, $G = 200$, $p_c = 0.9$, $\eta_c = \eta_m = 20$, $p_m = 1/|\mathbf{C}|$, decoder noise $\sigma = 0.05$. Problem constants are $\chi = 0.7$, $\alpha = 0.6$, $\gamma = 3.0$~kg/person, $\lambda_0 = 0.8$. Each configuration is executed for 20 independent runs, reporting mean~$\pm$~std. We use \textbf{Hypervolume (HV)}~\cite{zitzler1999multiobjective} (reference point $(1.1, 1.1)$) and \textbf{IGD\textsuperscript{+}}~\cite{ishibuchi2015modified} for performance metrics, utilizing exact Pareto fronts from complete enumeration as the ground truth for small instances.
+PB-NSGA is implemented in C++17; dataset construction and post-processing are performed in Python~3, on a workstation with an 11th Gen Intel Core i5-1135G7 @ 2.40~GHz and 16~GB RAM. Fixed for all runs: $N = 100$, $G = 200$, $p_c = 0.9$, $\eta_c = \eta_m = 20$, $p_m = 1/|\mathbf{C}|$, decoder noise $\sigma = 0.05$. Problem constants are $\chi = 0.7$, $\alpha = 0.6$, $\gamma = 3.0$~kg/person, $\lambda_0 = 0.8$. Each configuration is executed for 20 independent runs, reporting mean~$\pm$~std. We use \textbf{Hypervolume (HV)}~\cite{zitzler1999multiobjective} and \textbf{IGD\textsuperscript{+}}~\cite{ishibuchi2015modified} for performance metrics, utilizing exact Pareto fronts from complete enumeration as the ground truth for small instances.
 
 \subsection{Dataset Description}
 \label{sec:datasets}

@@ -1,3 +1,5 @@
+NOTE: THIS IS OUTDATED. FOR REFERENCE PURPOSES ONLY.
+
 Bạn hãy thực hiện đầy đủ quy trình thực nghiệm (bước số 2) như tôi sẽ phân tích dưới đây:
 
 Để làm thực nghiệm, cần quán triệt bốn vấn đề:
