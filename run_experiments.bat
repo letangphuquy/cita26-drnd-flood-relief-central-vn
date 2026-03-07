@@ -13,7 +13,7 @@ REM   data\cv\           — Central Vietnam instances (cv_small, cv_large)
 REM   results\exp1\      — Experiment 1 outputs (benchmarks)
 REM   results\exp2\      — Experiment 2 outputs (case study CV)
 REM   scripts\           — Python analysis scripts
-REM   solver_cpp\        — C++ solvers (solver.exe, bb_solver.exe)
+REM   solver\        — C++ solvers (solver.exe, bb_solver.exe)
 REM
 REM Experiment 1 — Algorithm Benchmarking
 REM   Step 1a: BB complete enumeration on AP10/20/25/40 (ground-truth Pareto)
@@ -27,8 +27,8 @@ REM   Step 2b: Analysis — sensitivity, hub stability, map visualisation
 setlocal EnableDelayedExpansion
 
 set "PROJECT=%~dp0"
-set "SOLVER=%PROJECT%solver_cpp\solver.exe"
-set "BB=%PROJECT%solver_cpp\bb_solver.exe"
+set "SOLVER=%PROJECT%solver\solver.exe"
+set "BB=%PROJECT%solver\bb_solver.exe"
 
 REM Canonical dataset directories
 set "DATA_BENCH=%PROJECT%data\benchmark"
@@ -77,12 +77,12 @@ REM ── Solver availability check ──────────────�
 :dataset_check
 if not exist "%SOLVER%" (
     echo [Error] solver.exe not found.
-    echo         Compile: cd solver_cpp ^& g++ -O2 -std=c++17 main.cpp -o solver
+    echo         Compile: cd solver ^& g++ -O2 -std=c++17 main.cpp -o solver
     exit /b 1
 )
 if not exist "%BB%" (
     echo [Error] bb_solver.exe not found.
-    echo         Compile: cd solver_cpp ^& g++ -O2 -std=c++17 bb_solver.cpp -o bb_solver
+    echo         Compile: cd solver ^& g++ -O2 -std=c++17 bb_solver.cpp -o bb_solver
     exit /b 1
 )
 

@@ -1,7 +1,7 @@
 @echo off
 setlocal EnableDelayedExpansion
 set "PROJECT=%~dp0"
-set "SOLVER=%PROJECT%solver_cpp\solver.exe"
+set "SOLVER=%PROJECT%solver\solver.exe"
 set "POP=100"
 set "GEN=200"
 set "SEEDS=0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19"
