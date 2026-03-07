@@ -15,21 +15,21 @@ echo [PB-NSGA] Full 20-seed run started.
 for %%N in (10 20 25 40 50 100) do (
     echo [AP%%N] Running 20 seeds...
     for %%R in (%SEEDS%) do (
-        "%SOLVER%" "!DATA_BENCH!\AP%%N_drnd.json" --pop %POP% --gen %GEN% --seed %%R --out "!RES1!\AP%%N_seed%%R.json" 2>/dev/null
+        "%SOLVER%" "!DATA_BENCH!\AP%%N_drnd.json" --pop %POP% --gen %GEN% --seed %%R --out "!RES1!\AP%%N_seed%%R.json" 2>NUL
     )
     echo [AP%%N] Done.
 )
 
 echo [TR81] Running 20 seeds...
 for %%R in (%SEEDS%) do (
-    "%SOLVER%" "!DATA_BENCH!\TR81_drnd.json" --pop %POP% --gen %GEN% --seed %%R --out "!RES1!\TR81_seed%%R.json" 2>/dev/null
+    "%SOLVER%" "!DATA_BENCH!\TR81_drnd.json" --pop %POP% --gen %GEN% --seed %%R --out "!RES1!\TR81_seed%%R.json" 2>NUL
 )
 echo [TR81] Done.
 
 for %%G in (small large) do (
     echo [CV-%%G] Running 20 seeds...
     for %%R in (%SEEDS%) do (
-        "%SOLVER%" "!DATA_CV!\cv_%%G_drnd.json" --pop %POP% --gen %GEN% --seed %%R --out "!RES2!\CV_%%G_seed%%R.json" 2>/dev/null
+        "%SOLVER%" "!DATA_CV!\cv_%%G_drnd.json" --pop %POP% --gen %GEN% --seed %%R --out "!RES2!\CV_%%G_seed%%R.json" 2>NUL
     )
     echo [CV-%%G] Done.
 )

@@ -15,6 +15,7 @@ Một số vấn đề của phần thực nghiệm hiện tại (commit e9f8844
 - For message 1., develop a baseline algorithm (e.g., a simple greedy algorithm and/or a single-objective optimization algorithm, like epsilon-constraint method) to compare with the proposed algorithm.
   - evaluate on small instances of case study dataset.
   - measuring HV, IGD+ and running time (in CPU seconds).
+  - output: a table
   - conclusion should claim the superiority of the proposed algorithm over the baseline algorithm.
 - For message 2., i.e. the case study in Central Vietnam
   - evaluate on the full case study dataset (large instance).
