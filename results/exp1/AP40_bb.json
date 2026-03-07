@@ -266,7 +266,7 @@
     }
   ],
   "meta": {
-    "elapsed_s": 3.345039,
+    "elapsed_s": 3.323389,
     "leaves_evaluated": 255,
     "mode": "enum",
     "nodes_visited": 510,
