@@ -131,11 +131,8 @@ def igd_plus(approx, reference):
 def _mean_std(vals):
     if not vals:
         return float("nan"), float("nan")
-    if len(vals) == 1:
-        return vals[0], 0.0
-    avg = sum(vals) / len(vals)
-    var = sum((x - avg) ** 2 for x in vals) / (len(vals) - 1)
-    return avg, math.sqrt(var)
+    import numpy as np
+    return float(np.mean(vals)), float(np.std(vals, ddof=1) if len(vals) > 1 else 0.0)
 
 
 # ---------------------------------------------------------------------------
@@ -388,7 +385,7 @@ def run(results_dir, out_dir, cv_data_dir=None):
         seed_results = []   # [(seed, pts, pareto_full)]
         for seed, path in seeds:
             pts, meta, pareto_full = load_result(path)
-            seed_results.append((seed, pts, pareto_full))
+            seed_results.append((seed, pts, meta, pareto_full))
 
         all_runs = [sr[1] for sr in seed_results]
 
@@ -403,18 +400,29 @@ def run(results_dir, out_dir, cv_data_dir=None):
         ref_pt = (1.1, 1.1)
 
         # Per-seed metrics
-        hv_list = igd_list = sz_list = []
-        hv_list, igd_list, sz_list = [], [], []
-        for pts, norm_pts in zip(all_runs, norm_runs):
+        hv_list, igd_list, sz_list, rt_list, cpu_list = [], [], [], [], []
+        for pts, norm_pts, sr_tuple in zip(all_runs, norm_runs, seed_results):
+            meta = sr_tuple[2]  # (seed, pts, meta, pareto_full)
             hv_list.append(hypervolume_2d(norm_pts, ref_pt))
             igd_list.append(igd_plus(norm_pts, reference_norm))
             sz_list.append(len(pts))
+            for k in ("runtime_s", "elapsed_s"):
+                if k in meta:
+                    rt_list.append(float(meta[k]))
+                    break
+            if "cpu_time_s" in meta:
+                cpu_list.append(float(meta["cpu_time_s"]))
 
         hv_m,  hv_s  = _mean_std(hv_list)
         igd_m, igd_s = _mean_std(igd_list)
         sz_m,  sz_s  = _mean_std([float(s) for s in sz_list])
+        rt_m,  rt_s  = _mean_std(rt_list)
+        cpu_m, cpu_s = _mean_std(cpu_list)
+        
         print(f"  HV={hv_m:.4f}±{hv_s:.4f}  IGD+={igd_m:.4f}±{igd_s:.4f}  "
-              f"front_size={sz_m:.1f}±{sz_s:.1f}")
+              f"front_size={sz_m:.1f}±{sz_s:.1f}"
+              + (f"  rt={rt_m:.1f}s" if rt_list else "")
+              + (f"  cpu={cpu_m:.1f}s" if cpu_list else ""))
 
         metrics_rows.append({
             "instance":        grp,
@@ -427,6 +435,10 @@ def run(results_dir, out_dir, cv_data_dir=None):
             "HV_std":          f"{hv_s:.6f}",
             "IGDplus_mean":    f"{igd_m:.6f}",
             "IGDplus_std":     f"{igd_s:.6f}",
+            "runtime_s_mean":  f"{rt_m:.4f}" if rt_list else "N/A",
+            "runtime_s_std":   f"{rt_s:.4f}" if rt_list else "N/A",
+            "cpu_time_s_mean": f"{cpu_m:.4f}" if cpu_list else "N/A",
+            "cpu_time_s_std":  f"{cpu_s:.4f}" if cpu_list else "N/A",
         })
 
         # Pareto plot (combined front across seeds)
@@ -475,6 +487,8 @@ def run(results_dir, out_dir, cv_data_dir=None):
         "instance", "algorithm", "n_runs",
         "pareto_combined", "pareto_mean", "pareto_std",
         "HV_mean", "HV_std", "IGDplus_mean", "IGDplus_std",
+        "runtime_s_mean", "runtime_s_std",
+        "cpu_time_s_mean", "cpu_time_s_std",
     ])
 
     all_stab = [r for rows in stability_rows_all.values() for r in rows]

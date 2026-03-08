@@ -56,7 +56,7 @@ This step executes the case study visualization by identifying a Median-tradeoff
 
 ```bash
 # A. Run PB-NSGA on CV-Large (Assuming Seed 0 for the chosen analysis slice)
-src\solver\solver.exe data\cv\cv_large_drnd.json --pop 100 --gen 200 --seed 0 --out results\exp2\cv_large_seed0.json
+src\solver\solver.exe data\cv\cv_large_drnd.json --pop 200 --gen 300 --seed 0 --out results\exp2\cv_large_seed0.json
 
 # B. Export routing and intermediate stage flow
 src\solver\export_flow.exe data\cv\cv_large_drnd.json results\exp2\cv_large_seed0.json results\exp2\cv_large_flow.json
@@ -66,3 +66,43 @@ python src\scripts\map_solution_detailed.py --instance data\cv\cv_large_drnd.jso
 ```
 
 The resulting 1x3 composite figure mapping the truck, boat, and helicopter responses to the Mild, Severe, and Extreme topologies will be produced and saved directly as `figures\cv_large_map_detailed.pdf`.
+
+## 4. Automated End-to-End Reproduction
+
+For a "one-click" reproduction of all results (recompile, run experiments, analyze, and sync to paper), use these scripts:
+
+```bash
+# A. Experiment 1: Benchmarks
+# Recompiles, runs baseline comparisons and benchmarks, analyzes, and syncs to paper/
+run_exp1_full.bat
+
+# B. Experiment 2: Case Study
+# Recompiles, runs 20-seed runs for CV-Small/Large, generates maps, and syncs to paper/
+run_exp2_full.bat
+```
+
+## 5. Manual Running and Analysis
+
+If you prefer to run steps manually, follow these instructions:
+
+### A. Compilation
+```bash
+# Main PB-NSGA solver
+g++ -O3 -std=c++17 src\solver\main.cpp -I src\solver -o src\solver\solver.exe
+```
+
+### B. Analysis Scripts
+```bash
+# Exp1 Metrics
+python src\scripts\analyze_exp1.py results\exp1
+
+# Exp2 Metrics & Maps
+python src\scripts\analyze_exp2.py results\exp2 results\exp2 data\cv
+```
+
+## 6. Updating the Manuscript (LaTeX)
+The automated scripts above already handle syncing. If running manually, copy assets to `paper/`:
+```bash
+copy /Y results\exp1\exp1_metrics.csv paper\
+copy /Y results\exp2\figures\*.pdf paper\figures\
+```

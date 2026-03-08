@@ -36,6 +36,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <ctime>
 #include <fstream>
 #include <numeric>
 #include <string>
@@ -470,7 +471,7 @@ static void bb_search(vector<int> &X, int depth, const DRNDInstance &inst,
 // JSON output (mirrors main solver format)
 // ---------------------------------------------------------------------------
 static void write_output(const ParetoArchive &archive, const string &out_path,
-                         double elapsed_s, const string &mode) {
+                         double elapsed_s, double cpu_s, const string &mode) {
   auto front = archive.front;
   std::sort(front.begin(), front.end(),
             [](const Solution &a, const Solution &b) { return a.Z1 < b.Z1; });
@@ -479,6 +480,7 @@ static void write_output(const ParetoArchive &archive, const string &out_path,
   j["meta"]["solver"] = (mode == "enum") ? "BB-CompleteEnum" : "BB-Exact";
   j["meta"]["mode"] = mode;
   j["meta"]["elapsed_s"] = elapsed_s;
+  j["meta"]["cpu_time_s"] = cpu_s;
   j["meta"]["nodes_visited"] = g_nodes_visited;
   j["meta"]["pruned_infeasible"] = g_pruned_infeasible;
   j["meta"]["pruned_dominance"] = g_pruned_dominance;
@@ -578,8 +580,11 @@ int main(int argc, char *argv[]) {
   vector<int> X(inst.num_H, 0);
 
   g_t_start = Clock::now();
+  std::clock_t c_start = std::clock();
   bb_search(X, 0, inst, bc, archive, num_trials, use_pruning);
+  std::clock_t c_end = std::clock();
   const double elapsed = Duration(Clock::now() - g_t_start).count();
+  const double cpu_s = 1.0 * (c_end - c_start) / CLOCKS_PER_SEC;
 
   cerr << "=== Done ===\n";
   cerr << "  Pareto front size : " << archive.front.size() << "\n";
@@ -588,13 +593,14 @@ int main(int argc, char *argv[]) {
   if (use_pruning)
     cerr << "  Pruned (dominance): " << g_pruned_dominance << "\n";
   cerr << "  Leaves evaluated  : " << g_leaves_evaluated << "\n";
-  cerr << "  Elapsed           : " << elapsed << " s\n";
+  cerr << "  Elapsed           : " << elapsed << " s (CPU: " << cpu_s
+       << " s)\n";
 
   if (Duration(Clock::now() - g_t_start).count() >= time_limit)
     cerr << "  WARNING: Time limit reached — result is PARTIAL front.\n";
 
   try {
-    write_output(archive, out_path, elapsed, mode);
+    write_output(archive, out_path, elapsed, cpu_s, mode);
   } catch (const std::exception &e) {
     cerr << "Error writing output: " << e.what() << "\n";
     return 1;

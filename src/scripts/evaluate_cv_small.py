@@ -215,17 +215,26 @@ def main():
     bb_pts,     bb_meta     = safe_load(bb_path)
     greedy_pts, greedy_meta = safe_load(greedy_path)
     milp_pts,   milp_meta   = safe_load(milp_path)
-    milp_cpu    = milp_meta.get("elapsed_s", milp_meta.get("wall_s", 1800.0))
+    
+    # Correctly resolve MILP and other algorithm runtimes
+    def get_time(meta):
+        wall = meta.get("total_elapsed_s", meta.get("elapsed_s", meta.get("runtime_s", float("nan"))))
+        cpu = meta.get("total_cpu_s", meta.get("cpu_time_s", float("nan")))
+        return wall, cpu
+
+    milp_wall, milp_cpu_val = get_time(milp_meta)
+    bb_wall,   bb_cpu_val   = get_time(bb_meta)
+    greedy_wall, greedy_cpu_val = get_time(greedy_meta)
 
     pbnsga_runs = []
-    pbnsga_rts  = []
+    pbnsga_walls = []
+    pbnsga_cpus = []
     for p in pbnsga_paths:
         pts, meta = safe_load(p)
         pbnsga_runs.append(pts)
-        for k in ("runtime_s", "elapsed_s"):
-            if k in meta:
-                pbnsga_rts.append(float(meta[k]))
-                break
+        w, c = get_time(meta)
+        if not np.isnan(w): pbnsga_walls.append(w)
+        if not np.isnan(c): pbnsga_cpus.append(c)
 
     print(f"\n[Data] BB solutions      : {len(bb_pts)}")
     print(f"[Data] Greedy solutions  : {len(greedy_pts)}")
@@ -293,21 +302,30 @@ def main():
             "hv_mean": hv_mean, "hv_std": hv_std,
             "igd_mean": igd_mean, "igd_std": igd_std,
             "n_runs": len(pts_list_of_runs),
+            "wall": 0.0, "cpu": 0.0 # to be filled
         }
         return hv_mean, hv_std, igd_mean, igd_std
 
-    # Single-run algorithms
+    # Single-run algorithms metrics
     evaluate_single("Greedy",   [greedy_pts])
+    results["Greedy"]["wall"], results["Greedy"]["cpu"] = greedy_wall, greedy_cpu_val
+    
     evaluate_single("MILP",     [milp_pts] if milp_pts else [[]])
+    results["MILP"]["wall"],   results["MILP"]["cpu"]   = milp_wall, milp_cpu_val
+    
     evaluate_single("BB-Exact", [bb_pts])
+    results["BB-Exact"]["wall"], results["BB-Exact"]["cpu"] = bb_wall, bb_cpu_val
+    
     evaluate_single("PB-NSGA",  pbnsga_runs)
+    results["PB-NSGA"]["wall"] = float(np.mean(pbnsga_walls)) if pbnsga_walls else 0.0
+    results["PB-NSGA"]["cpu"]  = float(np.mean(pbnsga_cpus)) if pbnsga_cpus else 0.0
 
     # ── Print results table ─────────────────────────────────────────────────
     print("\n" + "="*70)
     print("  CV-Small Baseline Comparison")
     print("="*70)
-    print(f"  {'Algorithm':<25} {'HV (norm)':>14}  {'IGD+':>12}  {'n_runs':>6}")
-    print("-"*70)
+    print(f"  {'Algorithm':<25} {'HV (norm)':>14}  {'IGD+':>12}  {'Wall (s)':>10}  {'CPU (s)':>10}")
+    print("-" * 80)
 
     def fmt_hv(r_name):
         r = results[r_name]
@@ -327,14 +345,15 @@ def main():
 
     for name in ["Greedy", "MILP", "BB-Exact", "PB-NSGA"]:
         r = results[name]
-        label = ("— (timeout)" if name == "MILP" and not milp_pts else name)
-        print(f"  {name:<25} {fmt_hv(name):>14}  {fmt_igd(name):>12}  {r['n_runs']:>6}")
+        w_str = f"{r['wall']:.1f}" if not np.isnan(r["wall"]) else "—"
+        c_str = f"{r['cpu']:.1f}" if not np.isnan(r["cpu"]) else "—"
+        print(f"  {name:<25} {fmt_hv(name):>14}  {fmt_igd(name):>12}  {w_str:>10}  {c_str:>10}")
 
-    print("="*70)
+    print("=" * 80)
 
     # ── PB-NSGA timing ──────────────────────────────────────────────────────
-    pb_rt_mean = float(np.mean(pbnsga_rts)) if pbnsga_rts else float("nan")
-    pb_rt_std  = float(np.std(pbnsga_rts, ddof=1)) if len(pbnsga_rts) > 1 else 0.0
+    pb_rt_mean = float(np.mean(pbnsga_walls)) if pbnsga_walls else float("nan")
+    pb_rt_std  = float(np.std(pbnsga_walls, ddof=1)) if len(pbnsga_walls) > 1 else 0.0
 
     # ── LaTeX table row ─────────────────────────────────────────────────────
     g = results["Greedy"]
@@ -348,7 +367,7 @@ def main():
     if milp_pts:
         milp_hv_str  = f"${m['hv_mean']:.3f}$"
         milp_igd_str = f"${m['igd_mean']:.3f}$" if np.isfinite(m["igd_mean"]) else "$-$"
-        milp_t_str   = f"${milp_cpu:.1f}^*$"
+        milp_t_str   = f"${m['wall']:.1f}^*$"
     else:
         milp_hv_str  = "$-$"
         milp_igd_str = "$-$"
@@ -356,14 +375,14 @@ def main():
 
     bb_hv_str  = f"${b['hv_mean']:.3f}$"
     bb_igd_str = f"${b['igd_mean']:.3f}$" if np.isfinite(b["igd_mean"]) else "$-$"
-    bb_t_str   = f"${bb_meta.get('elapsed_s', 18.5):.1f}$"
+    bb_t_str   = f"${b['wall']:.1f}$"
 
     pb_hv_str  = (f"$\\mathbf{{{p['hv_mean']:.3f} \\pm {p['hv_std']:.3f}}}$"
                   if p["n_runs"] > 1 else f"${p['hv_mean']:.3f}$")
     pb_igd_str = (f"$\\mathbf{{{p['igd_mean']:.3f} \\pm {p['igd_std']:.3f}}}$"
                   if p["n_runs"] > 1 and np.isfinite(p["igd_mean"])
                   else f"${p['igd_mean']:.3f}$")
-    pb_t_str   = f"${pb_rt_mean:.1f}$"
+    pb_t_str   = f"${p['wall']:.1f}$"
 
     print("\n--- LaTeX table rows (paste into main.tex) ---")
     print(r"Greedy Heuristic                &"
@@ -377,7 +396,7 @@ def main():
 
     # ── Write CSV ────────────────────────────────────────────────────────────
     out_csv = os.path.join(exp1_dir, "cv_small_metrics.csv")
-    fields  = ["algorithm", "n_runs", "hv_mean", "hv_std", "igd_mean", "igd_std"]
+    fields  = ["algorithm", "n_runs", "hv_mean", "hv_std", "igd_mean", "igd_std", "wall_s", "cpu_s"]
     with open(out_csv, "w", newline="") as fh:
         writer = csv.writer(fh)
         writer.writerow(fields)
@@ -388,6 +407,7 @@ def main():
                 f"{r['hv_mean']:.6f}", f"{r['hv_std']:.6f}",
                 f"{r['igd_mean']:.6f}" if np.isfinite(r["igd_mean"]) else "inf",
                 f"{r['igd_std']:.6f}",
+                f"{r['wall']:.3f}", f"{r['cpu']:.3f}",
             ])
     print(f"\n[CSV] {out_csv}")
 

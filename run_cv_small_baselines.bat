@@ -86,7 +86,7 @@ echo          This may take up to ~90 minutes.
 "%PYTHON%" "%SOLVER_DIR%\milp_baseline.py" ^
     --instance "%DATA_CV%" ^
     --out "%RES1%\cv_small_milp.json" ^
-    --steps 9
+    --steps 1000
 if !ERRORLEVEL! NEQ 0 (
     echo [Warning] MILP run returned non-zero exit. Partial results may be saved.
 )

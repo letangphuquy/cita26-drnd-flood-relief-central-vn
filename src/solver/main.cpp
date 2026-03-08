@@ -22,6 +22,7 @@
 #include "nsga2.hpp"
 
 #include <chrono>
+#include <ctime>
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
@@ -86,9 +87,10 @@ Args parse_args(int argc, char *argv[]) {
 // Output: write Pareto front to JSON
 // ---------------------------------------------------------------------------
 void write_output(const vector<Individual> &pop, std::ostream &out,
-                  double elapsed_s, const Args &args) {
+                  double elapsed_s, double cpu_s, const Args &args) {
   json j;
   j["meta"]["elapsed_s"] = elapsed_s;
+  j["meta"]["cpu_time_s"] = cpu_s;
   j["meta"]["seed"] = args.seed_iter;
   j["meta"]["pop_size"] = args.pop_size;
   j["meta"]["num_gen"] = args.num_gen;
@@ -172,21 +174,24 @@ int main(int argc, char *argv[]) {
   cfg.tournament_size = args.tournament_sz;
 
   auto t_start = std::chrono::steady_clock::now();
+  std::clock_t c_start = std::clock();
   auto population = run_nsga2(inst, cfg);
+  std::clock_t c_end = std::clock();
   auto t_end = std::chrono::steady_clock::now();
   double elapsed_s = std::chrono::duration<double>(t_end - t_start).count();
-  cerr << "[Time] " << elapsed_s << " s\n";
+  double cpu_s = 1.0 * (c_end - c_start) / CLOCKS_PER_SEC;
+  cerr << "[Time] " << elapsed_s << " s (CPU: " << cpu_s << " s)\n";
 
   // Output results
   if (args.output_path.empty()) {
-    write_output(population, cout, elapsed_s, args);
+    write_output(population, cout, elapsed_s, cpu_s, args);
   } else {
     std::ofstream fout(args.output_path);
     if (!fout.is_open()) {
       cerr << "Cannot open output file: " << args.output_path << "\n";
       return 1;
     }
-    write_output(population, fout, elapsed_s, args);
+    write_output(population, fout, elapsed_s, cpu_s, args);
     cerr << "[Output] Written to: " << args.output_path << "\n";
   }
 
