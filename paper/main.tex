@@ -115,7 +115,7 @@ Natural disasters are becoming increasingly frequent and violent, continuously e
 As a highly vulnerable coastal country, Vietnam has witnessed unprecedented extreme weather events.
 In 2025 alone, a relentless sequence of typhoons and record-breaking floods in Central Vietnam resulted in massive fatalities and an estimated 98.7 trillion VND in economic losses~\cite{VOV2025}.
 
-There were many great challenges in humanitarian operations during this period.
+Humanitarian operations during this period faced significant challenges.
 Most critically, national logistics infrastructure suffered severe disruption: the North-South Railway was paralyzed by track erosion and submersion, forcing the cancellation of 170 trains, while key arteries such as Vietnam National Route 1 were severed by landslides, isolating communities for days~\cite{VOV2025}.
 These events demonstrate that during a major catastrophe, the assumption of a fully connected transport network is fundamentally flawed -- the physical network becomes \quo{incomplete}, characterized by broken links and isolated nodes.
 Compounding this, resource scarcity arising from poor planning and uncertain supply and demand further strains relief efforts.
@@ -239,7 +239,7 @@ Objective $Z_1$ minimizes total expected logistics cost. Using the previously me
     \Theta_{kis} = \min_{m \in \mathcal{M}  \mid a_{ikms}=1} \left( 2 \cdot C_{kim} \cdot \lceil D_{is}/Q_m \rceil + C_{m} \cdot \Phi \sqrt{\lceil D_{is}/\eta \rceil \cdot A_i} \right)
 \end{equation*}
 
-\textbf{ Objective 2: Minimize Expected Maximum Deprivation Cost ($Z_2$)}
+\textbf{Objective 2: Minimize Expected Maximum Deprivation Cost ($Z_2$)}
 
 % Formula: max (s over S) (sum i over I) IS CHANGED TO avg (s over S) (max i over I)
 % \begin{equation} \label{eq:obj2}
@@ -254,13 +254,19 @@ Objective $Z_1$ minimizes total expected logistics cost. Using the previously me
 \Omega_{is} = \sum_{k \in \mathcal{H}} z_{iks} \left( \tau_{ks} + 2 \cdot \min_{m \in \mathcal{M}  \mid a_{ikms}=1} \tau_{kim} \right)
 \end{equation*}
 
-Objective $Z_2$ minimizes the expected value of maximum deprivation cost \cite{holguin2013appropriate}.
-The exponential function on waiting time $\Omega_{is}$ heavily penalizes the model if it lets a demand node $i$ wait slightly longer than the rest, thus forcing the model to distribute resources evenly.
-% Applying the exponential penalty on waiting times ($\Omega_{is}$) ensures equitable resource distribution across all populations.
-The penalty function is adjusted by $\lambda_{is}$, which is proportional to the risk index, $\lambda_{is} = \lambda_0 (1 + r_{is})$. Vulnerable populations with higher sensitivity factors $\lambda_{is}$ will be prioritized.
-% The sensitivity coefficient $\lambda_{is}$ is proportional to the risk index $r_{is}$ ($\lambda_{is} = \lambda_0(1 + r_{is})$), effectively prioritizing vulnerable populations. 
+Objective $Z_2$ minimizes the expected value of maximum deprivation cost \cite{holguin2013appropriate}. The exponential function heavily penalizes the model if it lets a demand node wait slightly longer than the rest, forcing the model to distribute resources evenly. The penalty function is adjusted by $\lambda_{is} = \lambda_0 (1 + r_{is})$ so that highly vulnerable populations are prioritized. 
 
-Although $Z_2$ introduces non-linearity, meta-heuristic solvers can directly evaluate it as a fitness function. For linearization into a Mixed-Integer Linear Programming (MILP) form, one can exploit the single-allocation property \eqref{eq:single_alloc_demand}: since each demand $i$ is allocated to exactly one hub $k^*$ (i.e.~$z_{ik^*s}=1$ and all others zero), $\Omega_{is}$ collapses to $\tau_{k^*s} + 2\min_m\tau_{k^*im}$, a constant given the allocation. Introducing auxiliary variables $\phi_s = \max_{i}(\cdot)$ and linearizing the exponential via a first-order Taylor expansion or piecewise-linear over-approximation then yields a standard MILP. In practice, however, the Big-M reformulation required by the $\epsilon$-constraint multi-objective framework renders the resulting MILP numerically unstable at the tested instance sizes (Table~\ref{tab:exp1_results}).
+Although Objective~\eqref{eq:obj2} correctly illustrates the non-linear minimax relationship, we emphasize that within the actual optimization procedures, this non-linearity is eliminated. Because the model strictly enforces a single-allocation property via the binary assignment variable $z_{iks}$ (\textit{i.e.}, $\sum_{k \in \mathcal{H}} z_{iks} = 1$), the deprivation cost for any specific $i \to k$ configuration is deterministic and finite. Consequently, we analytically map the exponential penalty into a set of perfectly linear parameters by pre-computing the exact deprivation cost $C^{\text{dep}}_{iks}$ offline:
+
+\begin{equation} \label{eq:deprivation_cost}
+    C^{\text{dep}}_{iks} = D_{is} \cdot \left(e^{\lambda_{is} \cdot \left(\tau_{ks} + 2 \cdot \min_{m \in \mathcal{M} \mid a_{ikms}=1} \tau_{kim}\right)} - 1\right)
+\end{equation}
+
+By introducing a continuous auxiliary variable $W_s \ge 0$ to capture the \quo{worst-case} (maximum) expected deprivation cost among all demand nodes in a given scenario $s$, the non-linear $Z_2$ objective can be reformulated into an exact linear sum:
+
+\begin{equation} \label{eq:obj2_linear}
+    \text{Min } Z_2^{\text{linear}} = \sum_{s \in \mathcal{S}} \pi_s \cdot W_s
+\end{equation}
 
 \subsection{Constraints}
 
@@ -286,15 +292,15 @@ The complete MO-IHLNDP model is formally stated as follows:
         & \quad + \sum_{h \in \mathcal{H}} \sum_{m \in \mathcal{M}} f_{hkms} \quad \forall k \in \mathcal{H}, s \in \mathcal{S} 
     \end{split} \label{eq:flow_balance} \\
     q_k + \sum_{j \in \mathcal{J}} O_{js} z_{jks} + \sum_{h \in \mathcal{H}} \sum_{m \in \mathcal{M}} f_{hkms} & \le \kappa_k \cdot (x_k + y_{ks}) \quad \forall k \in \mathcal{H}, s \in \mathcal{S} \label{eq:throughput_cap} \\
+    W_s & \ge \sum_{k \in \mathcal{H}} C^{\text{dep}}_{iks} \cdot z_{iks} \quad \forall i \in \mathcal{I}, s \in \mathcal{S} \label{eq:deprivation_bound} \\
     x_k, y_{ks}, z_{iks}, z_{jks} & \in \{0, 1\} \quad \forall i, j, k, s \label{eq:binary_vars} \\
-    q_k, f_{khms} & \ge 0 \quad \forall k, h, m, s \label{eq:nonneg_vars}
+    q_k, f_{khms}, W_s & \ge 0 \quad \forall k, h, m, s \label{eq:nonneg_vars}
 \end{align}
 
-Constraints \eqref{eq:hub_type} define
-the hub establishment. For planned hubs, inventory is bounded by physical capacity \eqref{eq:hub_inv_cap}, while the reactive hubs are required to be placed within safe zones \eqref{eq:hub_safety}.
-Constraints \eqref{eq:single_alloc_demand}-\eqref{eq:path_origin} rigorously enforce the single-allocation property to active hubs via available links. 
+Constraints \eqref{eq:hub_type} define the hub establishment. For planned hubs, inventory is bounded by physical capacity \eqref{eq:hub_inv_cap}, while reactive hubs are required to be placed within safe zones \eqref{eq:hub_safety}.
+Constraints \eqref{eq:single_alloc_demand}-\eqref{eq:path_origin} enforce the single-allocation property to active hubs via available links. 
 Constraint \eqref{eq:trans_path} restricts flow to be trans-shipped on intact paths. 
-Constraints \eqref{eq:flow_balance} and \eqref{eq:throughput_cap} maintain flow conservation and capacity limits. Specifically, \eqref{eq:flow_balance} ensures that total supply, comprising inventory ($q_k$), external origins ($O_{js}$), and incoming flows -- satisfies both victim demand (converted by $\gamma$) and outgoing trans-shipments.
+Constraints \eqref{eq:flow_balance} and \eqref{eq:throughput_cap} maintain flow conservation and capacity limits. Specifically, \eqref{eq:flow_balance} ensures that total supply, comprising inventory ($q_k$), external origins ($O_{js}$), and incoming flows -- satisfies both victim demand (converted by $\gamma$) and outgoing trans-shipments. Constraints \eqref{eq:deprivation_bound} define the linear boundaries for the maximum deprivation cost auxiliary variables $W_s$.
 Variable domains are defined in \eqref{eq:binary_vars}-\eqref{eq:nonneg_vars}.
 
 % ============================================================
@@ -319,7 +325,7 @@ The decoder is invoked once per chromosome per scenario $s \in \mathcal{S}$, rec
 
 \textbf{Step 2 -- Demand Prioritisation.} Each demand node $i$ receives a composite score prioritising urgency, isolation, and proximity to active hubs. Demands are then processed in descending score order.
 
-\textbf{Step 3 -- Tiered Hub Assignment.} For each demand $i$, we trial active hubs in proximity order from the anchor hub $\pi_{A_i}$. \textit{Pass~1} evaluates candidates based on residual capacity, travel time, and operational status. If unsuccessful, \textit{Pass~2} relaxes capacity constraints. Only when no reachable active hub can be found at all does the decoder open the nearest safe inactive hub as a reactive fallback and increments the constraint-violation counter CV by 1. Crucially, this fallback is not guaranteed to trigger -- CV is a genuine empirical performance metric that the algorithm minimizes via the constrained-dominance principle, and achieving $\mathrm{CV}=0$ across all Pareto solutions is a non-trivial result reflecting adequate hub coverage, not a built-in guarantee.
+\textbf{Step 3 -- Tiered Hub Assignment.} For each demand $i$, active hubs are trialled in proximity order from the anchor hub $\pi_{A_i}$. \textit{Pass~1} selects the best candidate by residual capacity, travel time, and operational status. If no feasible candidate is found, \textit{Pass~2} relaxes capacity constraints. If no reachable active hub exists, the decoder opens the nearest safe inactive hub as a reactive fallback and increments~CV.
 
 \textbf{Step 4 -- Supply Routing and Objective Accumulation.} Origins supply the most under-supplied active hubs, and surplus is redistributed via discounted inter-hub trans-shipment ($\alpha$). Expected objectives $Z_1$ and $Z_2$ are accumulated across all $s \in \mathcal{S}$. Algorithm~\ref{alg:decoder} formalises these procedures.
 
@@ -351,7 +357,7 @@ The decoder is invoked once per chromosome per scenario $s \in \mathcal{S}$, rec
 
 \subsection{Genetic Operators and Selection}
 
-\emph{Selection} uses binary tournament on Pareto rank with crowding distance as tiebreaker. To prevent stagnation in the multi-modal search space, our implementation monitors the diversity of the rank-1 front in objective space ($Z_1, Z_2$). If the front remains unchanged for 20 generations, selection pressure is boosted via 3-way tournaments and weight-vector ($W$) hypermutation is applied to escape the local basin. \emph{Crossover} applies Uniform Crossover to $\mathbf{X}$ and $\mathbf{A}$, and SBX to $\mathbf{R}$ and $\mathbf{W}$. SBX is chosen for the continuous segments $\mathbf{R}$ and $\mathbf{W}$ because it is distribution-index-controlled, preserving the mean of parent solutions while concentrating offspring near parents -- a property that empirically outperforms simple arithmetic crossover on bounded real-vector components of hybrid chromosomes~\cite{deb2002fast}. \emph{Mutation} ($p_m = 1/|\mathbf{C}|$) applies Bit-flip to $\mathbf{X}$, random-reset to $\mathbf{A}$, and Polynomial mutation to $\mathbf{R}$ and $\mathbf{W}$. Constraint handling follows the constrained-dominance principle~\cite{deb2002fast}: feasible solutions always dominate infeasible ones; among infeasible solutions, lower CV dominates. When a partial Pareto front must be split, tiebreaking proceeds by (1) Pareto rank, (2) crowding distance, (3) minimum Hamming distance in $\mathbf{X}$-space -- preserving genotypic diversity in hub configuration and countering premature convergence.
+\emph{Selection} uses binary tournament on Pareto rank with crowding distance as tiebreaker. To prevent stagnation in the multi-modal search space, our implementation monitors the diversity of the rank-1 front in objective space ($Z_1, Z_2$). If the front remains unchanged for 20 generations, selection pressure is boosted via 3-way tournaments and weight-vector ($W$) hypermutation is applied to escape the local basin. \emph{Crossover} applies Uniform Crossover to $\mathbf{X}$ and $\mathbf{A}$, and SBX~\cite{deb2002fast} to the continuous segments $\mathbf{R}$ and $\mathbf{W}$, whose distribution-index control concentrates offspring near parents and preserves the parental mean on bounded real vectors. \emph{Mutation} ($p_m = 1/|\mathbf{C}|$) applies Bit-flip to $\mathbf{X}$, random-reset to $\mathbf{A}$, and Polynomial mutation to $\mathbf{R}$ and $\mathbf{W}$. Constraint handling follows the constrained-dominance principle~\cite{deb2002fast}: feasible solutions always dominate infeasible ones; among infeasible solutions, lower CV dominates. When a partial Pareto front must be split, tiebreaking proceeds by (1) Pareto rank, (2) crowding distance, (3) minimum Hamming distance in $\mathbf{X}$-space -- preserving genotypic diversity in hub configuration and countering premature convergence.
 
 % ============================================================
 %  REPLACE YOUR EXISTING \section{Computational Experiments}
@@ -369,12 +375,12 @@ PB-NSGA is implemented in C++17; dataset construction and post-processing are pe
 
 \textbf{Central Vietnam Dataset.}
 We construct two instances modelling four flood-prone provinces: Da Nang, Quang Nam, Thua Thien-Hue, and Quang Ngai. \textbf{CV-Small} uses district-level demand nodes ($|\mathcal{I}|=20$, $|\mathcal{H}|=5$, $|\mathcal{J}|=2$, $|\mathcal{S}|=3$); \textbf{CV-Large} uses commune-level resolution ($|\mathcal{I}|=100$, $|\mathcal{H}|=20$, $|\mathcal{J}|=12$, $|\mathcal{S}|=3$). 
-Node coordinates map to real administrative centroids, confirmed logistics facilities, and vital supply origins. Scenario risks and road disruptions are calibrated using a multi-criteria flood vulnerability score~\cite{barzinpour2014}. Three transport modes -- trucks, motorboats, and helicopters are considered. Roads are subject to disruption, while water mode will be enabled on flood areas. Reflecting realistic operational constraints, helicopter links (air mode) are capped at 15\% of all active routing connections per scenario. This bound approximates a fixed rotary-wing fleet (approximately 2--3 helicopters shared across 20 candidate hubs), consistent with the documented capacity of Vietnam's civil aviation emergency reserve~\cite{barzinpour2014}; it is not an abstract percentage but a proxy for finite fleet size and flight-hour limits imposed on a shared air asset pool.
+Node coordinates map to real administrative centroids, confirmed logistics facilities, and vital supply origins. Scenario risks and road disruptions are calibrated using a multi-criteria flood vulnerability score~\cite{barzinpour2014}. Three transport modes -- trucks, motorboats, and helicopters -- are considered. Roads are subject to disruption, while water mode is enabled on flood areas. Helicopter links (air mode) are capped at 15\% of all active routing connections per scenario, approximating a shared rotary-wing fleet of 2--3 aircraft across the 20 candidate hubs.
 
 \subsection{Experiment 1: Baseline Comparison}
 \label{sec:exp1}
 
-To rigorously evaluate PB-NSGA's optimization capabilities against the structural complexity of MO-IHLNDP, we benchmarked the algorithm against two custom baselines on the exact same risk-calibrated \textbf{CV-Small} sub-instance ($|\mathcal{H}|=5, |\mathcal{I}|=20$).
+To evaluate PB-NSGA against the structural complexity of MO-IHLNDP, we benchmarked the algorithm against two baselines on the risk-calibrated \textbf{CV-Small} sub-instance ($|\mathcal{H}|=5, |\mathcal{I}|=20$).
 The first baseline is a two-phased \textbf{Greedy Heuristic} that constructs upper bounds by selecting the cheapest or safest hubs and assigns demands via nearest-neighbour logic. The second is an exact \textbf{Mixed-Integer Linear Programming (MILP)} formulation solved via OR-Tools~\cite{ortools} with the $\epsilon$-constraint method.
 % Furthermore, to guarantee solution quality without relying on relaxations, we deployed a custom Branch-and-Bound (BB) solver for complete enumeration to extract the absolute proxy Pareto front.
 
@@ -398,8 +404,8 @@ Exact Enum (BB)                 & $0.895$ & $0.079$ & $0.3$ \\
 Table~\ref{tab:exp1_results} reveals an instructive pattern for the small instance.
 The greedy heuristic remains distant from the reference front despite stochastic resets.
 The MILP $\epsilon$-constraint solver failed to return any feasible Pareto solution within 1800\,s, consistent with known Big-M numerical difficulties on non-linear deprivation objectives.
-Remarkably, PB-NSGA converges to the optimal region and defines the combined non-dominated reference front, reaching a hypervolume of $1.000$.
-This efficiency stems from PB-NSGA's ability to simultaneously optimize the decoder's priority-weight vectors ($W$), discovering more refined routing and inventory patterns for each hub configuration than the exhaustive BB enumeration using fixed weights.
+PB-NSGA converges to the optimal region and defines the combined non-dominated reference front, reaching a hypervolume of $1.000$.
+This efficiency stems from PB-NSGA's ability to simultaneously optimize the decoder's priority-weight vectors ($W$), discovering more refined routing and inventory patterns for each hub configuration than the exhaustive BB enumeration with fixed weights.
 
 As demonstrated in Experiment~2 (Sec.~\ref{sec:exp2}), this scalability advantage becomes even more pronounced on larger instances where exact methods become computationally intractable.
 
@@ -433,25 +439,23 @@ Table~\ref{tab:exp2_results} demonstrates that PB-NSGA maintains competitive sol
 \label{fig:cv_large_map_detailed}
 \end{figure}
 
-Figure~\ref{fig:cv_large_map_detailed} visualizes a representative \quo{Balanced} solution, showcasing the model's dynamic multimodal adaptation.
-Under mild conditions, the network utilizes a dense combination of coastal watercraft links and terrestrial road networks, drawing heavily from the pre-positioned inventory at strategic hubs H4, H15, and H16 (indicated by their high filling ratios).
-However, as severity intensifies to the extreme scenario, a pronounced modal shift occurs. The priority-based decoder accommodates the complete disruption of coastal roads by sequentially activating rotary-wing (helicopter) links to reach isolated clusters in the mountainous north-west and vulnerable eastern regions. 
-To supplement critical logistics bottlenecks under such extreme disruption, the model adaptively triggers a reactive hub (H8, shown in purple) and facilitates lateral transshipment flows (indicated by directional arrows) between established hubs to dynamically rebalance inventory deficits.
-This spatial adaptation ensures resilient distribution even when pre-planned capacity is overwhelmed.
+Figure~\ref{fig:cv_large_map_detailed} visualizes a representative \quo{Balanced} solution.
+Under mild conditions, the network utilizes a dense combination of coastal watercraft links and terrestrial road networks, drawing heavily from pre-positioned inventory at strategic hubs H4, H15, and H16 (indicated by their high filling ratios).
+As severity intensifies to the extreme scenario, a pronounced modal shift occurs: the decoder activates rotary-wing (helicopter) links to reach isolated clusters in the mountainous north-west and vulnerable eastern regions. 
+To supplement critical logistics bottlenecks, the model triggers a reactive hub (H8, shown in purple) and facilitates lateral transshipment flows between established hubs to rebalance inventory deficits.
 
 \subsubsection*{Sample Average Approximation and Out-Of-Sample Validation}
 
-To objectively evaluate whether PB-NSGA merely overfit the three training scenarios or truly identified a robust strategic policy, we validated the CV-Large Pareto front against two rigorous Out-Of-Sample numerical tests. 
+To evaluate whether PB-NSGA's solutions generalize beyond the three training scenarios, we validated the CV-Large Pareto front against two Out-Of-Sample tests. 
 
-First, we generated a Sample Average Approximation (SAA) set of 100 scenarios featuring continuous random geographic decay of flood risks and stochastic epicenter placements. Evaluating PB-NSGA's first-stage strategic hub decisions alongside its trained priority-based heuristic weights $\mathbf{W}$ directly on this unseen 100-scenario subset resulted in $0.00$ expected Constraint Violations (CV). The network maintained strict operational feasibility across an exceptionally dense distribution of disaster realizations, proving the intrinsic generalizability of the priority-decoder mechanism.
+First, we generated a Sample Average Approximation (SAA) set of 100 scenarios with randomized geographic flood risk decay and stochastic epicenter placements. Evaluating PB-NSGA's first-stage hub decisions and trained weights $\mathbf{W}$ on this unseen set yielded $0.00$ expected Constraint Violations (CV), confirming operational feasibility across a dense distribution of disaster realizations.
 
-Second, we confronted the trained model with an extreme Out-Of-Sample (OOS) \quo{Double Typhoon} event -- a novel catastrophic scenario featuring four simultaneous epicenters and an unprecedented $3.5\times$ severity threshold completely outside the training dataset. Remarkably, PB-NSGA's stored priority-allocation strategy absorbed this shock, successfully routing and fulfilling evacuation demand with an exact $0$ CV across all Pareto solutions.
-This proves that the parameterization (specifically the hub-choice anchors $\mathbf{A}$ and priority thresholds $\mathbf{W}$) learns a generalized, robust emergency response policy rather than aggressively overfitting to training sample geometry.
+Second, we confronted the trained model with an extreme Out-Of-Sample (OOS) \quo{Double Typhoon} event -- a catastrophic scenario featuring four simultaneous epicenters and a $3.5\times$ severity threshold outside the training distribution. PB-NSGA's stored priority-allocation strategy absorbed this shock with $0$ CV across all Pareto solutions, indicating that the learned hub-choice anchors $\mathbf{A}$ and priority weights $\mathbf{W}$ encode a robust emergency response policy rather than overfitting to training sample geometry.
 
 \subsubsection*{Methodological Framework for Decision Support}
 
 \textit{Robust hub prioritization.}
-Across all 20 independent runs, hub selection frequency on the CV-Large combined Pareto front reveals a clear hierarchy of strategic priority within the synthetic instance. The Quang Ngai Port Hub is present in every single Pareto-optimal solution (100\% selection frequency), establishing it as the unconditional anchor of the relief network on this calibrated dataset. The Phuoc Son Helipad follows at 70.6\% frequency, and the Tam Ky Logistics Hub at 38.3\%, together forming the robust hub core that the model consistently prescribes for permanent infrastructure investment. Hubs that are cost-effective under mild conditions but breach the $\chi=0.7$ safety threshold during extreme disruptions expose a critical \emph{resilience gap}: formally identifying these gaps enables authorities to pre-position backup inventory or trigger contingency evacuations before a disaster strikes. We note that these insights are derived from a calibrated synthetic instance and should be treated as illustrative of the framework's decision-support capability; validation against ground-truth historical data is left for future work.
+Across all 20 independent runs, hub selection frequency on the CV-Large combined Pareto front reveals a clear hierarchy of strategic priority. The Quang Ngai Port Hub appears in every Pareto-optimal solution (100\% selection frequency), establishing it as the unconditional anchor of the relief network. The Phuoc Son Helipad follows at 70.6\%, and the Tam Ky Logistics Hub at 38.3\%, together forming a robust hub core for permanent infrastructure investment. Hubs that are cost-effective under mild conditions but breach the $\chi=0.7$ safety threshold during extreme disruptions expose a critical \emph{resilience gap}: identifying these gaps enables authorities to pre-position backup inventory or activate contingency evacuations before a disaster strikes.
 
 \textit{Transport mode diversification.}
 The extreme scenario enforces a pronounced modal shift away from disrupted road networks. Pre-equipping coastal hubs -- particularly the robust core anchored by the Quang Ngai Port and Phuoc Son Helipad -- with resilient watercraft terminals and maintaining emergency airspace access for rotary-wing aircraft delivers asymmetric resilience yield at a fraction of the cost of deploying redundant mega-hubs.
@@ -464,7 +468,7 @@ This paper presented a two-stage stochastic multi-objective hub network design m
 The absence of a publicly available real-world relief dataset for Central Vietnam required the use of a synthetic instance calibrated from administrative and geographic data. Field validation against actual disaster records remains
 necessary before operational deployment.
 
-\textbf{Future work} will prioritize four directions. First, constructing a real relief logistics dataset for Central Vietnam in collaboration with local authorities, to enable rigorous empirical validation. Second, rapid practical deployment by integrating the model with government relief planning systems and validating against historical flood response data. Third, extending the benchmark study to include established multi-objective metaheuristics such as MOEA/D and NSGA-III, which would further demonstrate the necessity and superiority of PB-NSGA's problem-specific decoding mechanism. Fourth, strengthening PB-NSGA through improved decoder strategies, adaptive operator tuning, and hybridization with local search to enhance solution quality on large-scale instances.
+\textbf{Future work} will prioritize four directions. First, constructing a field-validated relief logistics dataset for Central Vietnam in collaboration with local authorities. Second, integrating the model with government relief planning systems for rapid practical deployment. Third, benchmarking PB-NSGA against established multi-objective metaheuristics (MOEA/D, NSGA-III) on the CV-Large instance to further quantify the advantage of the problem-specific decoder. Fourth, strengthening PB-NSGA through adaptive operator tuning and hybridization with local search for larger-scale instances.
 
 % \begin{credits}
 
