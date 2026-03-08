@@ -19,7 +19,7 @@ set "PROJECT=%~dp0"
 set "DATA_CV=%PROJECT%data\cv\cv_small_drnd.json"
 set "RES1=%PROJECT%results\exp1"
 set "RES2=%PROJECT%results\exp2"
-set "SOLVER_DIR=%PROJECT%solver"
+set "SOLVER_DIR=%PROJECT%src\solver"
 
 REM Python venv
 set "PYTHON=%PROJECT%.venv\Scripts\python.exe"
@@ -44,7 +44,7 @@ echo.
 echo [Step 2] Running stochastic greedy (500 restarts)...
 if not exist "%DATA_CV%" (
     echo [Error] cv_small_drnd.json not found at "%DATA_CV%"
-    echo         Run: python scripts\generate_cv.py --outdir data\cv
+    echo         Run: python src\scripts\generate_cv.py --outdir data\cv
     exit /b 1
 )
 "%SOLVER_DIR%\greedy_baseline.exe" "%DATA_CV%" ^
@@ -112,7 +112,7 @@ echo [Step 6] Done. Output: %RES1%\cv_small_pb_nsga.json
 REM ── Step 7: Final Comparison ───────────────────────────────────────────────
 echo.
 echo [Step 7] Generating Final Baseline Comparison Table...
-"%PYTHON%" "%PROJECT%scripts\evaluate_cv_small.py" ^
+"%PYTHON%" "%PROJECT%src\scripts\evaluate_cv_small.py" ^
     --results-exp1 "%RES1%" ^
     --ours "%RES1%\cv_small_pb_nsga.json" ^
     --greedy "%RES1%\cv_small_greedy.json" ^
