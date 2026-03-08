@@ -256,7 +256,7 @@ Objective $Z_1$ minimizes total expected logistics cost. Using the previously me
 
 Objective $Z_2$ minimizes the expected value of maximum deprivation cost \cite{holguin2013appropriate}. The exponential function heavily penalizes the model if it lets a demand node wait slightly longer than the rest, forcing the model to distribute resources evenly. The penalty function is adjusted by $\lambda_{is} = \lambda_0 (1 + r_{is})$ so that highly vulnerable populations are prioritized. 
 
-Although Objective~\eqref{eq:obj2} correctly illustrates the non-linear minimax relationship, we emphasize that within the actual optimization procedures, this non-linearity is eliminated. Because the model strictly enforces a single-allocation property via the binary assignment variable $z_{iks}$ (\textit{i.e.}, $\sum_{k \in \mathcal{H}} z_{iks} = 1$), the deprivation cost for any specific $i \to k$ configuration is deterministic and finite. Consequently, we analytically map the exponential penalty into a set of perfectly linear parameters by pre-computing the exact deprivation cost $C^{\text{dep}}_{iks}$ offline:
+To linearize $Z_2$, we exploit the fact that the model strictly enforces a single-allocation property \eqref{eq:single_alloc_demand}. The deprivation cost for any specific $i \to k$ configuration is deterministic and finite. Thus, we can pre-compute the exact deprivation cost $C^{\text{dep}}_{iks}$ offline:
 
 \begin{equation} \label{eq:deprivation_cost}
     C^{\text{dep}}_{iks} = D_{is} \cdot \left(e^{\lambda_{is} \cdot \left(\tau_{ks} + 2 \cdot \min_{m \in \mathcal{M} \mid a_{ikms}=1} \tau_{kim}\right)} - 1\right)
@@ -265,7 +265,12 @@ Although Objective~\eqref{eq:obj2} correctly illustrates the non-linear minimax 
 By introducing a continuous auxiliary variable $W_s \ge 0$ to capture the \quo{worst-case} (maximum) expected deprivation cost among all demand nodes in a given scenario $s$, the non-linear $Z_2$ objective can be reformulated into an exact linear sum:
 
 \begin{equation} \label{eq:obj2_linear}
-    \text{Min } Z_2^{\text{linear}} = \sum_{s \in \mathcal{S}} \pi_s \cdot W_s
+    Z_2^{\text{linear}} = \sum_{s \in \mathcal{S}} \pi_s \cdot W_s
+\end{equation}
+
+Subject to: 
+\begin{equation} \label{eq:deprivation_bound}
+    W_s \ge \sum_{k \in \mathcal{H}} C^{\text{dep}}_{iks} \cdot z_{iks} \quad \forall i \in \mathcal{I}, s \in \mathcal{S}
 \end{equation}
 
 \subsection{Constraints}
@@ -292,7 +297,6 @@ The complete MO-IHLNDP model is formally stated as follows:
         & \quad + \sum_{h \in \mathcal{H}} \sum_{m \in \mathcal{M}} f_{hkms} \quad \forall k \in \mathcal{H}, s \in \mathcal{S} 
     \end{split} \label{eq:flow_balance} \\
     q_k + \sum_{j \in \mathcal{J}} O_{js} z_{jks} + \sum_{h \in \mathcal{H}} \sum_{m \in \mathcal{M}} f_{hkms} & \le \kappa_k \cdot (x_k + y_{ks}) \quad \forall k \in \mathcal{H}, s \in \mathcal{S} \label{eq:throughput_cap} \\
-    W_s & \ge \sum_{k \in \mathcal{H}} C^{\text{dep}}_{iks} \cdot z_{iks} \quad \forall i \in \mathcal{I}, s \in \mathcal{S} \label{eq:deprivation_bound} \\
     x_k, y_{ks}, z_{iks}, z_{jks} & \in \{0, 1\} \quad \forall i, j, k, s \label{eq:binary_vars} \\
     q_k, f_{khms}, W_s & \ge 0 \quad \forall k, h, m, s \label{eq:nonneg_vars}
 \end{align}
@@ -300,8 +304,14 @@ The complete MO-IHLNDP model is formally stated as follows:
 Constraints \eqref{eq:hub_type} define the hub establishment. For planned hubs, inventory is bounded by physical capacity \eqref{eq:hub_inv_cap}, while reactive hubs are required to be placed within safe zones \eqref{eq:hub_safety}.
 Constraints \eqref{eq:single_alloc_demand}-\eqref{eq:path_origin} enforce the single-allocation property to active hubs via available links. 
 Constraint \eqref{eq:trans_path} restricts flow to be trans-shipped on intact paths. 
-Constraints \eqref{eq:flow_balance} and \eqref{eq:throughput_cap} maintain flow conservation and capacity limits. Specifically, \eqref{eq:flow_balance} ensures that total supply, comprising inventory ($q_k$), external origins ($O_{js}$), and incoming flows -- satisfies both victim demand (converted by $\gamma$) and outgoing trans-shipments. Constraints \eqref{eq:deprivation_bound} define the linear boundaries for the maximum deprivation cost auxiliary variables $W_s$.
-Variable domains are defined in \eqref{eq:binary_vars}-\eqref{eq:nonneg_vars}.
+Constraints \eqref{eq:flow_balance} and \eqref{eq:throughput_cap} maintain flow conservation and capacity limits. Specifically, \eqref{eq:flow_balance} ensures that total supply, comprising inventory ($q_k$), external origins ($O_{js}$), and incoming flows -- satisfies both victim demand (converted by $\gamma$) and outgoing trans-shipments. Variable domains are defined in \eqref{eq:binary_vars}-\eqref{eq:nonneg_vars}.
+
+Constraints \eqref{eq:deprivation_bound} define the linear boundaries for the maximum deprivation cost auxiliary variables $W_s$. The linearized program is then:
+\begin{align}
+    \text{Minimize } \quad & Z_1, Z_2^{\text{linear}} \nonumber \\
+    \text{subject to} \quad & \text{Constraints } \eqref{eq:deprivation_bound} - \eqref{eq:nonneg_vars} \nonumber
+\end{align}
+
 
 % ============================================================
 %  REPLACE YOUR EXISTING \section{Proposed Algorithm: PB-NSGA}
