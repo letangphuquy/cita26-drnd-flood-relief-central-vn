@@ -2,8 +2,8 @@
 setlocal EnableDelayedExpansion
 set "PROJECT=%~dp0"
 set "SOLVER=%PROJECT%src\solver\solver.exe"
-set "POP=100"
-set "GEN=200"
+set "POP=200"
+set "GEN=300"
 set "SEEDS=0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19"
 set "RES1=%PROJECT%results\exp1"
 set "RES2=%PROJECT%results\exp2"

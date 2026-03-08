@@ -110,9 +110,8 @@ def igd_plus(approx, reference):
 def _mean_std(vals):
     if not vals:
         return float("nan"), float("nan")
-    if len(vals) == 1:
-        return vals[0], 0.0
-    return statistics.mean(vals), statistics.stdev(vals)
+    import numpy as np
+    return float(np.mean(vals)), float(np.std(vals, ddof=1) if len(vals) > 1 else 0.0)
 
 
 # ---------------------------------------------------------------------------
@@ -137,6 +136,9 @@ def discover_benchmark_files(results_dir):
       TR81_seed{s}.json    → (TR81,  PB-NSGA, s)
       AP{n}_bb.json        → (AP{n}, BB-Exact, 0)
       TR81_bb.json         → (TR81,  BB-Exact, 0)
+      cv_small_milp.json    → (cv_small, MILP-Exact, 0)
+      cv_small_bb.json      → (cv_small, BB-Exact, 0)
+      cv_small_pb_nsga.json → (cv_small, PB-NSGA, 0)
     """
     groups = {}
     for fname in sorted(os.listdir(results_dir)):
@@ -147,16 +149,19 @@ def discover_benchmark_files(results_dir):
 
         if base.endswith("_bb"):
             prefix = base[:-3]
-            if prefix.startswith("AP") or prefix == "TR81":
-                grp, algo, seed = prefix, "BB-Exact", "0"
+            grp, algo, seed = prefix, "BB-Exact", "0"
+        elif base.endswith("_milp"):
+            prefix = base[:-5]
+            grp, algo, seed = prefix, "MILP-Exact", "0"
         elif "_seed" in base:
             prefix, seed = base.split("_seed", 1)
-            if prefix.startswith("AP") or prefix == "TR81":
-                grp, algo = prefix, "PB-NSGA"
+            grp, algo = prefix, "PB-NSGA"
         elif base.endswith("_result"):
             prefix = base[:-7]
-            if prefix.startswith("AP") or prefix == "TR81":
-                grp, algo, seed = prefix, "PB-NSGA", "0"
+            grp, algo, seed = prefix, "PB-NSGA", "0"
+        elif base.endswith("_pb_nsga"):
+             prefix = base[:-8]
+             grp, algo, seed = prefix, "PB-NSGA", "0"
 
         if grp is None:
             continue
@@ -230,7 +235,7 @@ def run(results_dir, out_dir):
 
     sorted_grps = sorted(groups.keys(),
                          key=lambda g: _BENCH_ORDER.index(g)
-                         if g in _BENCH_ORDER else 99)
+                         if g in _BENCH_ORDER else (0 if "small" in g.lower() else 99))
 
     metrics_rows = []
     timing_rows  = []
@@ -241,7 +246,7 @@ def run(results_dir, out_dir):
         # Load runs
         algo_runs = {}
         algo_meta = {}
-        for algo in ["BB-Exact", "PB-NSGA"]:
+        for algo in ["BB-Exact", "PB-NSGA", "MILP-Exact"]:
             if algo not in algo_data:
                 continue
             algo_runs[algo] = []
@@ -282,7 +287,7 @@ def run(results_dir, out_dir):
         )
 
         # Per-algorithm metrics
-        for algo in ["BB-Exact", "PB-NSGA"]:
+        for algo in ["BB-Exact", "PB-NSGA", "MILP-Exact"]:
             if algo not in algo_runs:
                 continue
             runs  = algo_runs[algo]
@@ -290,28 +295,35 @@ def run(results_dir, out_dir):
             norm_runs, _ = normalize_points(runs, bounds=bounds)
             ref_pt = (1.1, 1.1)
 
-            hv_list = igd_list = size_list = rt_list = []
-            hv_list, igd_list, size_list, rt_list = [], [], [], []
+            hv_list, igd_list, size_list, rt_list, cpu_list = [], [], [], [], []
             for pts, norm_pts, meta in zip(runs, norm_runs, metas):
                 hv_list.append(hypervolume_2d(norm_pts, ref_pt))
                 igd_list.append(igd_plus(norm_pts, reference_norm))
                 size_list.append(len(pts))
-                for key in ("elapsed_s", "runtime_s"):
+                # Wall time keys
+                for key in ("elapsed_s", "runtime_s", "total_elapsed_s"):
                     if key in meta:
                         rt_list.append(float(meta[key]))
+                        break
+                # CPU time keys
+                for key in ("cpu_time_s", "total_cpu_s"):
+                    if key in meta:
+                        cpu_list.append(float(meta[key]))
                         break
 
             hv_m,   hv_s   = _mean_std(hv_list)
             igd_m,  igd_s  = _mean_std(igd_list)
             sz_m,   sz_s   = _mean_std([float(s) for s in size_list])
             rt_m,   rt_s   = _mean_std(rt_list) if rt_list else (float("nan"), float("nan"))
+            cpu_m,  cpu_s  = _mean_std(cpu_list) if cpu_list else (float("nan"), float("nan"))
 
             n_nodes = _INST_SIZE.get(grp, "?")
             print(f"  [{grp}|{n_nodes:3}] {algo:10s}  "
                   f"runs={len(runs)}  "
                   f"HV={hv_m:.4f}±{hv_s:.4f}  "
                   f"IGD+={igd_m:.4f}±{igd_s:.4f}"
-                  + (f"  rt={rt_m:.1f}s" if rt_list else ""))
+                  + (f"  rt={rt_m:.1f}s" if rt_list else "")
+                  + (f"  cpu={cpu_m:.1f}s" if cpu_list else ""))
 
             metrics_rows.append({
                 "instance":       grp,
@@ -327,6 +339,8 @@ def run(results_dir, out_dir):
                 "IGDplus_std":    f"{igd_s:.6f}",
                 "runtime_s_mean": f"{rt_m:.2f}" if rt_list else "N/A",
                 "runtime_s_std":  f"{rt_s:.2f}"  if rt_list else "N/A",
+                "cpu_time_s_mean": f"{cpu_m:.2f}" if cpu_list else "N/A",
+                "cpu_time_s_std":  f"{cpu_s:.2f}" if cpu_list else "N/A",
             })
 
             # Timing stress-test row (PB-NSGA only)
@@ -348,6 +362,7 @@ def run(results_dir, out_dir):
         "pareto_combined", "pareto_mean", "pareto_std",
         "HV_mean", "HV_std", "IGDplus_mean", "IGDplus_std",
         "runtime_s_mean", "runtime_s_std",
+        "cpu_time_s_mean", "cpu_time_s_std",
     ])
 
     # Write timing stress-test CSV (sorted by instance size)

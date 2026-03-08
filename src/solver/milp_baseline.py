@@ -391,8 +391,10 @@ def build_and_solve_milp(inst, w1=1.0, w2=0.0, eps_z1=None, eps_z2=None, time_li
     # 4. Solve and extract results
     # -------------------------------------------------------------------------
     t0 = time.time()
+    cpu0 = time.process_time()
     status = solver.Solve()
     elapsed = time.time() - t0
+    cpu_elapsed = time.process_time() - cpu0
 
     if status == pywraplp.Solver.OPTIMAL or status == pywraplp.Solver.FEASIBLE:
         X_res = [int(x[ki].solution_value() > 0.5) for ki in range(num_H)]
@@ -415,10 +417,11 @@ def build_and_solve_milp(inst, w1=1.0, w2=0.0, eps_z1=None, eps_z2=None, time_li
             "R":         R_res,
             "CV":        CV_val,
             "elapsed_s": elapsed,
+            "cpu_time_s": cpu_elapsed,
         }
     else:
         print(f"Solver status: {status}")
-        return {"status": "INFEASIBLE", "elapsed_s": time.time() - t0}
+        return {"status": "INFEASIBLE", "elapsed_s": time.time() - t0, "cpu_time_s": time.process_time() - cpu0}
 
 
 def run_weighted_sum(inst, steps=1000, time_limit=600):
@@ -468,10 +471,13 @@ def main():
     inst = load_instance(args.instance)
 
     t_start = time.time()
+    cpu_start = time.process_time()
     pareto  = run_weighted_sum(inst, steps=args.steps, time_limit=args.time_limit)
     t_total = time.time() - t_start
+    cpu_total = time.process_time() - cpu_start
 
     per_solve_times = [s.get("elapsed_s", 0.0) for s in pareto]
+    per_solve_cpu   = [s.get("cpu_time_s", 0.0) for s in pareto]
 
     out_data = {
         "meta": {
@@ -480,7 +486,9 @@ def main():
             "steps":            args.steps,
             "time_limit_s":     args.time_limit,
             "total_elapsed_s":  t_total,
+            "total_cpu_s":      cpu_total,
             "per_solve_time_s": per_solve_times,
+            "per_solve_cpu_s":  per_solve_cpu,
         },
         "pareto_front": pareto
     }

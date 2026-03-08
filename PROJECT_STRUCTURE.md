@@ -25,7 +25,7 @@ This project follows a standard research directory structure to maintain organiz
 ## Key Entry Points
 
 - `compile.bat`: Compiles the PB-NSGA-II C++ solver.
-- `run_experiments.bat`: The main pipeline to generate data, run solvers, and perform analysis.
-- `run_cv_small_baselines.bat`: Specifically runs baseline comparisons for the CV-Small instance.
+- `run_exp1_full.bat`: End-to-end pipeline for algorithm benchmarking (Recompile -> Run -> Analyze -> Sync).
+- `run_exp2_full.bat`: End-to-end pipeline for the case study (Recompile -> Run -> Analyze -> Sync).
 - `run_dataset.bat`: Utilities for dataset patching and visualization.
 - `README.md`: General project introduction and setup guide.
