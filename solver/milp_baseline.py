@@ -2,6 +2,7 @@ import json
 import argparse
 import sys
 import math
+import time
 import numpy as np
 from ortools.linear_solver import pywraplp
 
@@ -47,62 +48,6 @@ def build_and_solve_milp(inst, w1=1.0, w2=0.0, eps_z1=None, eps_z2=None, time_li
     C_hub = [inst["hub_params"]["hold_cost"][str(k)] for k in inst["nodes"]["hub_indices"]]
     K_hub = [inst["hub_params"]["capacity"][str(k)] for k in inst["nodes"]["hub_indices"]]
     
-    # 0. Pre-compute constant matrices
-    theta_const = np.zeros((num_I, num_H, num_S))
-    c_dep_iks = np.zeros((num_I, num_H, num_S))
-    
-    demand_is_m2 = np.zeros((num_I, num_H, num_S))
-    orig_c_jks = np.full((num_J, num_H, num_S), big_M)
-    orig_is_m2 = np.zeros((num_J, num_H, num_S))
-    
-    for si, sc in enumerate(inst["scenarios"]):
-        for ii in range(num_I):
-            i_node = inst["nodes"]["demand_indices"][ii]
-            D_is = sc["demand"][str(i_node)]
-            lam_is = inst["lambda"][f"{i_node}_{si}"]
-            
-            for ki in range(num_H):
-                k_node = inst["nodes"]["hub_indices"][ki]
-                best_cost = big_M
-                best_time = big_M
-                best_m = -1
-                for m in range(num_M):
-                    if sc["accessibility"][m][k_node][i_node]:
-                        c_kim = inst["transport"]["cost"][m][k_node][i_node]
-                        t_kim = inst["transport"]["time"][m][k_node][i_node]
-                        if c_kim < best_cost: best_cost = c_kim
-                        if t_kim < best_time:
-                            best_time = t_kim
-                            best_m = m
-                
-                # Theta for Z1 (pre-computed in instance, but we can verify or use inst["theta"])
-                theta_const[ii, ki, si] = inst["theta"][ki][ii][si]
-                
-                # C_dep for Z2 (linearization parameter)
-                if best_m != -1:
-                    omega_is = sc["hub_process_time"][str(k_node)] + 2.0 * best_time
-                    c_dep_iks[ii, ki, si] = D_is * math.expm1(min(lam_is * omega_is, 20.0))
-                    if best_m == 2:
-                        demand_is_m2[ii, ki, si] = 1
-                else:
-                    c_dep_iks[ii, ki, si] = D_is * math.expm1(20.0) # Maximum penalty
-                        
-        for ji in range(num_J):
-            j_node = inst["nodes"]["origin_indices"][ji]
-            for ki in range(num_H):
-                k_node = inst["nodes"]["hub_indices"][ki]
-                best_c = big_M
-                best_m = -1
-                for m in range(num_M):
-                    if sc["accessibility"][m][j_node][k_node]:
-                        if inst["transport"]["cost"][m][j_node][k_node] < best_c:
-                            best_c = inst["transport"]["cost"][m][j_node][k_node]
-                            best_m = m
-                if best_m != -1:
-                    orig_c_jks[ji, ki, si] = best_c
-                    if best_m == 2:
-                        orig_is_m2[ji, ki, si] = 1
-
     # Tight Big-M for flows
     tot_cap = sum(K_hub)
 
@@ -112,10 +57,11 @@ def build_and_solve_milp(inst, w1=1.0, w2=0.0, eps_z1=None, eps_z2=None, time_li
     for ki in range(num_H):
         x[ki] = solver.IntVar(0, 1, f'x_{ki}')
         q[ki] = solver.NumVar(0, K_hub[ki], f'q_{ki}')
+        solver.Add(q[ki] <= K_hub[ki] * x[ki])
         
     y = {}  # y_ks: reactive hub
-    z_iks = {} # z_iks: demand i assigned to hub k in scenario s
-    z_jks = {} # z_jks: origin j assigned to hub k in scenario s
+    z_iks = {} # z_iks_m [ii, ki, m, si]
+    z_jks = {} # z_jks_m [ji, ki, m, si]
     f_khms = {} # lateral transshipment
     w_trans = {} # binary indicator for transshipment mode active
     
@@ -128,9 +74,11 @@ def build_and_solve_milp(inst, w1=1.0, w2=0.0, eps_z1=None, eps_z2=None, time_li
         for ki in range(num_H):
             y[ki, si] = solver.IntVar(0, 1, f'y_{ki}_{si}')
             for ii in range(num_I):
-                z_iks[ii, ki, si] = solver.IntVar(0, 1, f'z_i{ii}_k{ki}_s{si}')
+                for m in range(num_M):
+                    z_iks[ii, ki, m, si] = solver.IntVar(0, 1, f'z_i{ii}_k{ki}_m{m}_s{si}')
             for ji in range(num_J):
-                z_jks[ji, ki, si] = solver.IntVar(0, 1, f'z_j{ji}_k{ki}_s{si}')
+                for m in range(num_M):
+                    z_jks[ji, ki, m, si] = solver.IntVar(0, 1, f'z_j{ji}_k{ki}_m{m}_s{si}')
             for hi in range(num_H):
                 for m in range(num_M):
                     f_khms[ki, hi, m, si] = solver.NumVar(0, tot_cap, f'f_{ki}_{hi}_{m}_{si}')
@@ -141,86 +89,120 @@ def build_and_solve_milp(inst, w1=1.0, w2=0.0, eps_z1=None, eps_z2=None, time_li
             v_js[ji, si] = solver.NumVar(0, solver.infinity(), f'v_{ji}_{si}')
 
         
+    # Scenario-dependent operational status of planned hubs
+    x_act = {}
+    for si in range(num_S):
+        sc = inst["scenarios"][si]
+        for ki in range(num_H):
+            x_act[ki, si] = solver.IntVar(0, 1, f'x_act_{ki}_{si}')
+            # Hub only active in scenario if it was built
+            solver.Add(x_act[ki, si] <= x[ki])
+            # Hub inactive if risk exceeds threshold
+            k_node = inst["nodes"]["hub_indices"][ki]
+            if sc["risk"][k_node] > chi:
+                solver.Add(x_act[ki, si] == 0)
+
     # 2. Constraints
-    for ki in range(num_H):
-        # Inventory cap for planned hubs
-        solver.Add(q[ki] <= K_hub[ki] * x[ki])
-        for si, sc in enumerate(inst["scenarios"]):
-            # Hub mutually exclusive in scenario
+    for si, sc in enumerate(inst["scenarios"]):
+        for ki in range(num_H):
+            k_node = inst["nodes"]["hub_indices"][ki]
+            # Hub mutually exclusive in scenario: built hub (active or not) vs reactive hub
             solver.Add(x[ki] + y[ki, si] <= 1)
-            # Safe zone constraint for ANY active hub
-            risk_k = sc["risk"][inst["nodes"]["hub_indices"][ki]]
-            solver.Add(risk_k * (x[ki] + y[ki, si]) <= chi)
+            # (Note: Risk constraint for x already handled by x_act)
+            # Risk constraint for reactive hub
+            risk_k = sc["risk"][k_node]
+            solver.Add(risk_k * y[ki, si] <= chi)
             
         for ii in range(num_I):
-            demand_i = sc["demand"][str(inst["nodes"]["demand_indices"][ii])]
+            i_node = inst["nodes"]["demand_indices"][ii]
+            demand_i = float(sc["demand"][str(i_node)])
             if demand_i > 1e-6:
-                # Single allocation demand with slack
-                solver.Add(sum(z_iks[ii, ki, si] for ki in range(num_H)) + u_is[ii, si] == 1)
+                # Total assignment to hubs + slack == 1
+                solver.Add(sum(z_iks[ii, ki, m, si] for ki in range(num_H) for m in range(num_M)) + u_is[ii, si] == 1)
                 for ki in range(num_H):
-                    solver.Add(z_iks[ii, ki, si] <= x[ki] + y[ki, si])
-                    acc_sum = sum(sc["accessibility"][m][inst["nodes"]["hub_indices"][ki]][inst["nodes"]["demand_indices"][ii]] for m in range(num_M))
-                    solver.Add(z_iks[ii, ki, si] <= acc_sum)
+                    # assignment only if hub is active (planned or reactive)
+                    solver.Add(sum(z_iks[ii, ki, m, si] for m in range(num_M)) <= x_act[ki, si] + y[ki, si])
+                    # assignment only if mode is accessible
+                    for m in range(num_M):
+                        solver.Add(z_iks[ii, ki, m, si] <= sc["accessibility"][m][inst["nodes"]["hub_indices"][ki]][i_node])
                 
-                # Rigorous Linearization: W_s >= sum_k (C_dep_iks * z_iks) + penalty for unassigned
-                # Penalty for unassigned: D * exp(20)
-                unassigned_penalty = demand_i * math.expm1(20.0)
-                solver.Add(z2_max_s[si] >= sum(c_dep_iks[ii, ki, si] * z_iks[ii, ki, si] for ki in range(num_H)) + unassigned_penalty * u_is[ii, si])
+                # Big-M Z2: W_s >= sum_ki (C_dep_i_ki_s * z_i_ki_s) + penalty
+                # where C_dep is based on the FASTEST accessible mode for that hub.
+                # Numerical stability: cap expm1 scale at 1e5 (demand multiplier still applies)
+                penalty = demand_i * min(math.expm1(20.0), 1e5)
+                z2_expr = u_is[ii, si] * penalty
+                
+                lam_is = inst["lambda"][f"{i_node}_{si}"]
+                for ki in range(num_H):
+                    k_node = inst["nodes"]["hub_indices"][ki]
+                    # Find min_t among accessible modes for (i, k) in scenario s
+                    min_t = 1e30
+                    any_acc = False
+                    for m in range(num_M):
+                        if sc["accessibility"][m][k_node][i_node]:
+                            min_t = min(min_t, inst["transport"]["time"][m][k_node][i_node])
+                            any_acc = True
+                    
+                    if any_acc:
+                        omega_fastest = sc["hub_process_time"][str(k_node)] + 2.0 * min_t
+                        c_dep_fastest = demand_i * math.expm1(min(lam_is * omega_fastest, 20.0))
+                        
+                        # Apply to the decision of assigning i to k (sum over all modes)
+                        z_ik_total = solver.Sum(z_iks[ii, ki, m, si] for m in range(num_M))
+                        z2_expr += c_dep_fastest * z_ik_total
+                
+                solver.Add(z2_max_s[si] >= z2_expr)
             else:
                 solver.Add(u_is[ii, si] == 0)
                 for ki in range(num_H):
-                    solver.Add(z_iks[ii, ki, si] == 0)
+                    for m in range(num_M):
+                        solver.Add(z_iks[ii, ki, m, si] == 0)
 
         for ji in range(num_J):
-            supply_j = sc["supply"][str(inst["nodes"]["origin_indices"][ji])]
+            j_node = inst["nodes"]["origin_indices"][ji]
+            supply_j = float(sc["supply"][str(j_node)])
             if supply_j > 1e-6:
-                # Origin allocation with slack
-                # Changed to == 1 with slack to track unmet supply if disconnected
-                solver.Add(sum(z_jks[ji, ki, si] for ki in range(num_H)) + v_js[ji, si] == 1)
+                solver.Add(sum(z_jks[ji, ki, m, si] for ki in range(num_H) for m in range(num_M)) + v_js[ji, si] == 1)
                 for ki in range(num_H):
-                    solver.Add(z_jks[ji, ki, si] <= x[ki] + y[ki, si])
-                    acc_sum = sum(sc["accessibility"][m][inst["nodes"]["origin_indices"][ji]][inst["nodes"]["hub_indices"][ki]] for m in range(num_M))
-                    solver.Add(z_jks[ji, ki, si] <= acc_sum)
+                    k_node = inst["nodes"]["hub_indices"][ki]
+                    solver.Add(sum(z_jks[ji, ki, m, si] for m in range(num_M)) <= x_act[ki, si] + y[ki, si])
+                    for m in range(num_M):
+                        solver.Add(z_jks[ji, ki, m, si] <= sc["accessibility"][m][j_node][k_node])
             else:
-                 solver.Add(v_js[ji, si] == 0)
-                 for ki in range(num_H):
-                    solver.Add(z_jks[ji, ki, si] == 0)
-                    
+                solver.Add(v_js[ji, si] == 0)
+                for ki in range(num_H):
+                    for m in range(num_M):
+                        solver.Add(z_jks[ji, ki, m, si] == 0)
+                        
         for ki in range(num_H):
             k_node = inst["nodes"]["hub_indices"][ki]
             for hi in range(num_H):
                 h_node = inst["nodes"]["hub_indices"][hi]
-                # Bound flow by capacity and access
                 for m in range(num_M):
                     solver.Add(f_khms[ki, hi, m, si] <= tot_cap * sc["accessibility"][m][k_node][h_node])
-                    # Bound flow by binary activity indicator
                     solver.Add(f_khms[ki, hi, m, si] <= tot_cap * w_trans[ki, hi, m, si])
             
             # Flow Balance & Capacity
-            i_demand_nodes = inst["nodes"]["demand_indices"]
-            sum_demand = sum(gamma * float(sc["demand"][str(i_node)]) * z_iks[ii, ki, si] for ii, i_node in enumerate(i_demand_nodes))
-            
-            j_origin_nodes = inst["nodes"]["origin_indices"]
-            sum_supply = sum(float(sc["supply"][str(j_node)]) * z_jks[ji, ki, si] for ji, j_node in enumerate(j_origin_nodes))
+            sum_demand = sum(gamma * float(sc["demand"][str(inst["nodes"]["demand_indices"][ii])]) * z_iks[ii, ki, m, si] \
+                             for ii in range(num_I) for m in range(num_M))
+            sum_supply = sum(float(sc["supply"][str(inst["nodes"]["origin_indices"][ji])]) * z_jks[ji, ki, m, si] \
+                             for ji in range(num_J) for m in range(num_M))
             
             sum_trans_out = sum(f_khms[ki, hi, m, si] for hi in range(num_H) for m in range(num_M))
             sum_trans_in = sum(f_khms[hi, ki, m, si] for hi in range(num_H) for m in range(num_M))
             
-            # Flow Balance: Demand + OutFlow <= Inventory + Supply + InFlow
             solver.Add(sum_demand + sum_trans_out <= q[ki] + sum_supply + sum_trans_in)
-            # Throughput Capacity: Inventory + Supply + InFlow <= kappa
-            solver.Add(q[ki] + sum_supply + sum_trans_in <= K_hub[ki] * (x[ki] + y[ki, si]))
+            solver.Add(q[ki] + sum_supply + sum_trans_in <= K_hub[ki] * (x_act[ki, si] + y[ki, si]))
 
-        # Helicopter link restriction (max 15%)
-        # Calculate established links
+        # Helicopter quota (Mode 2)
         total_links_s = (
-            solver.Sum(z_iks[ii, ki, si] for ii in range(num_I) for ki in range(num_H)) +
-            solver.Sum(z_jks[ji, ki, si] for ji in range(num_J) for ki in range(num_H)) +
+            solver.Sum(z_iks[ii, ki, m, si] for ii in range(num_I) for ki in range(num_H) for m in range(num_M)) +
+            solver.Sum(z_jks[ji, ki, m, si] for ji in range(num_J) for ki in range(num_H) for m in range(num_M)) +
             solver.Sum(w_trans[ki, hi, m, si] for ki in range(num_H) for hi in range(num_H) for m in range(num_M))
         )
         heli_links_s = (
-            solver.Sum(z_iks[ii, ki, si] * demand_is_m2[ii, ki, si] for ii in range(num_I) for ki in range(num_H)) +
-            solver.Sum(z_jks[ji, ki, si] * orig_is_m2[ji, ki, si] for ji in range(num_J) for ki in range(num_H)) +
+            solver.Sum(z_iks[ii, ki, 2, si] for ii in range(num_I) for ki in range(num_H)) +
+            solver.Sum(z_jks[ji, ki, 2, si] for ji in range(num_J) for ki in range(num_H)) +
             solver.Sum(w_trans[ki, hi, 2, si] for ki in range(num_H) for hi in range(num_H))
         )
         solver.Add(heli_links_s <= 0.15 * total_links_s + 0.999)
@@ -237,11 +219,14 @@ def build_and_solve_milp(inst, w1=1.0, w2=0.0, eps_z1=None, eps_z2=None, time_li
         
         # Origin to Hub
         for ji in range(num_J):
+            j_node = inst["nodes"]["origin_indices"][ji]
+            supply_j = float(sc["supply"][str(j_node)])
             for ki in range(num_H):
-                c_jks = orig_c_jks[ji, ki, si]
-                if c_jks < big_M:
-                     j_node = inst["nodes"]["origin_indices"][ji]
-                     z1_expr += pi * (c_jks * float(sc["supply"][str(j_node)]) * z_jks[ji, ki, si])
+                k_node = inst["nodes"]["hub_indices"][ki]
+                for m in range(num_M):
+                    if sc["accessibility"][m][j_node][k_node]:
+                        c_jkm = inst["transport"]["cost"][m][j_node][k_node]
+                        z1_expr += pi * (c_jkm * supply_j * z_jks[ji, ki, m, si])
                      
         # Transshipment Flow
         for ki in range(num_H):
@@ -249,26 +234,29 @@ def build_and_solve_milp(inst, w1=1.0, w2=0.0, eps_z1=None, eps_z2=None, time_li
             for hi in range(num_H):
                 h_node = inst["nodes"]["hub_indices"][hi]
                 for m in range(num_M):
-                    c_thm = inst["transport"]["cost"][m][k_node][h_node]
-                    z1_expr += pi * (c_thm * alpha * f_khms[ki, hi, m, si])
+                    if sc["accessibility"][m][k_node][h_node]:
+                        c_thm = inst["transport"]["cost"][m][k_node][h_node]
+                        z1_expr += pi * (alpha * c_thm * f_khms[ki, hi, m, si])
                      
-        # Last Mile
-        for ki in range(num_H):
-            for ii in range(num_I):
-                 z1_expr += pi * (theta_const[ii, ki, si] * z_iks[ii, ki, si])
+        # Last Mile (Theta)
+        for ii in range(num_I):
+            for ki in range(num_H):
+                # theta[ki][ii][si] is loaded in build_and_solve_milp already
+                z1_expr += pi * (inst["theta"][ki][ii][si] * sum(z_iks[ii, ki, m, si] for m in range(num_M)))
                  
     # Add penalty for slack variables to Z1
     for si, sc in enumerate(inst["scenarios"]):
         pi = sc["probability"]
         # Demand penalty: big_M per unassigned node
         z1_expr += pi * solver.Sum(u_is[ii, si] * big_M for ii in range(num_I))
-        # Supply penalty: small penalty or just tracking? Let's use big_M to enforce assignment if possible.
+        # Supply penalty: big_M per unassigned origin
         z1_expr += pi * solver.Sum(v_js[ji, si] * big_M for ji in range(num_J))
 
     z2_expr = solver.Sum(inst["scenarios"][si]["probability"] * z2_max_s[si] for si in range(num_S))
     
     # Weighted Sum Objective
-    solver.Minimize(w1 * z1_expr + w2 * z2_expr)
+    # If w1 is 0, we still want to minimize Z1's penalties (feasibility)
+    solver.Minimize(max(w1, 1e-7) * z1_expr + w2 * z2_expr)
     
     # Epsilon Constraint fallback (for extremes if needed)
     if eps_z2 is not None:
@@ -338,13 +326,20 @@ def main():
     parser.add_argument("--instance", required=True)
     parser.add_argument("--out", required=True)
     parser.add_argument("--steps", type=int, default=5)
+    parser.add_argument("--time_limit", type=int, default=600)
     args = parser.parse_args()
 
     inst = load_instance(args.instance)
-    pareto = run_weighted_sum(inst, steps=args.steps, time_limit=300)
+    
+    t_start = time.time()
+    pareto = run_weighted_sum(inst, steps=args.steps, time_limit=args.time_limit)
+    t_end = time.time()
     
     out_data = {
-        "meta": {"solver": "MILP_WeightedSum"},
+        "meta": {
+            "solver": "MILP_WeightedSum",
+            "elapsed_s": t_end - t_start
+        },
         "pareto_front": pareto
     }
     

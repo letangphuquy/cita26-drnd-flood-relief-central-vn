@@ -254,28 +254,25 @@ Objective $Z_1$ minimizes total expected logistics cost. Using the previously me
 \Omega_{is} = \sum_{k \in \mathcal{H}} z_{iks} \left( \tau_{ks} + 2 \cdot \min_{m \in \mathcal{M}  \mid a_{ikms}=1} \tau_{kim} \right)
 \end{equation*}
 
-Objective $Z_2$ minimizes the expected value of maximum deprivation cost \cite{holguin2013appropriate}. The exponential function heavily penalizes the model if it lets a demand node wait slightly longer than the rest, forcing the model to distribute resources evenly. The penalty function is adjusted by $\lambda_{is} = \lambda_0 (1 + r_{is})$ so that highly vulnerable populations are prioritized. 
+Objective $Z_2$ minimizes the expected value of maximum deprivation cost \cite{holguin2013appropriate}. The exponential function of waiting time $\Omega_{is}$ heavily penalizes the model if it lets a demand node wait slightly longer than the rest, forcing the model to distribute resources evenly. The penalty function is adjusted by $\lambda_{is} = \lambda_0 (1 + r_{is})$ so that highly vulnerable populations are prioritized. 
 
-To linearize $Z_2$, we exploit the fact that the model strictly enforces a single-allocation property \eqref{eq:single_alloc_demand}. The deprivation cost for any specific $i \to k$ configuration is deterministic and finite. Thus, we can pre-compute the exact deprivation cost $C^{\text{dep}}_{iks}$ offline:
+To linearize $Z_2$, we exploit the single-allocation property \eqref{eq:single_alloc_demand}. Any demand $i$ is allocated to a single hub $k$. Thus, the deprivation cost $C^{\text{dep}}_{is}$ is pre-computed:
 
 \begin{equation} \label{eq:deprivation_cost}
-    C^{\text{dep}}_{iks} = D_{is} \cdot \left(e^{\lambda_{is} \cdot \left(\tau_{ks} + 2 \cdot \min_{m \in \mathcal{M} \mid a_{ikms}=1} \tau_{kim}\right)} - 1\right)
+    C^{\text{dep}}_{is} = D_{is} \cdot \left(e^{\lambda_{is} \cdot \left(\tau_{ks} + 2 \cdot \min_{m \in \mathcal{M} \mid a_{ikms}=1} \tau_{kim}\right)} - 1\right)
 \end{equation}
 
-By introducing a continuous auxiliary variable $W_s \ge 0$ to capture the \quo{worst-case} (maximum) expected deprivation cost among all demand nodes in a given scenario $s$, the non-linear $Z_2$ objective can be reformulated into an exact linear sum:
+By introducing a continuous auxiliary variable $W_s \ge 0$ and constraint \eqref{eq:deprivation_bound} to capture the worst-case deprivation cost among all demand nodes in a given scenario $s$, we obtain the linearized program:
 
-\begin{equation} \label{eq:obj2_linear}
-    Z_2^{\text{linear}} = \sum_{s \in \mathcal{S}} \pi_s \cdot W_s
-\end{equation}
-
-Subject to: 
-\begin{equation} \label{eq:deprivation_bound}
-    W_s \ge \sum_{k \in \mathcal{H}} C^{\text{dep}}_{iks} \cdot z_{iks} \quad \forall i \in \mathcal{I}, s \in \mathcal{S}
-\end{equation}
+\begin{align}
+    \text{Minimize } \quad & Z_1, Z_2^{\text{linear}} = \sum_{s \in \mathcal{S}} \pi_s \cdot W_s   \nonumber \\
+    \text{subject to} \quad & \text{Constraints } \eqref{eq:deprivation_bound} - \eqref{eq:nonneg_vars} \nonumber \\
+    W_s & \ge C^{\text{dep}}_{is} \cdot z_{iks} \quad \forall i \in \mathcal{I}, s \in \mathcal{S} \label{eq:deprivation_bound}
+\end{align}
 
 \subsection{Constraints}
 
-The complete MO-IHLNDP model is formally stated as follows:
+The original, complete MO-IHLNDP model is formally stated as follows:
 
 \allowdisplaybreaks
 \begin{align}
@@ -305,13 +302,6 @@ Constraints \eqref{eq:hub_type} define the hub establishment. For planned hubs, 
 Constraints \eqref{eq:single_alloc_demand}-\eqref{eq:path_origin} enforce the single-allocation property to active hubs via available links. 
 Constraint \eqref{eq:trans_path} restricts flow to be trans-shipped on intact paths. 
 Constraints \eqref{eq:flow_balance} and \eqref{eq:throughput_cap} maintain flow conservation and capacity limits. Specifically, \eqref{eq:flow_balance} ensures that total supply, comprising inventory ($q_k$), external origins ($O_{js}$), and incoming flows -- satisfies both victim demand (converted by $\gamma$) and outgoing trans-shipments. Variable domains are defined in \eqref{eq:binary_vars}-\eqref{eq:nonneg_vars}.
-
-Constraints \eqref{eq:deprivation_bound} define the linear boundaries for the maximum deprivation cost auxiliary variables $W_s$. The linearized program is then:
-\begin{align}
-    \text{Minimize } \quad & Z_1, Z_2^{\text{linear}} \nonumber \\
-    \text{subject to} \quad & \text{Constraints } \eqref{eq:deprivation_bound} - \eqref{eq:nonneg_vars} \nonumber
-\end{align}
-
 
 % ============================================================
 %  REPLACE YOUR EXISTING \section{Proposed Algorithm: PB-NSGA}
@@ -402,9 +392,9 @@ The first baseline is a two-phased \textbf{Greedy Heuristic} that constructs upp
 \toprule
 Algorithm & HV (norm.) $\uparrow$ & IGD\textsuperscript{+} $\downarrow$ & CPU Time (s) $\downarrow$ \\
 \midrule
-Greedy Heuristic                & $0.000$ & $1.538$ & $\mathbf{<0.1}$ \\
+Greedy Heuristic                & $0.000$ & $1.282$ & $\mathbf{<0.1}$ \\
 MILP ($\epsilon$-constraint)    & $-$     & $-$     & $1800.0^*$ \\
-Exact Enum (BB)                 & $0.895$ & $0.079$ & $0.3$ \\
+Exact Enum (BB)                 & $0.890$ & $0.084$ & $0.3$ \\
 \textbf{PB-NSGA (Ours)}         & $\mathbf{1.000}$ & $\mathbf{0.000}$ & $1.9$ \\
 \bottomrule
 \multicolumn{4}{l}{\footnotesize $^*$ No feasible Pareto solution found within 1800\,s (SCIP/Big-M instability).} \\
@@ -419,7 +409,7 @@ This efficiency stems from PB-NSGA's ability to simultaneously optimize the deco
 
 As demonstrated in Experiment~2 (Sec.~\ref{sec:exp2}), this scalability advantage becomes even more pronounced on larger instances where exact methods become computationally intractable.
 
-\subsection{Experiment 2: Deep Case Study Analysis \& SAA Verification}
+\subsection{Experiment 2: Case Study on Central Vietnam}
 \label{sec:exp2}
 
 To investigate the practical managerial insights generated by the model on realistic operational scales, we executed PB-NSGA on the \textbf{CV-Large} instance ($|\mathcal{I}|=100, |\mathcal{H}|=20$). Table~\ref{tab:exp2_results} reports the algorithm's performance metrics.
