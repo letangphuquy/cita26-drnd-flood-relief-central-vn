@@ -13,7 +13,7 @@ REM   data\cv\           — Central Vietnam instances (cv_small, cv_large)
 REM   results\exp1\      — Experiment 1 outputs (benchmarks)
 REM   results\exp2\      — Experiment 2 outputs (case study CV)
 REM   scripts\           — Python analysis scripts
-REM   solver\        — C++ solvers (solver.exe, bb_solver.exe)
+REM   src\solver\        — C++ solvers (solver.exe, bb_solver.exe)
 REM
 REM Experiment 1 — Algorithm Benchmarking
 REM   Step 1a: BB complete enumeration on AP10/20/25/40 (ground-truth Pareto)
@@ -27,11 +27,11 @@ REM   Step 2b: Analysis — sensitivity, hub stability, map visualisation
 setlocal EnableDelayedExpansion
 
 set "PROJECT=%~dp0"
-set "SOLVER=%PROJECT%solver\solver.exe"
-set "BB=%PROJECT%solver\bb_solver.exe"
+set "SOLVER=%PROJECT%src\solver\solver.exe"
+set "BB=%PROJECT%src\solver\bb_solver.exe"
 
 REM Canonical dataset directories
-set "DATA_BENCH=%PROJECT%data\benchmark"
+set "DATA_BENCH=%PROJECT%data\hlp-benchmark"
 set "DATA_CV=%PROJECT%data\cv"
 
 REM Results directories
@@ -39,8 +39,8 @@ set "RES1=%PROJECT%results\exp1"
 set "RES2=%PROJECT%results\exp2"
 
 REM Python scripts
-set "SCRIPT_EXP1=%PROJECT%scripts\analyze_exp1.py"
-set "SCRIPT_EXP2=%PROJECT%scripts\analyze_exp2.py"
+set "SCRIPT_EXP1=%PROJECT%src\scripts\analyze_exp1.py"
+set "SCRIPT_EXP2=%PROJECT%src\scripts\analyze_exp2.py"
 
 REM Create output directories
 if not exist "%DATA_BENCH%" mkdir "%DATA_BENCH%"
@@ -81,18 +81,18 @@ REM ── Solver availability check ──────────────�
 :dataset_check
 if not exist "%SOLVER%" (
     echo [Error] solver.exe not found.
-    echo         Compile: g++ -O2 -std=c++17 solver\main.cpp -o solver\solver.exe
+    echo         Compile: g++ -O2 -std=c++17 src\solver\main.cpp -o src\solver\solver.exe
     exit /b 1
 )
 if not exist "%BB%" (
     echo [Error] bb_solver.exe not found.
-    echo         Compile: g++ -O2 -std=c++17 solver\bb_solver.cpp -o solver\bb_solver.exe
+    echo         Compile: g++ -O2 -std=c++17 src\solver\bb_solver.cpp -o src\solver\bb_solver.exe
     exit /b 1
 )
-set "GREEDY=%PROJECT%solver\greedy_baseline.exe"
+set "GREEDY=%PROJECT%src\solver\greedy_baseline.exe"
 if not exist "%GREEDY%" (
     echo [Warning] greedy_baseline.exe not found - greedy runs will be skipped.
-    echo           Compile: g++ -O2 -std=c++17 solver\greedy_baseline.cpp -o solver\greedy_baseline.exe
+    echo           Compile: g++ -O2 -std=c++17 src\solver\greedy_baseline.cpp -o src\solver\greedy_baseline.exe
 )
 
 REM ══════════════════════════════════════════════════════════════════════════
@@ -105,18 +105,18 @@ echo  Generating / verifying datasets
 echo ============================================================
 
 REM Benchmark instances (HLP → DRND) via scripts\process_benchmark.py
-set "BENCH_SCRIPT=%PROJECT%scripts\process_benchmark.py"
+set "BENCH_SCRIPT=%PROJECT%src\scripts\process_benchmark.py"
 if not exist "%BENCH_SCRIPT%" (
-    echo [Error] scripts\process_benchmark.py not found.
+    echo [Error] src\scripts\process_benchmark.py not found.
     exit /b 1
 )
 python "%BENCH_SCRIPT%" --outdir "%DATA_BENCH%"
 echo [Datasets] Benchmark instances written to %DATA_BENCH%
 
 REM CV instances via scripts\generate_cv.py
-set "CV_SCRIPT=%PROJECT%scripts\generate_cv.py"
+set "CV_SCRIPT=%PROJECT%src\scripts\generate_cv.py"
 if not exist "%CV_SCRIPT%" (
-    echo [Error] scripts\generate_cv.py not found.
+    echo [Error] src\scripts\generate_cv.py not found.
     exit /b 1
 )
 python "%CV_SCRIPT%" --outdir "%DATA_CV%"
@@ -194,7 +194,7 @@ for %%G in (small large) do (
         echo [CV-%%G] Done.
     ) else (
         echo [CV-%%G] Instance not found: !INST!
-        echo          Run: python scripts\generate_cv.py --outdir data\cv
+        echo          Run: python src\scripts\generate_cv.py --outdir data\cv
     )
 )
 
@@ -217,7 +217,7 @@ python "%SCRIPT_EXP2%" "%RES2%" "%RES2%" "%DATA_CV%"
 
 echo.
 echo --- CV-Small Baseline Evaluation (Greedy / MILP / BB vs PB-NSGA) ---
-python "%PROJECT%scripts\evaluate_cv_small.py" ^
+python "%PROJECT%src\scripts\evaluate_cv_small.py" ^
     --results-exp1 "%RES1%" ^
     --results-exp2 "%RES2%"
 

@@ -421,7 +421,7 @@ def build_and_solve_milp(inst, w1=1.0, w2=0.0, eps_z1=None, eps_z2=None, time_li
         return {"status": "INFEASIBLE", "elapsed_s": time.time() - t0}
 
 
-def run_weighted_sum(inst, steps=9, time_limit=600):
+def run_weighted_sum(inst, steps=1000, time_limit=600):
     """Run weighted-sum MILP. Iterates through weight combinations and returns non-dominated front."""
     if steps < 2:
         steps = 2
@@ -461,7 +461,7 @@ def main():
     parser = argparse.ArgumentParser(description="MILP Baseline: MO-IHLNDP weighted-sum solver.")
     parser.add_argument("--instance",   required=True, help="Path to the JSON instance file.")
     parser.add_argument("--out",        required=True, help="Path to save results JSON.")
-    parser.add_argument("--steps",      type=int, default=5,   help="Number of weighted-sum points.")
+    parser.add_argument("--steps",      type=int, default=1000, help="Number of weighted-sum points.")
     parser.add_argument("--time_limit", type=int, default=600, help="Per-solve SCIP time limit (s).")
     args = parser.parse_args()
 
