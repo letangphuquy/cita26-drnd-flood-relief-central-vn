@@ -79,15 +79,14 @@ Compare the In-Sample objective $\hat{Z}_1^N$ with the OOS objective $Z_1^{OOS}$
 
 - [~] Update the MILP solver so that it apply the correct linearization formula. Debug it carefully, then re-run. Use weighted sum method instead of epsilon-constraint
 - [x] We have defined the milp_baseline.py solver. It produces result and runs quite fast. However:
-- it lacks time tracking
-- it is outperformed by the proposed algorithm.
-Please proof-read and make correction to the MILP solver:
-- verify implementation match formulation.
-- verify data types, input format and output format of the variables are consistent.
-- Re-run the experiment 1
-- Apply the strategy adaptive weighted sum as in the paper "Adaptive weighted-sum method for bi-objective optimization s00158-004-0465-1"
+    - it lacks time tracking
+    - it is outperformed by the proposed algorithm.
 
-
+- [x] Please proof-read and make correction to the MILP solver:
+    - verify implementation match formulation.
+    - verify data types, input format and output format of the variables are consistent.
+    - Re-run the experiment 1
+- [ ] Apply the strategy adaptive weighted sum as in the paper "Adaptive weighted-sum method for bi-objective optimization s00158-004-0465-1"
 
 - Revamp and make the greedy heuristic smarter. Remember: Not giving it any metaheuristic capability (like GRASP, ACO or TS). The greedy should be close to manager's natural ad-hoc decision-making.
 - Improve the dataset by combinatorial generation technique. It should have 50 scenarios. Then rewrite the experimental methodology prose text in the paper.
