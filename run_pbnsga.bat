@@ -12,19 +12,24 @@ set "DATA_CV=%PROJECT%data\cv"
 
 echo [PB-NSGA] Full 20-seed run started.
 
-for %%N in (10 20 25 40 50 100) do (
-    echo [AP%%N] Running 20 seeds...
-    for %%R in (%SEEDS%) do (
-        "%SOLVER%" "!DATA_BENCH!\AP%%N_drnd.json" --pop %POP% --gen %GEN% --seed %%R --out "!RES1!\AP%%N_seed%%R.json" 2>NUL
-    )
-    echo [AP%%N] Done.
-)
+REM ── ARCHIVED BENCHMARKS (The data is used for a future study) ─────────────
+REM Note: Outdated AP and TR81 benchmark runs are preserved here for archival.
+REM They are not part of the current narrative but available for future research.
+REM ──────────────────────────────────────────────────────────────────────────
 
-echo [TR81] Running 20 seeds...
-for %%R in (%SEEDS%) do (
-    "%SOLVER%" "!DATA_BENCH!\TR81_drnd.json" --pop %POP% --gen %GEN% --seed %%R --out "!RES1!\TR81_seed%%R.json" 2>NUL
-)
-echo [TR81] Done.
+REM for %%N in (10 20 25 40 50 100) do (
+REM     echo [AP%%N] Running 20 seeds...
+REM     for %%R in (%SEEDS%) do (
+REM         "%SOLVER%" "!DATA_BENCH!\AP%%N_drnd.json" --pop %POP% --gen %GEN% --seed %%R --out "!RES1!\AP%%N_seed%%R.json" 2>NUL
+REM     )
+REM     echo [AP%%N] Done.
+REM )
+
+REM echo [TR81] Running 20 seeds...
+REM for %%R in (%SEEDS%) do (
+REM     "%SOLVER%" "!DATA_BENCH!\TR81_drnd.json" --pop %POP% --gen %GEN% --seed %%R --out "!RES1!\TR81_seed%%R.json" 2>NUL
+REM )
+REM echo [TR81] Done.
 
 for %%G in (small large) do (
     echo [CV-%%G] Running 20 seeds...
