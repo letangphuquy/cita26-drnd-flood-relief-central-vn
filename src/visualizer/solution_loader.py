@@ -131,16 +131,23 @@ def load_instance(path: str) -> NodeInfo:
 # ════════════════════════════════════════════════════════════════════════════
 
 def _parse_solution(raw: dict, source: str) -> Solution:
+    # MILP outputs may be missing A, W, rank, crowding — default gracefully
+    crowding_raw = raw.get("crowding", 0.0)
+    try:
+        crowding = float(crowding_raw)
+    except (TypeError, ValueError):
+        crowding = float("inf")
+
     return Solution(
         Z1=float(raw.get("Z1", 0.0)),
         Z2=float(raw.get("Z2", 0.0)),
         CV=float(raw.get("CV", 0.0)),
         rank=int(raw.get("rank", 1)),
-        crowding=float(raw.get("crowding", 0.0)),
-        X=list(raw.get("X", [])),
-        R=list(raw.get("R", [])),
-        A=list(raw.get("A", [])),
-        W=list(raw.get("W", [])),
+        crowding=crowding,
+        X=list(raw.get("X") or []),
+        R=list(raw.get("R") or []),
+        A=list(raw.get("A") or []),
+        W=list(raw.get("W") or []),
         source=source,
     )
 

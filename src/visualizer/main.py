@@ -36,7 +36,7 @@ import sys
 from pathlib import Path
 
 # Ensure src/ is on path when invoked without install
-_SRC = Path(__file__).resolve().parent.parent.parent  # …/CITA_paper/src
+_SRC = Path(__file__).resolve().parent.parent  # …/CITA_paper/src
 sys.path.insert(0, str(_SRC))
 
 from visualizer.solution_loader import (

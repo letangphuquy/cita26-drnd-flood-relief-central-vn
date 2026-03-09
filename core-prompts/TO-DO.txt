@@ -1,3 +1,4 @@
+- [x] Clean up `src\scripts`
 - [x] The figure is missing information like: + Reactive hubs   + Flows between hub   + Inventory filling ratio (decorate like a half-filled square for hub, for instance)   + Legends for demand 
 - [~] Also, in the figure I'm not seeing the Lateral Flow Arrow. Check and fix that. Is it due to solution, display or data?
  It seems like the model and the solver is omitting lateral hub trans-shipment. 
@@ -6,8 +7,6 @@
 
 - [ ] The inventory filling variables is overfitted to a single configuration. 
 Our next problem: You can see the R decision variables look the same for all three solution. It looks like our algorithm overfitted. Do RCA then suggest fixes.
-
-- [x] We have new problem, the water mode is utilized everywhere. Please review the data and update the accessibility matrix sanely.
 
 - Apply the SAA methodology. Using combinatorial techniques to generate a diverse dataset consisting of 50 scenarios. You can read guide on SAA and OOS here:
 Here is the precise guidance on Sample Average Approximation (SAA) and Out-Of-Sample (OOS) evaluation, tailored directly to your MO-IHLNDP formulation.
