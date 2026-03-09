@@ -61,14 +61,22 @@ def load_pareto(path):
     
     front = data.get("pareto_front", [])
     
+    def deduplicate(pvecs):
+        unique = {}
+        for p in pvecs:
+            k = (round(p[0], 6), round(p[1], 6))
+            if k not in unique:
+                unique[k] = p
+        return list(unique.values())
+
     # Try strict CV==0 filter first
     pts_strict = [(sol["Z1"], sol["Z2"]) for sol in front if sol.get("CV", 0) == 0.0]
     if pts_strict:
-        return pts_strict, data.get("meta", {})
+        return deduplicate(pts_strict), data.get("meta", {})
     
     # Fallback: all rank=1 solutions (handles PB-NSGA CV-in-kg encoding)
     pts_all = [(sol["Z1"], sol["Z2"]) for sol in front if sol.get("rank", 1) == 1]
-    return pts_all, data.get("meta", {})
+    return deduplicate(pts_all), data.get("meta", {})
 
 
 
@@ -174,7 +182,7 @@ def main():
     args = parser.parse_args()
 
     script_dir   = os.path.dirname(os.path.abspath(__file__))
-    project_root = os.path.dirname(script_dir)
+    project_root = os.path.dirname(os.path.dirname(script_dir))
     exp1_dir = args.results_exp1 or os.path.join(project_root, "results", "exp1")
     exp2_dir = args.results_exp2 or os.path.join(project_root, "results", "exp2")
 
@@ -202,7 +210,9 @@ def main():
         bb_path = os.path.join(exp2_dir, "CV_small_bb.json")
 
     greedy_path = os.path.join(exp1_dir, "cv_small_greedy.json")
-    milp_path   = os.path.join(exp1_dir, "cv_small_milp.json")
+    milp_path   = args.milp   or os.path.join(exp1_dir, "cv_small_milp_aws.json")
+    if not os.path.exists(milp_path):
+        milp_path = os.path.join(exp1_dir, "cv_small_milp.json") # legacy fallback
 
     # PB-NSGA seeds (already handled by CLI args or default logic above)
 
@@ -238,7 +248,7 @@ def main():
 
     print(f"\n[Data] BB solutions      : {len(bb_pts)}")
     print(f"[Data] Greedy solutions  : {len(greedy_pts)}")
-    print(f"[Data] MILP solutions    : {len(milp_pts)}")
+    print(f"[Data] MILP AWS solutions: {len(milp_pts)}")
     print(f"[Data] PB-NSGA seeds     : {len(pbnsga_runs)} "
           f"(total pts: {sum(len(r) for r in pbnsga_runs)})")
 
@@ -310,8 +320,8 @@ def main():
     evaluate_single("Greedy",   [greedy_pts])
     results["Greedy"]["wall"], results["Greedy"]["cpu"] = greedy_wall, greedy_cpu_val
     
-    evaluate_single("MILP",     [milp_pts] if milp_pts else [[]])
-    results["MILP"]["wall"],   results["MILP"]["cpu"]   = milp_wall, milp_cpu_val
+    evaluate_single("MILP AWS", [milp_pts] if milp_pts else [[]])
+    results["MILP AWS"]["wall"],   results["MILP AWS"]["cpu"]   = milp_wall, milp_cpu_val
     
     evaluate_single("BB-Exact", [bb_pts])
     results["BB-Exact"]["wall"], results["BB-Exact"]["cpu"] = bb_wall, bb_cpu_val
@@ -343,7 +353,7 @@ def main():
             return f"{igd_m:.3f} ± {igd_s:.3f}"
         return f"{igd_m:.3f}"
 
-    for name in ["Greedy", "MILP", "BB-Exact", "PB-NSGA"]:
+    for name in ["Greedy", "MILP AWS", "BB-Exact", "PB-NSGA"]:
         r = results[name]
         w_str = f"{r['wall']:.1f}" if not np.isnan(r["wall"]) else "—"
         c_str = f"{r['cpu']:.1f}" if not np.isnan(r["cpu"]) else "—"
@@ -357,7 +367,7 @@ def main():
 
     # ── LaTeX table row ─────────────────────────────────────────────────────
     g = results["Greedy"]
-    m = results["MILP"]
+    m = results["MILP AWS"]
     b = results["BB-Exact"]
     p = results["PB-NSGA"]
 
@@ -387,7 +397,7 @@ def main():
     print("\n--- LaTeX table rows (paste into main.tex) ---")
     print(r"Greedy Heuristic                &"
           f" {greedy_hv_str} & {greedy_igd_str} & $\\mathbf{{<0.1}}$ \\\\")
-    print(r"MILP ($\epsilon$-constraint)    &"
+    print(r"MILP (Adaptive Weighted Sum)    &"
           f" {milp_hv_str} & {milp_igd_str} & {milp_t_str} \\\\")
     print(r"Exact Enum (BB)                 &"
           f" {bb_hv_str} & {bb_igd_str} & {bb_t_str} \\\\")
@@ -400,7 +410,7 @@ def main():
     with open(out_csv, "w", newline="") as fh:
         writer = csv.writer(fh)
         writer.writerow(fields)
-        for name in ["Greedy", "MILP", "BB-Exact", "PB-NSGA"]:
+        for name in ["Greedy", "MILP AWS", "BB-Exact", "PB-NSGA"]:
             r = results[name]
             writer.writerow([
                 name, r["n_runs"],
