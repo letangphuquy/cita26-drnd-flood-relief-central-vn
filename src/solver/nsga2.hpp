@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <cmath>
 #include <iomanip>
+#include <set>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -26,8 +27,13 @@ struct NSGAConfig {
   // High early exploration, tight late exploitation.
   double pm_high = 0.40;         // initial mutation rate base
   double pm_low = 0.10;          // final mutation rate base
-  double sbx_eta = 20.0;         // SBX distribution index
-  double pm_eta = 20.0;          // polynomial mutation index
+  // [F2] SBX distribution indices — lower η → more exploratory offspring.
+  // X-space crossover uses uniform XO (not SBX), so sbx_eta only affects A.
+  // R and W use separate, lower η to avoid premature convergence.
+  double sbx_eta = 15.0;         // SBX distribution index (A segment)
+  double sbx_eta_rw = 2.0;       // SBX distribution index for R & W segments
+  double pm_eta = 20.0;          // polynomial mutation index (A segment)
+  double pm_eta_rw = 5.0;        // polynomial mutation index for R & W
   int log_every = 10;            // generations between progress logs
   int seed_iter = 0;             // for set_rolling_seed
   bool use_local_search = false; // true → PB-NSMA; false → plain NSGA-II
@@ -39,6 +45,14 @@ struct NSGAConfig {
   // for one generation to escape the local basin.
   int stagnation_threshold = 20; // gens without new X-config in rank-1
   int tournament_size = 2;       // base tournament size (binary)
+  // [F3] Random immigrant injection: fraction of pop replaced with fresh
+  // random individuals every immigrant_interval generations.
+  double immigrant_fraction = 0.10; // 10% of pop
+  int immigrant_interval = 20;      // every 20 gens
+  // [F6] Stagnation restart: if stagnation persists for restart_threshold
+  // generations, reinitialize restart_fraction of the population randomly.
+  int restart_threshold = 40;       // 2× stagnation_threshold
+  double restart_fraction = 0.30;   // 30% of pop
 };
 
 // ── Constrained comparison (crowded comparison with CV) ─────────────────────
@@ -94,9 +108,9 @@ crossover(const Individual &p1, const Individual &p2, const NSGAConfig &cfg) {
       c2.X[k] = p1.X[k];
     }
   }
-  // R segment: SBX
+  // R segment: SBX with low η (exploratory) [F2]
   for (int k = 0; k < num_H; k++) {
-    auto [r1, r2] = sbx_gene(p1.R[k], p2.R[k], cfg.sbx_eta);
+    auto [r1, r2] = sbx_gene(p1.R[k], p2.R[k], cfg.sbx_eta_rw);
     c1.R[k] = r1;
     c2.R[k] = r2;
   }
@@ -107,9 +121,9 @@ crossover(const Individual &p1, const Individual &p2, const NSGAConfig &cfg) {
       c2.A[i] = p1.A[i];
     }
   }
-  // W segment: SBX (all weights)
+  // W segment: SBX with low η (exploratory) [F2]
   for (int w = 0; w < (int)p1.W.size(); w++) {
-    auto [w1, w2] = sbx_gene(p1.W[w], p2.W[w], cfg.sbx_eta);
+    auto [w1, w2] = sbx_gene(p1.W[w], p2.W[w], cfg.sbx_eta_rw);
     c1.W[w] = w1;
     c2.W[w] = w2;
   }
@@ -129,22 +143,28 @@ crossover(const Individual &p1, const Individual &p2, const NSGAConfig &cfg) {
   return {c1, c2};
 }
 
-// ── Mutation
-// ──────────────────────────────────────────────────────────────────
-// current_pm_base: adaptive value passed by run_nsga2 (linearly decayed).
-// w_scale:         multiplier for W-segment mutation (1.0 normally, 2.0 on
-//                  stagnation-triggered W-hypermutation).
+// ── Mutation [F1: segment-specific rates] ───────────────────────────────────
+// Each segment gets its own per-gene mutation probability = pm_base / segment_size.
+// This ensures X (5 genes) and W (6 genes) are mutated as frequently as A (20 genes)
+// in terms of expected mutations per segment per offspring.
+// w_scale: multiplier for W-segment mutation (1.0 normally, 2.0 on stagnation).
 void mutate(Individual &ind, const NSGAConfig &cfg,
             double current_pm_base = -1.0, double w_scale = 1.0) {
   int num_H = (int)ind.X.size();
   int num_I = (int)ind.A.size();
-  int gene_count = num_H + num_H + num_I + (int)ind.W.size(); // X + R + A + W
+  int num_W = (int)ind.W.size();
   double pm_base = (current_pm_base >= 0) ? current_pm_base : cfg.pm_high;
-  double pm = pm_base / gene_count;
+
+  // [F1] Segment-specific mutation probabilities:
+  //   Expected mutations per segment per offspring ≈ pm_base.
+  double pm_x = pm_base / std::max(1, num_H); // X: ~pm_base mutations/offspring
+  double pm_r = pm_base / std::max(1, num_H); // R: ~pm_base mutations/offspring
+  double pm_a = pm_base / std::max(1, num_I); // A: ~pm_base mutations/offspring
+  double pm_w_base = pm_base / std::max(1, num_W); // W: ~pm_base mutations/offspring
 
   // X: bit-flip
   for (int k = 0; k < num_H; k++) {
-    if (rand01() < pm)
+    if (rand01() < pm_x)
       ind.X[k] ^= 1;
   }
   // Repair: ensure at least 1 open hub
@@ -157,21 +177,21 @@ void mutate(Individual &ind, const NSGAConfig &cfg,
   if (!any_open)
     ind.X[(int)rand_int(0, num_H - 1)] = 1;
 
-  // R: polynomial mutation
+  // R: polynomial mutation with low η [F2]
   for (int k = 0; k < num_H; k++) {
-    if (rand01() < pm)
-      ind.R[k] = poly_mutate(ind.R[k], cfg.pm_eta);
+    if (rand01() < pm_r)
+      ind.R[k] = poly_mutate(ind.R[k], cfg.pm_eta_rw);
   }
   // A: random replacement
   for (int i = 0; i < num_I; i++) {
-    if (rand01() < pm)
+    if (rand01() < pm_a)
       ind.A[i] = (int)rand_int(0, num_H - 1);
   }
-  // W: polynomial mutation with optional hyper-scale (stagnation escape)
-  double pm_w = (pm * w_scale > 1.0) ? 1.0 : (pm * w_scale);
-  for (int w = 0; w < (int)ind.W.size(); w++) {
+  // W: polynomial mutation with low η [F2] + optional hyper-scale (stagnation)
+  double pm_w = std::min(pm_w_base * w_scale, 1.0);
+  for (int w = 0; w < num_W; w++) {
     if (rand01() < pm_w)
-      ind.W[w] = poly_mutate(ind.W[w], cfg.pm_eta);
+      ind.W[w] = poly_mutate(ind.W[w], cfg.pm_eta_rw);
   }
 }
 
@@ -398,6 +418,38 @@ vector<Individual> run_nsga2(const DRNDInstance &inst, const NSGAConfig &cfg) {
       }
     }
 
+    // ── [F6] Stagnation restart: reinitialize 30% of pop if deeply stuck ────
+    if (stag_gens >= cfg.restart_threshold && stag_gens % cfg.restart_threshold == 0) {
+      int n_restart = std::max(1, (int)(POP * cfg.restart_fraction));
+      cerr << "[Gen " << gen << "] Deep stagnation (" << stag_gens
+           << " gens) — restarting " << n_restart << " individuals\n";
+      // Sort pop: worst-ranked / lowest-crowding first → replace them
+      std::sort(all(pop), [](const Individual &a, const Individual &b) {
+        if (a.rank != b.rank) return a.rank > b.rank;
+        return a.crowding < b.crowding;
+      });
+      for (int ri = 0; ri < n_restart && ri < (int)pop.size(); ri++) {
+        pop[ri] = random_individual(inst);
+        decode(pop[ri], inst);
+      }
+      elitist_select(pop, POP);
+    }
+
+    // ── [F3] Random immigrant injection ─────────────────────────────────────
+    if (cfg.immigrant_interval > 0 && gen % cfg.immigrant_interval == 0) {
+      int n_imm = std::max(1, (int)(POP * cfg.immigrant_fraction));
+      // Replace the worst n_imm individuals
+      std::sort(all(pop), [](const Individual &a, const Individual &b) {
+        if (a.rank != b.rank) return a.rank > b.rank;
+        return a.crowding < b.crowding;
+      });
+      for (int ri = 0; ri < n_imm && ri < (int)pop.size(); ri++) {
+        pop[ri] = random_individual(inst);
+        decode(pop[ri], inst);
+      }
+      elitist_select(pop, POP);
+    }
+
     // ── Generate offspring ─────────────────────────────────────────────────
     vector<Individual> offspring;
     offspring.reserve(POP);
@@ -461,7 +513,7 @@ vector<Individual> run_nsga2(const DRNDInstance &inst, const NSGAConfig &cfg) {
           } else {
             // Perturb one W weight
             int ww = (int)rand_int(0, (int)nbr.W.size() - 1);
-            nbr.W[ww] = poly_mutate(nbr.W[ww], cfg.pm_eta);
+            nbr.W[ww] = poly_mutate(nbr.W[ww], cfg.pm_eta_rw);
           }
           decode(nbr, inst);
           if (!sol.constrained_dominates(nbr))
@@ -495,6 +547,15 @@ vector<Individual> run_nsga2(const DRNDInstance &inst, const NSGAConfig &cfg) {
            << " Z2=" << best_z2 << " " << std::fixed << std::setprecision(1)
            << duration_ms(time_now() - t_start) / 1000.0 << "s\n";
     }
+  }
+
+  // ── Log diversity summary at end ──────────────────────────────────────────
+  {
+    std::set<vector<int>> unique_x;
+    for (const auto &ind : pop)
+      unique_x.insert(ind.X);
+    cerr << "[" << algo_name << "] Final unique X configs: " << unique_x.size()
+         << "/" << POP << "\n";
   }
 
   cerr << "[" << algo_name << "] Done in " << std::fixed << std::setprecision(2)

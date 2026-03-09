@@ -11,12 +11,15 @@
 #include <iostream>
 #include <numeric>
 #include <random>
+#include <map>
+#include <numeric>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
 
 
-using std::vector, std::cin, std::cout, std::cerr, std::string, std::pair;
+using std::map, std::set, std::vector, std::cin, std::cout, std::cerr, std::string, std::pair;
 
 #define all(v) (v).begin(), (v).end()
 #define cst(T) const T &
