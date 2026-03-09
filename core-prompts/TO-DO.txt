@@ -100,6 +100,12 @@ From then, having some heuristics to assign the flow and remaining variables. Ca
 
 - Add a new algorithm basline: VNS-TS, as in the paper "Capacitated single‐allocation hub location model for a flood relief distribution network coin.12374"
 
+- [~] The results in experiment 1 show tha: PB-NSGA performs poorly compared to MILP AWS. I see it stuck and converges to local optimum very soon.
+I also observed that: The inventory filling variables is overfitted to a single configuration.
+Our next problem: You can see the R decision variables look the same for all three solution. It looks like our algorithm overfitted.
+
+Do RCA then suggest fixes.
+
 - Extend experiments 2 by:
 0. Add Pareto front for trade-off analysis.
 1. Measuring HV and IGD over 5000 generations, and reports at the milestones: 10,20,50,100,200,500,1000,2000,5000. Plot convergence. HV and IGD lines are plotted per each generation step (horizontal axis) in the same figure.
