@@ -22,10 +22,11 @@ bash compile.sh
 .\compile.bat
 ```
 
-This creates the following binaries in `src/solver/`:
+This creates the following binary in `src/solver/`:
 - `solver` (or `solver.exe`): Main PB-NSGA-II solver.
-- `bb_solver` (or `bb_solver.exe`): Branch-and-Bound solver for ground-truth proxies.
-- `greedy_baseline` (or `greedy_baseline.exe`): Stochastic multi-restart greedy heuristic.
+
+> **Note**: `greedy_baseline` is compiled automatically by `run_exp1_baselines.bat/.sh` (Step 1).
+> `bb_solver` is pre-compiled and provided in `src/solver/`.
 
 ## 3. High-Level Experiment Pipeline
 
@@ -71,20 +72,26 @@ If you prefer to run specific stages or analysis scripts manually:
 
 **Mac / Linux:**
 ```bash
-# Run PB-NSGA Seed 0 on CV-Large
-./src/solver/solver data/cv/cv_large_drnd.json --pop 200 --gen 300 --seed 0 --out results/exp2/cv_large_seed0.json
+# Run PB-NSGA Seed 0 on CV-Large (Exp 2 uses --gen 500)
+./src/solver/solver data/cv/cv_large_drnd.json --pop 200 --gen 500 --seed 0 --out results/exp2/cv_large_seed0.json
 
-# Run Analysis for Experiment 2
+# Run Analysis for Experiment 2 (args: results_dir out_dir cv_data_dir)
 python src/scripts/analyze_exp2.py results/exp2 results/exp2 data/cv
+
+# Generate high-fidelity map (representative seed)
+python src/scripts/map_solution_v2.py --instance data/cv/cv_large_drnd.json --result results/exp2/cv_large_seed0.json --out figures/cv_large_map_detailed.pdf
 ```
 
 **Windows:**
 ```powershell
-# Run PB-NSGA Seed 0 on CV-Large
-.\src\solver\solver.exe data\cv\cv_large_drnd.json --pop 200 --gen 300 --seed 0 --out results\exp2\cv_large_seed0.json
+# Run PB-NSGA Seed 0 on CV-Large (Exp 2 uses --gen 500)
+.\src\solver\solver.exe data\cv\cv_large_drnd.json --pop 200 --gen 500 --seed 0 --out results\exp2\cv_large_seed0.json
 
-# Run Analysis for Experiment 2
+# Run Analysis for Experiment 2 (args: results_dir out_dir cv_data_dir)
 python src\scripts\analyze_exp2.py results\exp2 results\exp2 data\cv
+
+# Generate high-fidelity map (representative seed)
+python src\scripts\map_solution_v2.py --instance data\cv\cv_large_drnd.json --result results\exp2\cv_large_seed0.json --out figures\cv_large_map_detailed.pdf
 ```
 
 ## 6. CLI Reference & Parameters
@@ -125,9 +132,10 @@ Detailed command-line arguments for the solvers and reproduction scripts.
 ### 6.4. Evaluation Metrics (`src/scripts/evaluate_cv_small.py`)
 | Argument | Description |
 | :------- | :---------- |
-| `--results-exp1` | Directory containing baseline JSONs (CV-Small). |
-| `--results-exp2` | Directory containing seed JSONs (CV-Large/Small). |
-| `--ours` | Path or glob pattern for PB-NSGA results (e.g., `results/exp2/*.json`). |
+| `--results-exp1` | Directory containing baseline JSONs (`results/exp1/`). |
+| `--ours` | Path to PB-NSGA result JSON (`cv_small_pb_nsga.json`). |
+| `--greedy` | Path to Greedy result JSON (`cv_small_greedy.json`). |
+| `--milp` | Path to MILP AWS result JSON (`cv_small_milp_aws.json`). |
 
 ## 7. Strategic & Economic Parameters
 
@@ -142,10 +150,11 @@ The following parameters are typically defined inside the instance JSON files bu
 
 ## 8. Result Locations
 
-- **Metrics**: `results/exp1/cv_small_metrics.csv` (Table 4 data).
-- **Stability**: `results/exp2/exp2_metrics.csv` and `results/exp2/exp2_hub_stability.csv`.
-- **Figures**: `results/exp2/figures/` (Pareto fronts, heatmaps).
-- **Maps**: `figures/cv_large_map_detailed.pdf` (1x3 Scenario Map).
+- **Exp 1 Metrics**: `results/exp1/cv_small_metrics.csv` (Table 4 data).
+- **Exp 2 Metrics**: `results/exp2/exp2_metrics.csv` — HV, IGD+ mean±std across 20 seeds.
+- **Hub Stability**: `results/exp2/exp2_hub_stability.csv` — hub selection frequency per scenario.
+- **Pareto Figures**: `results/exp2/figures/` — Pareto fronts, hub frequency bars, risk heatmaps.
+- **Solution Map**: `figures/cv_large_map_detailed.pdf` — 1×3 scenario composite map (Step 3 of Exp 2).
 
 ---
 *Note: Outdated benchmark datasets (AP, TR) are archived in the code and marked for future study. They can be triggered via `run_pbnsga.sh --instances AP TR81` or `run_pbnsga.bat --instances AP TR81` if needed for comparative research.*

@@ -44,7 +44,8 @@ done
 # ── Step 2: Statistical Analysis & Sensitivity ────────────────────────────
 echo ""
 echo "[Step 2] Analyzing Stability & Scenario Sensitivity..."
-"$PYTHON" "$PROJECT/src/scripts/analyze_exp2.py" "$RES2" "$PROJECT/data/cv"
+# Args: <results_dir> <out_dir> <cv_data_dir>
+"$PYTHON" "$PROJECT/src/scripts/analyze_exp2.py" "$RES2" "$RES2" "$PROJECT/data/cv"
 
 # ── Step 3: High-Fidelity Mapping ─────────────────────────────────────────
 echo ""
