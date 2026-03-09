@@ -19,8 +19,8 @@ if [ "$1" == "data" ]; then
     echo "Regenerating datasets..."
     PYTHON="$PROJECT/.venv/bin/python3"
     if [ ! -f "$PYTHON" ]; then PYTHON="python3"; fi
-    $PYTHON src/scripts/generate_cv.py --outdir data/cv
-    $PYTHON src/scripts/process_benchmark.py --outdir data/benchmark
+    $PYTHON src/scripts/data_generate_cv.py --outdir data/cv
+    $PYTHON src/scripts/data_process_hlp_benchmark.py --outdir data/benchmark
     echo "Datasets ready."
     exit 0
 fi

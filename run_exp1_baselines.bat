@@ -56,7 +56,7 @@ IF NOT EXIST "%SOLVER_DIR%\solver.exe" (
 REM ── Step 5: Final Comparison Table ────────────────────────────────────────
 echo.
 echo [Step 5] Generating Comparison Metrics (HV, IGD+)...
-"%PYTHON%" "%PROJECT%src\scripts\evaluate_cv_small.py" --results-exp1 "%RES1%" --ours "%RES1%\cv_small_pb_nsga.json" --greedy "%RES1%\cv_small_greedy.json" --milp "%RES1%\cv_small_milp_aws.json"
+"%PYTHON%" "%PROJECT%src\scripts\exp1_evaluate_cv_small.py" --results-exp1 "%RES1%" --ours "%RES1%\cv_small_pb_nsga.json" --greedy "%RES1%\cv_small_greedy.json" --milp "%RES1%\cv_small_milp_aws.json"
 
 echo.
 echo Experiment 1 (Baselines) Completed.

@@ -1,6 +1,6 @@
 """
-analyze_exp2.py — Experiment 2: Case Study Central Vietnam (CV-Large)
-======================================================================
+exp2_analyze_case_study.py — Experiment 2: Case Study Central Vietnam (CV-Large)
+=================================================================================
 STATUS: Active — called from run_exp2_case_study.bat / run_exp2_case_study.sh
         (Step 2 of 3).
 
@@ -15,15 +15,15 @@ Outputs (written to results/exp2/ and figures/):
   figures/<grp>_hub_heatmap.pdf — hub × scenario risk heatmap (sensitivity)
 
 Note: The solution map (1×3 composite) is generated separately by
-      map_solution_v2.py in Step 3 of run_exp2_case_study.bat.
+      exp2_map_solution.py in Step 3 of run_exp2_case_study.bat.
 
 The sensitivity analysis (hub_heatmap) answers:
   "Which hubs become unsafe under different disaster scenarios?"
 This directly supports the managerial insights in the paper.
 
 Usage (canonical, from project root):
-  python src/scripts/analyze_exp2.py results/exp2 data/cv
-  python src/scripts/analyze_exp2.py <results_dir> [<cv_data_dir>]
+  python src/scripts/exp2_analyze_case_study.py results/exp2 results/exp2 data/cv
+  python src/scripts/exp2_analyze_case_study.py <results_dir> [<out_dir> [<cv_data_dir>]]
 """
 
 import os
@@ -517,9 +517,9 @@ def run(results_dir, out_dir, cv_data_dir=None):
 def _call_map_solution(inst_path, result_path, out_path):
     """Invoke map_solution_v2.py via subprocess."""
     _script_dir  = os.path.dirname(os.path.abspath(__file__))
-    map_script   = os.path.join(_script_dir, "map_solution_v2.py")
+    map_script   = os.path.join(_script_dir, "exp2_map_solution.py")
     if not os.path.isfile(map_script):
-        print(f"  [Map] map_solution_v2.py not found — skipping map for {out_path}")
+        print(f"  [Map] exp2_map_solution.py not found — skipping map for {out_path}")
         return
     cmd = [sys.executable, map_script,
            "--instance", inst_path,

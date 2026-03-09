@@ -1,6 +1,6 @@
 """
-process_benchmark.py — HLP Benchmark-to-DRND Converter
-=======================================================
+data_process_hlp_benchmark.py — HLP Benchmark-to-DRND Converter
+================================================================
 STATUS: Active (data preparation) — called from run_experiments.bat / .sh when
         regenerating datasets (run_experiments.bat data).
 
@@ -10,9 +10,9 @@ expected by the PB-NSGA-II solver.
 
 Missing DRND fields (risk index, accessibility, demand, Daganzo CA Theta, etc.)
 are synthetically generated following the same four-criterion risk scoring
-methodology as generate_cv.py, adapted to each benchmark's coordinate space.
+methodology as data_generate_cv.py, adapted to each benchmark's coordinate space.
 
-OUTPUTS (written to --outdir, default data/hlp-benchmark/):
+OUTPUTS (written to --outdir, default data/benchmark/):
   AP10_seed<N>_drnd.json  ...  AP100_seed<N>_drnd.json
   TR81_seed<N>_drnd.json
 
@@ -21,8 +21,8 @@ Note: The AP/TR81 benchmark runs are archived (see run_experiments.bat comment).
       part of the current paper's primary narrative.
 
 Usage (canonical, from project root):
-  python src/scripts/process_benchmark.py --outdir data/hlp-benchmark   # default seed=42
-  python src/scripts/process_benchmark.py --outdir data/hlp-benchmark --seed 7
+  python src/scripts/data_process_hlp_benchmark.py --outdir data/benchmark   # default seed=42
+  python src/scripts/data_process_hlp_benchmark.py --outdir data/benchmark --seed 7
 """
 
 import math

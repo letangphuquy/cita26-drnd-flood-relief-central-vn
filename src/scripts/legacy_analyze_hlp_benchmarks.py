@@ -1,8 +1,8 @@
 """
-analyze_exp1.py — LEGACY: HLP Benchmark Stress-Test Analysis
-=============================================================
+legacy_analyze_hlp_benchmarks.py — LEGACY: HLP Benchmark Stress-Test Analysis
+==============================================================================
 STATUS: Not part of the current paper pipeline.
-        The canonical Experiment 1 is run by evaluate_cv_small.py
+        The canonical Experiment 1 is run by exp1_evaluate_cv_small.py
         (called from run_exp1_baselines.bat / run_exp1_baselines.sh).
 
 This script was used for an earlier narrative that ran PB-NSGA against
@@ -17,8 +17,8 @@ Outputs (if run):
   3. results/exp1/figures/<group>_pareto.pdf  — Pareto comparison plots
 
 Usage (legacy, not in current pipeline):
-  python scripts/analyze_exp1.py                   # auto-discovers results/exp1/
-  python scripts/analyze_exp1.py <results_dir>
+  python src/scripts/legacy_analyze_hlp_benchmarks.py                   # auto-discovers results/exp1/
+  python src/scripts/legacy_analyze_hlp_benchmarks.py <results_dir>
 """
 
 import os

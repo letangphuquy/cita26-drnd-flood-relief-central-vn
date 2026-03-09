@@ -1,6 +1,6 @@
 """
-analyze_saa_oos.py — Standalone SAA & OOS Diagnostic Tool
-==========================================================
+exp2_analyze_saa_oos.py — Standalone SAA & OOS Diagnostic Tool
+===============================================================
 STATUS: Standalone utility — NOT part of the main experiment pipeline.
 
 Reads pre-computed evaluation files produced by the C++ solver's SAA and
@@ -16,7 +16,7 @@ OOS eval modes and prints a brief statistical summary:
     novel extreme scenario.
 
 Usage (from project root):
-  python src/scripts/analyze_saa_oos.py
+  python src/scripts/exp2_analyze_saa_oos.py
 """
 
 import json

@@ -1,6 +1,6 @@
 """
-generate_saa_oos.py — SAA & OOS Scenario Generator
-====================================================
+data_generate_saa_oos.py — SAA & OOS Scenario Generator
+========================================================
 STATUS: Standalone data-generation utility — NOT part of the main pipeline.
 
 Generates two supplementary evaluation datasets for CV-Large:
@@ -15,10 +15,10 @@ Generates two supplementary evaluation datasets for CV-Large:
      training scenarios.  Output: data/cv/cv_large_oos.json
 
 These files are consumed by the C++ solver's --eval-saa / --eval-oos
-modes, whose results are then summarised by analyze_saa_oos.py.
+modes, whose results are then summarised by exp2_analyze_saa_oos.py.
 
 Usage (from project root):
-  python src/scripts/generate_saa_oos.py
+  python src/scripts/data_generate_saa_oos.py
 """
 
 import math
@@ -26,7 +26,7 @@ import json
 import random
 import os
 
-from generate_cv import (
+from data_generate_cv import (
     DEMAND_NODES, HUB_NODES, ORIGIN_NODES, NUM_MODES, GAMMA, ALPHA, CHI, LAMBDA0, 
     DAGANZO_ETA, DAGANZO_C_LOC, BIG_M, RISK_WEIGHTS, compute_aux_risk, risk_interval,
     build_transport, _weighted_sample, haversine, gauss, terrain_factor, compute_theta
@@ -212,7 +212,7 @@ def build_instance_variant(variant="saa", num_scenarios=100):
     # To do that, we briefly generate the 3 training scenarios using seed 2026 just to set the max capacity, 
     # matching what generate_cv.py would do.
     random.seed(2026)
-    from generate_cv import generate_scenarios as orig_generate_scenarios
+    from data_generate_cv import generate_scenarios as orig_generate_scenarios
     orig_scens = orig_generate_scenarios(coords, aux_risk, r_intervals, demand_idx, hub_idx, origin_idx, base_pop)
     max_demand_kg = max(GAMMA * sum(float(v) for v in sc["demand"].values()) for sc in orig_scens)
     hub_capacity   = {}

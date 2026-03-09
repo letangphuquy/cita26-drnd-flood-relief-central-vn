@@ -1,6 +1,6 @@
 """
-map_solution_v2.py — High-Fidelity Solution Map for MO-IHLNDP (CV-Large)
-=========================================================================
+exp2_map_solution.py — High-Fidelity Solution Map for MO-IHLNDP (CV-Large)
+===========================================================================
 STATUS: Active — called from run_exp2_case_study.bat / run_exp2_case_study.sh
         (Step 3 of 3).
 
@@ -9,7 +9,7 @@ representative PB-NSGA solution on the Central Vietnam instance.  The decoder
 logic mirrors the C++ solver decoder to ensure accurate hub/flow assignment.
 
 Canonical call (from run_exp2_case_study.bat):
-  python src/scripts/map_solution_v2.py \
+  python src/scripts/exp2_map_solution.py \
       --instance data/cv/cv_large_drnd.json \
       --result   results/exp2/cv_large_seed0.json \
       --out      figures/cv_large_map_detailed.pdf

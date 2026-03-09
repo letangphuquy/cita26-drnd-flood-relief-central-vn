@@ -19,8 +19,8 @@ IF "%1"=="data" (
     echo Regenerating datasets...
     SET "PYTHON=.venv\Scripts\python.exe"
     IF NOT EXIST "%PYTHON%" SET "PYTHON=python"
-    "%PYTHON%" src\scripts\generate_cv.py --outdir data\cv
-    "%PYTHON%" src\scripts\process_benchmark.py --outdir data\benchmark
+    "%PYTHON%" src\scripts\data_generate_cv.py --outdir data\cv
+    "%PYTHON%" src\scripts\data_process_hlp_benchmark.py --outdir data\benchmark
     echo Datasets ready.
     exit /b 0
 )
