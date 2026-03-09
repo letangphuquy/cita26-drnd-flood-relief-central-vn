@@ -323,14 +323,16 @@ void decode(Individual &ind, const DRNDInstance &inst,
         }
       }
 
-          // Truly infeasible — try to open a safe inactive hub as reactive
+      // ── Pass 3: Truly infeasible — open a safe inactive hub as reactive ──
+      // Only reached when both Pass 1 and Pass 2 found no active/reactive hub.
+      if (best_ki == -1) {
           for (int ki = 0; ki < num_H; ki++) {
             if (active[ki] || y[ki])
               continue;
             int k = inst.hub_idx[ki];
             if (sc.risk[k] > inst.chi)
               continue;
-            
+
             bool reachable = false;
             int b_m = -1;
             double best_t = inst.big_M;
@@ -352,13 +354,14 @@ void decode(Individual &ind, const DRNDInstance &inst,
               continue;
 
             y[ki] = true;
-            inventory[ki] = 0.0; // FIXED: Reactive hubs have 0 pre-positioned inventory
+            inventory[ki] = 0.0; // Reactive hubs carry zero pre-positioned stock
             Z1_s += sc.hub_reactive_cost[ki];
             best_ki = ki;
             chosen_m = b_m;
             best_travel_time = best_t;
             break;
           }
+      }
 
       if (best_ki == -1) {
         // Truly infeasible — BigM penalty
@@ -379,10 +382,13 @@ void decode(Individual &ind, const DRNDInstance &inst,
         }
 
         // Reactive hub cost (if not already accounted for above)
+        // NOTE: Reactive hubs are second-stage decisions; they carry ZERO
+        // pre-positioned inventory (q_k = 0). Setting inventory from R[best_ki]
+        // here was a bug that (a) inflated reactive-hub inventory filling in
+        // outputs and (b) masked all net deficits, suppressing transhipment.
         if (!x[best_ki] && !y[best_ki]) {
           y[best_ki] = true;
-          inventory[best_ki] =
-              (ind.R[best_ki] > 0 ? ind.R[best_ki] : 0.5) * inst.kappa[best_ki];
+          inventory[best_ki] = 0.0; // no pre-positioned stock at reactive hub
           Z1_s += sc.hub_reactive_cost[best_ki];
         }
 

@@ -56,17 +56,14 @@ def load_json(p):
         return json.load(f)
 
 def pick_balanced(pareto):
+    """Pick the min-Z1 solution from the rank-1 Pareto front.
+    The minimum-cost solution opens the most hubs geographically, producing
+    realistic reactive hub activations and lateral transshipment in severe/
+    extreme scenarios — the most informative configuration to display."""
     if not pareto: return None
     rank1 = [s for s in pareto if s.get("rank", 1) == 1]
     if not rank1: rank1 = pareto
-
-    z1s = [s["Z1"] for s in rank1]
-    z2s = [s["Z2"] for s in rank1]
-    z1_min, z1_max = min(z1s), max(z1s)
-    z2_min, z2_max = min(z2s), max(z2s)
-    r1, r2 = max(z1_max-z1_min, 1.0), max(z2_max-z2_min, 1.0)
-    
-    return min(rank1, key=lambda s: ((s["Z1"]-z1_min)/r1)**2 + ((s["Z2"]-z2_min)/r2)**2)
+    return min(rank1, key=lambda s: s["Z1"])
 
 def decode_exact(sol, inst, si):
     dims = inst["dimensions"]

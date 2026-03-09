@@ -46,7 +46,7 @@ MODE_COLORS = {
     2: ("#DAA520", ":")   # Helicopter
 }
 
-def draw_scenario(ax, inst, flow_scen, use_mercator=True):
+def draw_scenario(ax, inst, flow_scen, x_planned, kappa, use_mercator=True):
     coords = inst["nodes"]["coords"]
     dem_idx = inst["nodes"]["demand_indices"]
     hub_idx = inst["nodes"]["hub_indices"]
@@ -113,29 +113,50 @@ def draw_scenario(ax, inst, flow_scen, use_mercator=True):
 
     # Nodes - Hubs
     for ki, h in enumerate(hub_idx):
-        x, y = xy(h)
+        hx, hy = xy(h)
         is_reactive = flow_scen["y_ks"][ki]
-        # Check if planned open from inventory_held? Actually, flow data doesn't have X directly.
-        # But we can assume if it's not reactive and inventory_held > 0, it's planned.
-        # Let's just color reactive vs planned.
-        inv = flow_scen["inventory_held"][ki]
-        is_planned = inv > 0 and not is_reactive
-        
+        # Use first-stage X array (authoritative): planned hub iff x_planned[ki]==1
+        is_planned = bool(x_planned[ki]) and not is_reactive
+        inv = flow_scen["inventory_held"][ki]  # 0 for reactive hubs after decoder fix
+
         if is_planned:
             color = COL_HUB_OPEN
             marker = "s"
-            size = 150
+            size = 180
         elif is_reactive:
             color = COL_HUB_REACT
             marker = "*"
-            size = 200
+            size = 220
         else:
             color = COL_HUB_CLOSED
             marker = "^"
             size = 60
-            
-        ax.scatter(x, y, s=size, c=color, marker=marker, edgecolors="black", zorder=7)
-        ax.annotate(f"H{ki}", (x, y), xytext=(0, 8), textcoords="offset points", ha="center", fontsize=8, fontweight="bold", zorder=8)
+
+        ax.scatter(hx, hy, s=size, c=color, marker=marker, edgecolors="black", zorder=7)
+
+        # Inventory fill ratio indicator — only for planned hubs with capacity
+        if is_planned and kappa[ki] > 0:
+            fill_ratio = min(1.0, inv / kappa[ki])
+            # Draw a partial-fill rectangle next to the hub marker
+            rect_w, rect_h = 6000, 12000  # in web-mercator units (approx 6km x 12km)
+            bg = mpatches.FancyBboxPatch(
+                (hx + 8000, hy - rect_h / 2), rect_w, rect_h,
+                boxstyle="square,pad=0", linewidth=0.8,
+                edgecolor="black", facecolor="white", zorder=8
+            )
+            ax.add_patch(bg)
+            filled = mpatches.FancyBboxPatch(
+                (hx + 8000, hy - rect_h / 2), rect_w, rect_h * fill_ratio,
+                boxstyle="square,pad=0", linewidth=0,
+                edgecolor="none", facecolor=COL_HUB_OPEN, alpha=0.85, zorder=9
+            )
+            ax.add_patch(filled)
+            ax.annotate(f"{fill_ratio:.0%}", (hx + 11000, hy),
+                        xytext=(0, 0), textcoords="offset points",
+                        ha="left", va="center", fontsize=6, zorder=10)
+
+        ax.annotate(f"H{ki}", (hx, hy), xytext=(0, 8), textcoords="offset points",
+                    ha="center", fontsize=8, fontweight="bold", zorder=11)
 
 def main():
     parser = argparse.ArgumentParser()
@@ -147,14 +168,18 @@ def main():
     inst = load_json(args.instance)
     flow_data = load_json(args.flow)
 
+    # First-stage X array and hub capacity from meta / instance
+    x_planned = flow_data["meta"]["X"]
+    kappa = inst.get("hub_params", {}).get("capacity", [1.0] * len(inst["nodes"]["hub_indices"]))
+
     fig, axes = plt.subplots(1, 3, figsize=(18, 6), dpi=300)
     titles = ["Scenario 0: Mild", "Scenario 1: Severe", "Scenario 2: Extreme"]
-    
+
     for si in range(3):
         ax = axes[si]
         if si < len(flow_data["scenarios"]):
             f_scen = flow_data["scenarios"][si]
-            draw_scenario(ax, inst, f_scen, use_mercator=True)
+            draw_scenario(ax, inst, f_scen, x_planned, kappa, use_mercator=True)
             
             if HAS_CONTEXTILY:
                 try:
@@ -183,7 +208,9 @@ def main():
     z2 = flow_data["meta"]["Z2"]
     fig.suptitle(f"Detailed Flow Mapping — Representative Solution (Z1 = {z1:.1f}, Z2 = {z2:.1f})", fontsize=16, fontweight="bold")
     
-    plt.savefig(args.out, format="pdf", bbox_inches="tight")
+    # Auto-detect format from output file extension
+    out_fmt = os.path.splitext(args.out)[1].lstrip(".").lower() or "pdf"
+    plt.savefig(args.out, format=out_fmt, bbox_inches="tight")
     print(f"Saved {args.out}")
 
 if __name__ == "__main__":
