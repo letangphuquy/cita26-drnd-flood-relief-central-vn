@@ -103,7 +103,6 @@ def decode_exact(sol, inst, si):
         q_ki = R[ki] * kappa[str(k)]
         if X[ki] and sc["risk"][k] <= chi:
             active[ki] = True
-            y[ki] = True
             inventory[ki] = q_ki
 
     if not any(active):
@@ -114,7 +113,6 @@ def decode_exact(sol, inst, si):
                 best_r = sc["risk"][k]
                 best_ki = ki
         active[best_ki] = True
-        y[best_ki] = True
         inventory[best_ki] = R[best_ki] * kappa[str(hub_idx[best_ki])]
 
     # 2. Demand Scoring
@@ -192,9 +190,21 @@ def decode_exact(sol, inst, si):
             
             if not reachable: continue
             residual = inventory[ki] - hub_load[ki]
-            if residual <= 0.0: continue
+
+            # Pass 1: Traditionally requires positive residual capacity.
+            # FIX (trans-shipment awareness): Allow hubs with 0 stock (like reactive hubs)
+            # to be considered in Pass 1 if there is surplus available elsewhere in the 
+            # network that could be trans-shipped here in Step 6.
+            has_global_surplus = False
+            for kj in range(num_H):
+                if (active[kj] or y[kj]) and (inventory[kj] - hub_load[kj] > 1e-6):
+                    has_global_surplus = True
+                    break
+
+            if residual <= 0.0 and not has_global_surplus:
+                continue
             
-            score = W[1] * (1.0 / (best_c_t + 1e-9)) + W[2] * residual + W[4] * (1.0 if X[ki] else 0.0)
+            score = W[1] * (1.0 / (best_c_t + 1e-9)) + W[2] * max(0.0, residual) + W[4] * (1.0 if X[ki] else 0.0)
             if score > best_hub_score:
                 best_hub_score = score
                 best_ki = ki
@@ -247,7 +257,7 @@ def decode_exact(sol, inst, si):
                 
                 if not reachable: continue
                 y[ki] = True
-                inventory[ki] = (R[ki] if R[ki] > 0 else 0.5) * kappa[str(k)]
+                inventory[ki] = 0.0 # FIXED: Reactive hubs have 0 pre-positioned inventory
                 best_ki, best_t, best_m = ki, best_c_t, b_m
                 break
         
@@ -256,7 +266,7 @@ def decode_exact(sol, inst, si):
             hub_load[best_ki] += D_kg
             if not X[best_ki] and not y[best_ki]:
                 y[best_ki] = True
-                inventory[best_ki] = (R[best_ki] if R[best_ki] > 0 else 0.5) * kappa[str(hub_idx[best_ki])]
+                inventory[best_ki] = 0.0 # FIXED: Reactive hubs have 0 pre-positioned inventory
 
     # 4. Origins (Supply to Hubs)
     net_inv = [inventory[ki] - hub_load[ki] for ki in range(num_H)]
@@ -283,31 +293,39 @@ def decode_exact(sol, inst, si):
             
     # 5. Transshipments
     transshipments = []
-    for _ in range(num_H * 2):
+    for _ in range(num_H * num_H):
         src_ki, dst_ki = -1, -1
-        max_surplus, max_deficit = 1e-6, 1e-6
-        for ki in range(num_H):
-            if not active[ki] and not y[ki]: continue
-            if net_inv[ki] > max_surplus:
-                max_surplus = net_inv[ki]
-                src_ki = ki
-            if -net_inv[ki] > max_deficit:
-                max_deficit = -net_inv[ki]
-                dst_ki = ki
+        best_pair_score = -1e18
+        for ski in range(num_H):
+            if (not active[ski] and not y[ski]) or net_inv[ski] <= 1e-6: continue
+            for dki in range(num_H):
+                if (not active[dki] and not y[dki]) or net_inv[dki] >= -1e-6: continue
+                
+                # Reachability check
+                sk, dk = hub_idx[ski], hub_idx[dki]
+                reachable = any(sc["accessibility"][m][sk][dk] for m in range(num_M))
+                if not reachable: continue
+                
+                score = net_inv[ski] - net_inv[dki]
+                if score > best_pair_score:
+                    best_pair_score = score
+                    src_ki, dst_ki = ski, dki
+                    
         if src_ki == -1 or dst_ki == -1: break
         
         k, h = hub_idx[src_ki], hub_idx[dst_ki]
         cm, best_c = -1, 1e9
         for m in [0, 1]:
-            if sc["accessibility"][m][k][h] and inst["transport"]["cost"][m][k][h] < best_c:
-                best_c = inst["transport"]["cost"][m][k][h]
-                cm = m
+            if sc["accessibility"][m][k][h]:
+                if inst["transport"]["cost"][m][k][h] < best_c:
+                    best_c = inst["transport"]["cost"][m][k][h]
+                    cm = m
         if cm == -1 and sc["accessibility"][2][k][h]:
             cm = 2
             
         if cm == -1: break
         
-        flow = min(max_surplus, max_deficit)
+        flow = min(net_inv[src_ki], -net_inv[dst_ki])
         net_inv[src_ki] -= flow
         net_inv[dst_ki] += flow
         transshipments.append((src_ki, dst_ki, cm, flow))
@@ -393,15 +411,18 @@ def draw_scenario(ax, inst, sol, si, use_mercator=True):
         size = 150
         
         # User requested filling percentage match decision variable R.
-        R_val = sol["R"][ki] if is_planned else (sol["R"][ki] if sol["R"][ki] > 0 else 0.5)
-        fill_pct = int(R_val * 100)
-        
-        # Draw with bottom fill
-        ax.plot(p[0], p[1], marker=marker, markersize=14, markerfacecolor="white", markeredgecolor="black", markeredgewidth=1.2, zorder=6)
-        ax.plot(p[0], p[1], marker=marker, markersize=14, markerfacecolor=color, markeredgecolor="none", fillstyle="bottom", zorder=7)
+        # FIXED: inventory filling should not be present in reactive hubs.
+        if is_reactive:
+            label_txt = f"H{ki} (R)"
+            ax.plot(p[0], p[1], marker=marker, markersize=14, markerfacecolor=color, markeredgecolor="black", markeredgewidth=1.2, zorder=7)
+        else:
+            R_val = sol["R"][ki]
+            fill_pct = int(R_val * 100)
+            label_txt = f"H{ki}\n[{fill_pct}%]"
+            # Draw with bottom fill
+            ax.plot(p[0], p[1], marker=marker, markersize=14, markerfacecolor="white", markeredgecolor="black", markeredgewidth=1.2, zorder=6)
+            ax.plot(p[0], p[1], marker=marker, markersize=14, markerfacecolor=color, markeredgecolor="none", fillstyle="bottom", zorder=7)
 
-        label_txt = f"H{ki}\n[{fill_pct}%]"
-        if is_reactive: label_txt += " (R)"
         ax.annotate(label_txt, p, xytext=(0, 8), textcoords="offset points", 
                     fontsize=7, fontweight="bold", ha="center", va="bottom",
                     path_effects=[matplotlib.patheffects.withStroke(linewidth=2, foreground='white')], zorder=8)

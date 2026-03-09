@@ -1,5 +1,8 @@
 - [x] The figure is missing information like: + Reactive hubs   + Flows between hub   + Inventory filling ratio (decorate like a half-filled square for hub, for instance)   + Legends for demand 
 [ ] Also, in the figure I'm not seeing the Lateral Flow Arrow. Check and fix that. Is it due to solution, display or data?
+ It seems like the model and the solver is omitting lateral hub trans-shipment. 
+Moreover, as we can see in the solution `paper/figures/cv_large_map_detailed_v3.png`, the inventory filling variables is overfitted to a single configuration. 
+The inventory filling should not be present in reactive hubs.
 
 em nâng cấp paper rồi nha thầy :v nào thầy xem qua thử đã ổn chưa ạ
 
@@ -86,7 +89,7 @@ Compare the In-Sample objective $\hat{Z}_1^N$ with the OOS objective $Z_1^{OOS}$
     - verify implementation match formulation.
     - verify data types, input format and output format of the variables are consistent.
     - Re-run the experiment 1
-- [ ] Apply the strategy adaptive weighted sum as in the paper "Adaptive weighted-sum method for bi-objective optimization s00158-004-0465-1"
+- [x] Apply the strategy adaptive weighted sum as in the paper "Adaptive weighted-sum method for bi-objective optimization s00158-004-0465-1"
 
 - Revamp and make the greedy heuristic smarter. Remember: Not giving it any metaheuristic capability (like GRASP, ACO or TS). The greedy should be close to manager's natural ad-hoc decision-making.
 - Improve the dataset by combinatorial generation technique. It should have 50 scenarios. Then rewrite the experimental methodology prose text in the paper.
@@ -98,6 +101,7 @@ From then, having some heuristics to assign the flow and remaining variables. Ca
 - Add a new algorithm basline: VNS-TS, as in the paper "Capacitated single‐allocation hub location model for a flood relief distribution network coin.12374"
 
 - Extend experiments 2 by:
+0. Add Pareto front for trade-off analysis.
 1. Measuring HV and IGD over 5000 generations, and reports at the milestones: 10,20,50,100,200,500,1000,2000,5000. Plot convergence. HV and IGD lines are plotted per each generation step (horizontal axis) in the same figure.
 
 2. 

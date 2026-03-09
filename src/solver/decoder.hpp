@@ -261,9 +261,23 @@ void decode(Individual &ind, const DRNDInstance &inst,
         if (!reachable)
           continue;
         double residual = inventory[ki] - hub_load[ki];
-        if (residual <= 0.0)
-          continue; // Pass 1: requires positive residual
-        double score = ind.W[1] * (1.0 / (best_t + EPS)) + ind.W[2] * residual +
+        
+        // Pass 1: Traditionally requires positive residual capacity.
+        // FIX (trans-shipment awareness): Allow hubs with 0 stock (like reactive hubs)
+        // to be considered in Pass 1 if there is surplus available elsewhere in the 
+        // network that could be trans-shipped here in Step 6.
+        bool has_global_surplus = false;
+        for (int kj = 0; kj < num_H; kj++) {
+          if ((active[kj] || y[kj]) && (inventory[kj] - hub_load[kj] > EPS)) {
+            has_global_surplus = true;
+            break;
+          }
+        }
+
+        if (residual <= 0.0 && !has_global_surplus)
+            continue; // No stock here and no surplus elsewhere to trans-ship
+
+        double score = ind.W[1] * (1.0 / (best_t + EPS)) + ind.W[2] * std::max(0.0, residual) +
                        ind.W[4] * (x[ki] ? 1.0 : 0.0);
         if (score > best_hub_score) {
           best_hub_score = score;
@@ -309,46 +323,42 @@ void decode(Individual &ind, const DRNDInstance &inst,
         }
       }
 
-      // ── Forced reactive / infeasible ──────────────────────────────────
-      if (best_ki == -1) {
-        // Try to open any safe inactive hub reachable from i
-        for (int ki = 0; ki < num_H; ki++) {
-          if (active[ki] || y[ki])
-            continue;
-          int k = inst.hub_idx[ki];
-          if (sc.risk[k] > inst.chi)
-            continue;
-          bool reachable = false;
-          int b_m = -1;
-          double best_t = inst.big_M;
-          int bk = inst.hub_idx[ki];
-
-          for (int m : {0, 1}) {
-            if (sc.acc(m, i, bk)) {
-              reachable = true;
-              if (inst.C_time[m][i][bk] < best_t) {
-                best_t = inst.C_time[m][i][bk];
-                b_m = m;
+          // Truly infeasible — try to open a safe inactive hub as reactive
+          for (int ki = 0; ki < num_H; ki++) {
+            if (active[ki] || y[ki])
+              continue;
+            int k = inst.hub_idx[ki];
+            if (sc.risk[k] > inst.chi)
+              continue;
+            
+            bool reachable = false;
+            int b_m = -1;
+            double best_t = inst.big_M;
+            for (int m : {0, 1}) {
+              if (sc.acc(m, i, k)) {
+                reachable = true;
+                if (inst.C_time[m][i][k] < best_t) {
+                  best_t = inst.C_time[m][i][k];
+                  b_m = m;
+                }
               }
             }
-          }
-          if (b_m == -1 && sc.acc(2, i, bk)) {
-            reachable = true;
-            best_t = inst.C_time[2][i][bk];
-            b_m = 2;
-          }
-          if (!reachable)
-            continue;
+            if (b_m == -1 && sc.acc(2, i, k)) {
+              reachable = true;
+              best_t = inst.C_time[2][i][k];
+              b_m = 2;
+            }
+            if (!reachable)
+              continue;
 
-          y[ki] = true;
-          inventory[ki] = (ind.R[ki] > 0 ? ind.R[ki] : 0.5) * inst.kappa[ki];
-          Z1_s += sc.hub_reactive_cost[ki];
-          best_ki = ki;
-          chosen_m = b_m;
-          best_travel_time = best_t;
-          break;
-        }
-      }
+            y[ki] = true;
+            inventory[ki] = 0.0; // FIXED: Reactive hubs have 0 pre-positioned inventory
+            Z1_s += sc.hub_reactive_cost[ki];
+            best_ki = ki;
+            chosen_m = b_m;
+            best_travel_time = best_t;
+            break;
+          }
 
       if (best_ki == -1) {
         // Truly infeasible — BigM penalty
@@ -464,23 +474,36 @@ void decode(Individual &ind, const DRNDInstance &inst,
     }
 
     // ── STEP 6: Greedy transshipment (surplus → deficit) ──────────────
-    for (int iter = 0; iter < num_H * 2; iter++) {
+    // Revised greedy loop: repeatedly pick the best reachable (surplus, deficit) pair.
+    for (int iter = 0; iter < num_H * num_H; iter++) {
       int src_ki = -1, dst_ki = -1;
-      double max_surplus = EPS, max_deficit = EPS;
-      for (int ki = 0; ki < num_H; ki++) {
-        if (!active[ki] && !y[ki])
-          continue;
-        if (net_inv[ki] > max_surplus) {
-          max_surplus = net_inv[ki];
-          src_ki = ki;
-        }
-        if (-net_inv[ki] > max_deficit) {
-          max_deficit = -net_inv[ki];
-          dst_ki = ki;
+      double best_pair_score = -1e18;
+
+      for (int ski = 0; ski < num_H; ski++) {
+        if ((!active[ski] && !y[ski]) || net_inv[ski] <= EPS) continue;
+        for (int dki = 0; dki < num_H; dki++) {
+          if ((!active[dki] && !y[dki]) || net_inv[dki] >= -EPS) continue;
+
+          // Reachability check
+          int sk = inst.hub_idx[ski], dk = inst.hub_idx[dki];
+          bool reachable = false;
+          for (int m = 0; m < num_M; m++) {
+            if (sc.acc(m, sk, dk)) { reachable = true; break; }
+          }
+          if (!reachable) continue;
+
+          double score = net_inv[ski] - net_inv[dki]; // Prioritize large surplus and deficit
+          if (score > best_pair_score) {
+            best_pair_score = score;
+            src_ki = ski;
+            dst_ki = dki;
+          }
         }
       }
+
       if (src_ki == -1 || dst_ki == -1)
         break;
+
       int k = inst.hub_idx[src_ki];
       int h = inst.hub_idx[dst_ki];
 
@@ -499,10 +522,9 @@ void decode(Individual &ind, const DRNDInstance &inst,
         cm = 2;
       }
 
-      if (cm == -1)
-        break;
+      if (cm == -1) break; // Should not happen due to pre-check
 
-      double flow = std::min(max_surplus, max_deficit);
+      double flow = std::min(net_inv[src_ki], -net_inv[dst_ki]);
       Z1_s += inst.alpha * best_c * flow;
       net_inv[src_ki] -= flow;
       net_inv[dst_ki] += flow;
