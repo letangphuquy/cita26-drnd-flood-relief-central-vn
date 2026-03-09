@@ -42,11 +42,18 @@ except ImportError:
 def load_result(path):
     with open(path) as fh:
         data = json.load(fh)
-    pts = [
+    raw_pts = [
         (sol["Z1"], sol["Z2"])
         for sol in data.get("pareto_front", [])
         if sol.get("CV", 0) == 0
     ]
+    # De-duplicate
+    unique = {}
+    for p in raw_pts:
+        k = (round(p[0], 6), round(p[1], 6))
+        if k not in unique:
+            unique[k] = p
+    pts = list(unique.values())
     return pts, data.get("meta", {})
 
 
@@ -136,8 +143,10 @@ def discover_benchmark_files(results_dir):
       TR81_seed{s}.json    → (TR81,  PB-NSGA, s)
       AP{n}_bb.json        → (AP{n}, BB-Exact, 0)
       TR81_bb.json         → (TR81,  BB-Exact, 0)
+      cv_small_milp_aws.json → (cv_small, MILP-AWS, 0)
       cv_small_milp.json    → (cv_small, MILP-Exact, 0)
       cv_small_bb.json      → (cv_small, BB-Exact, 0)
+      cv_small_greedy.json  → (cv_small, Greedy, 0)
       cv_small_pb_nsga.json → (cv_small, PB-NSGA, 0)
     """
     groups = {}
@@ -147,27 +156,33 @@ def discover_benchmark_files(results_dir):
         base = fname[:-5]
         grp = algo = seed = None
 
-        if base.endswith("_bb"):
-            prefix = base[:-3]
-            grp, algo, seed = prefix, "BB-Exact", "0"
+        if "_seed" in base:
+            grp, seed = base.split("_seed", 1)
+            algo = "PB-NSGA"
+        elif base.endswith("_bb"):
+            grp, algo, seed = base[:-3], "BB-Exact", "0"
+        elif base.endswith("_milp_aws"):
+            grp, algo, seed = base[:-9], "MILP-AWS", "0"
         elif base.endswith("_milp"):
-            prefix = base[:-5]
-            grp, algo, seed = prefix, "MILP-Exact", "0"
+            grp, algo, seed = base[:-5], "MILP-Exact", "0"
         elif base.endswith("_aws"):
-            prefix = base[:-4]
-            grp, algo, seed = prefix, "MILP-AWS", "0"
-        elif "_seed" in base:
-            prefix, seed = base.split("_seed", 1)
-            grp, algo = prefix, "PB-NSGA"
-        elif base.endswith("_result"):
-            prefix = base[:-7]
-            grp, algo, seed = prefix, "PB-NSGA", "0"
+            grp, algo, seed = base[:-4], "MILP-AWS", "0"
+        elif base.endswith("_greedy"):
+            grp, algo, seed = base[:-7], "Greedy", "0"
         elif base.endswith("_pb_nsga"):
-             prefix = base[:-8]
-             grp, algo, seed = prefix, "PB-NSGA", "0"
+             grp, algo, seed = base[:-8], "PB-NSGA", "0"
+        elif base.endswith("_result"):
+             grp, algo, seed = base[:-7], "PB-NSGA", "0"
 
         if grp is None:
             continue
+        
+        # Harmonize CV prefix
+        if grp.startswith("cv_small"):
+            grp = "cv_small"
+        elif grp.startswith("cv_large"):
+            grp = "cv_large"
+
         path = os.path.join(results_dir, fname)
         groups.setdefault(grp, {}).setdefault(algo, []).append((seed, path))
     return groups
@@ -181,6 +196,7 @@ _STYLE = {
     "PB-NSGA":              dict(color="#1f77b4", marker="o", lw=1.8, ls="-"),
     "BB-Exact":             dict(color="#d62728", marker="D", lw=2.0, ls="-"),
     "MILP-AWS":             dict(color="#2ca02c", marker="s", lw=1.8, ls="--"),
+    "Greedy":               dict(color="#9467bd", marker="^", lw=1.5, ls=":"),
     "PB-NSGA (combined)":   dict(color="#1f77b4", marker="o", lw=1.8, ls="-"),
 }
 
@@ -237,9 +253,16 @@ def run(results_dir, out_dir):
         print(f"[Exp1] No benchmark result files found in {results_dir}")
         return
 
-    sorted_grps = sorted(groups.keys(),
-                         key=lambda g: _BENCH_ORDER.index(g)
-                         if g in _BENCH_ORDER else (0 if "small" in g.lower() else 99))
+    # Filter for relevant groups (primary focus on CV case study)
+    relevant_only = True # Set to False to include AP/TR benchmarks
+    if relevant_only:
+        sorted_grps = [g for g in sorted(groups.keys()) if "cv_" in g.lower()]
+        if not sorted_grps:
+             sorted_grps = sorted(groups.keys()) # fallback
+    else:
+        sorted_grps = sorted(groups.keys(),
+                             key=lambda g: _BENCH_ORDER.index(g)
+                             if g in _BENCH_ORDER else (0 if "small" in g.lower() else 99))
 
     metrics_rows = []
     timing_rows  = []
@@ -250,7 +273,7 @@ def run(results_dir, out_dir):
         # Load runs
         algo_runs = {}
         algo_meta = {}
-        for algo in ["BB-Exact", "PB-NSGA", "MILP-Exact", "MILP-AWS"]:
+        for algo in ["BB-Exact", "PB-NSGA", "MILP-Exact", "MILP-AWS", "Greedy"]:
             if algo not in algo_data:
                 continue
             algo_runs[algo] = []
@@ -293,7 +316,7 @@ def run(results_dir, out_dir):
         )
 
         # Per-algorithm metrics
-        for algo in ["BB-Exact", "PB-NSGA", "MILP-Exact", "MILP-AWS"]:
+        for algo in ["BB-Exact", "PB-NSGA", "MILP-Exact", "MILP-AWS", "Greedy"]:
             if algo not in algo_runs:
                 continue
             runs  = algo_runs[algo]
