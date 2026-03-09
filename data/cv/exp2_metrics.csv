@@ -1,3 +1,3 @@
 instance,algorithm,n_runs,pareto_combined,pareto_mean,pareto_std,HV_mean,HV_std,IGDplus_mean,IGDplus_std,runtime_s_mean,runtime_s_std,cpu_time_s_mean,cpu_time_s_std
-CV_large,PB-NSGA,20,29,14.1,4.7,1.073296,0.045444,0.014996,0.024020,3.8296,0.1993,3.8187,0.1969
+CV_large,PB-NSGA,20,29,14.1,4.7,1.073296,0.045444,0.014996,0.024020,3.9876,0.2684,3.9426,0.2300
 CV_small,PB-NSGA,20,5,6.2,2.4,1.190130,0.015231,0.006227,0.006533,0.4613,0.0223,N/A,N/A
