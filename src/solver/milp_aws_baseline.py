@@ -65,6 +65,9 @@ def build_and_solve_milp(inst, w1=1.0, w2=0.0, eps_z1=None, eps_z2=None,
             else:
                 solver.Add(x_act[ki, si] <= x[ki])
 
+            # (C1) Hub mutual exclusivity: a location is either planned OR reactive
+            solver.Add(x[ki] + y[ki, si] <= 1)
+
             if sc["risk"][k_node] > chi:
                 # If definitely risky, it can't be a reactive hub (matching C++ decoder's y[ki] check)
                 solver.Add(y[ki, si] == 0)
