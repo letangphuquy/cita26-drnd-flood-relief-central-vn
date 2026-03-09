@@ -1,6 +1,6 @@
 - [x] Clean up `src\scripts`
-- [x] The figure is missing information like: + Reactive hubs   + Flows between hub   + Inventory filling ratio (decorate like a half-filled square for hub, for instance)   + Legends for demand 
-- [~] Also, in the figure I'm not seeing the Lateral Flow Arrow. Check and fix that. Is it due to solution, display or data?
+- [x] Information-rich map visualization figures
+- [~] Fix Lateral hub trans-shipment. In the figure I'm not seeing the Lateral Flow Arrow. Check and fix that. Is it due to solution, display or data?
  It seems like the model and the solver is omitting lateral hub trans-shipment. 
  as we can see in the solution `paper/figures/cv_large_map_detailed_v3.png`
 - [x] The inventory filling should not be present in reactive hubs.
