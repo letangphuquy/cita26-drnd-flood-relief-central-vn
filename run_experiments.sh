@@ -17,9 +17,10 @@ PROJECT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if [ "$1" == "data" ]; then
     echo "Regenerating datasets..."
-    PYTHON=".venv/bin/python3"
+    PYTHON="$PROJECT/.venv/bin/python3"
+    if [ ! -f "$PYTHON" ]; then PYTHON="python3"; fi
     $PYTHON src/scripts/generate_cv.py --outdir data/cv
-    $PYTHON src/scripts/process_benchmark.py --outdir data/hlp-benchmark
+    $PYTHON src/scripts/process_benchmark.py --outdir data/benchmark
     echo "Datasets ready."
     exit 0
 fi

@@ -515,16 +515,11 @@ def run(results_dir, out_dir, cv_data_dir=None):
 
 
 def _call_map_solution(inst_path, result_path, out_path):
-    """Invoke map_solution.py via subprocess."""
+    """Invoke map_solution_v2.py via subprocess."""
     _script_dir  = os.path.dirname(os.path.abspath(__file__))
-    map_script   = os.path.join(_script_dir, "map_solution.py")
+    map_script   = os.path.join(_script_dir, "map_solution_v2.py")
     if not os.path.isfile(map_script):
-        # Fallback: legacy location
-        map_script = os.path.join(
-            os.path.dirname(os.path.dirname(_script_dir)), "hlp-dataset", "map_solution.py"
-        )
-    if not os.path.isfile(map_script):
-        print(f"  [Map] map_solution.py not found — skipping map for {out_path}")
+        print(f"  [Map] map_solution_v2.py not found — skipping map for {out_path}")
         return
     cmd = [sys.executable, map_script,
            "--instance", inst_path,
