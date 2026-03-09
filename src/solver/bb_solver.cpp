@@ -474,7 +474,15 @@ static void write_output(const ParetoArchive &archive, const string &out_path,
                          double elapsed_s, double cpu_s, const string &mode) {
   auto front = archive.front;
   std::sort(front.begin(), front.end(),
-            [](const Solution &a, const Solution &b) { return a.Z1 < b.Z1; });
+            [](const Solution &a, const Solution &b) {
+              return a.Z1 < b.Z1 || (a.Z1 == b.Z1 && a.Z2 < b.Z2);
+            });
+  front.erase(std::unique(front.begin(), front.end(),
+                          [](const Solution &a, const Solution &b) {
+                            return std::abs(a.Z1 - b.Z1) < 1e-6 &&
+                                   std::abs(a.Z2 - b.Z2) < 1e-6;
+                          }),
+              front.end());
 
   json j;
   j["meta"]["solver"] = (mode == "enum") ? "BB-CompleteEnum" : "BB-Exact";

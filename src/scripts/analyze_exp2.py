@@ -53,10 +53,18 @@ def load_result(path):
     has_strictly_feasible = any(sol.get("CV", 0) == 0 for sol in pareto_json)
     
     if has_strictly_feasible:
-        pts = [(sol["Z1"], sol["Z2"]) for sol in pareto_json if sol.get("CV", 0) == 0]
+        raw_pts = [(sol["Z1"], sol["Z2"]) for sol in pareto_json if sol.get("CV", 0) == 0]
     else:
         # Fallback to all rank-1 solutions if no strictly feasible ones exist
-        pts = [(sol["Z1"], sol["Z2"]) for sol in pareto_json if sol.get("rank", 1) == 1]
+        raw_pts = [(sol["Z1"], sol["Z2"]) for sol in pareto_json if sol.get("rank", 1) == 1]
+    
+    # De-duplicate raw_pts
+    unique = {}
+    for p in raw_pts:
+        k = (round(p[0], 6), round(p[1], 6))
+        if k not in unique:
+            unique[k] = p
+    pts = list(unique.values())
     
     return pts, data.get("meta", {}), pareto_json
 
@@ -182,7 +190,7 @@ def hub_stability(seed_results, inst):
     hub_counts = [0] * num_H
     total_solutions = 0
 
-    for _seed, _pts, pareto_full in seed_results:
+    for _seed, _pts, _meta, pareto_full in seed_results:
         for sol in pareto_full:
             X = sol.get("X", [])
             for k in range(min(num_H, len(X))):
@@ -368,7 +376,7 @@ def run(results_dir, out_dir, cv_data_dir=None):
     # Infer cv_data_dir if not provided
     if cv_data_dir is None:
         _script_dir  = os.path.dirname(os.path.abspath(__file__))
-        _project_dir = os.path.dirname(_script_dir)
+        _project_dir = os.path.dirname(os.path.dirname(_script_dir))
         cv_data_dir  = os.path.join(_project_dir, "data", "cv")
         if not os.path.isdir(cv_data_dir):
             # Fallback to legacy location
@@ -382,7 +390,7 @@ def run(results_dir, out_dir, cv_data_dir=None):
         print(f"\n[{grp}] {len(seeds)} seed files found")
 
         # Load all seeds
-        seed_results = []   # [(seed, pts, pareto_full)]
+        seed_results = []   # [(seed, pts, meta, pareto_full)]
         for seed, path in seeds:
             pts, meta, pareto_full = load_result(path)
             seed_results.append((seed, pts, meta, pareto_full))
@@ -508,7 +516,7 @@ def _call_map_solution(inst_path, result_path, out_path):
     if not os.path.isfile(map_script):
         # Fallback: legacy location
         map_script = os.path.join(
-            os.path.dirname(_script_dir), "hlp-dataset", "map_solution.py"
+            os.path.dirname(os.path.dirname(_script_dir)), "hlp-dataset", "map_solution.py"
         )
     if not os.path.isfile(map_script):
         print(f"  [Map] map_solution.py not found — skipping map for {out_path}")

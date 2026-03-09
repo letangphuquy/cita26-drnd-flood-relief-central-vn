@@ -100,20 +100,31 @@ void write_output(const vector<Individual> &pop, std::ostream &out,
   j["meta"]["tournament_size"] = args.tournament_sz;
   j["meta"]["solver"] = string(args.use_local_search ? "PB-NSMA" : "PB-NSGA");
 
-  j["pareto_front"] = json::array();
+  // De-duplicate the Pareto front
+  vector<Individual> p_front;
   for (const auto &ind : pop) {
-    if (ind.rank == 1) {
-      json sol;
-      sol["Z1"] = ind.Z1;
-      sol["Z2"] = ind.Z2;
-      sol["CV"] = ind.CV;
-      sol["rank"] = ind.rank;
-      sol["X"] = ind.X;
-      sol["R"] = ind.R;
-      sol["A"] = ind.A;
-      sol["W"] = ind.W;
-      j["pareto_front"].push_back(sol);
-    }
+    if (ind.rank == 1)
+      p_front.push_back(ind);
+  }
+  std::sort(p_front.begin(), p_front.end(), [](const Individual &a, const Individual &b) {
+    return a.Z1 < b.Z1 || (a.Z1 == b.Z1 && a.Z2 < b.Z2);
+  });
+  p_front.erase(std::unique(p_front.begin(), p_front.end(), [](const Individual &a, const Individual &b) {
+    return std::abs(a.Z1 - b.Z1) < 1e-6 && std::abs(a.Z2 - b.Z2) < 1e-6;
+  }), p_front.end());
+
+  j["pareto_front"] = json::array();
+  for (const auto &ind : p_front) {
+    json sol;
+    sol["Z1"] = ind.Z1;
+    sol["Z2"] = ind.Z2;
+    sol["CV"] = ind.CV;
+    sol["rank"] = 1;
+    sol["X"] = ind.X;
+    sol["R"] = ind.R;
+    sol["A"] = ind.A;
+    sol["W"] = ind.W;
+    j["pareto_front"].push_back(sol);
   }
   // Also write all feasible solutions for analysis
   j["all_feasible"] = json::array();

@@ -111,17 +111,23 @@ def build_and_solve_milp(inst, w1=1.0, w2=0.0, eps_z1=None, eps_z2=None, time_li
     x_act = {}
     for si in range(num_S):
         sc = inst["scenarios"][si]
+        # Find the minimum risk among ALL hub candidates in this scenario
+        min_risk_s = min(inst["scenarios"][si]["risk"][inst["nodes"]["hub_indices"][h]] for h in range(num_H))
         for ki in range(num_H):
             x_act[ki, si] = solver.IntVar(0, 1, f'x_act_{ki}_{si}')
             # (a) can only be active if hub was built
-            solver.Add(x_act[ki, si] <= x[ki])
-            # (b) must be inactive if risk exceeds threshold
+            # Match C++ decoder: A hub is "active" if it was built AND (it's safe OR it's the least-risky fallback)
             k_node = inst["nodes"]["hub_indices"][ki]
-            if sc["risk"][k_node] > chi:
+            
+            # x_act[ki, si] = 1 iff (x[ki] == 1) AND (risk <= chi OR risk == min_risk_s)
+            is_safe_or_best = (sc["risk"][k_node] <= chi or sc["risk"][k_node] <= min_risk_s + 1e-7)
+            
+            if not is_safe_or_best:
                 solver.Add(x_act[ki, si] == 0)
-            # (c) if built and risk is safe, allow activation:
-            #     x_act[ki,si] >= x[ki] - (0 if safe else forced 0) is implicitly
-            #     handled — the solver will maximise activation when profitable.
+            else:
+                solver.Add(x_act[ki, si] <= x[ki])
+                # Optimization: x_act can be 1 if x[ki] is 1 and it's safe/best. 
+                # The solver will naturally want x_act=1 to use pre-positioned inventory.
 
     # -------------------------------------------------------------------------
     # 2. Constraints
@@ -204,8 +210,8 @@ def build_and_solve_milp(inst, w1=1.0, w2=0.0, eps_z1=None, eps_z2=None, time_li
         for ki in range(num_H):
             k_node = inst["nodes"]["hub_indices"][ki]
             for hi in range(num_H):
-                h_node = inst["nodes"]["hub_indices"][hi]
                 for m in range(num_M):
+                    h_node = inst["nodes"]["hub_indices"][hi]
                     # (C10) Transshipment only on intact arcs
                     solver.Add(
                         f_khms[ki, hi, m, si] <= tot_cap * sc["accessibility"][m][k_node][h_node]
@@ -213,23 +219,24 @@ def build_and_solve_milp(inst, w1=1.0, w2=0.0, eps_z1=None, eps_z2=None, time_li
                     # Arc-use indicator coupling
                     solver.Add(f_khms[ki, hi, m, si] <= tot_cap * w_trans[ki, hi, m, si])
 
-            # (C11) Flow balance: demand + outflow <= inventory + supply + inflow
-            sum_demand = sum(
-                gamma * float(sc["demand"][str(inst["nodes"]["demand_indices"][ii])]) * z_iks[ii, ki, si]
-                for ii in range(num_I)
-            )
-            sum_supply = sum(
-                float(sc["supply"][str(inst["nodes"]["origin_indices"][ji])]) * z_jks[ji, ki, si]
-                for ji in range(num_J)
-            )
-            sum_trans_out = sum(f_khms[ki, hi, m, si] for hi in range(num_H) for m in range(num_M))
-            sum_trans_in  = sum(f_khms[hi, ki, m, si] for hi in range(num_H) for m in range(num_M))
+            # (C11) Inventory + supply + transshipment_in >= demand + transshipment_out
+            inventory_s = q[ki]
+            
+            # Demand sum must be converted from people to relief items via gamma
+            sum_demand_items = sum(z_iks[ii, ki, si] * float(sc["demand"][str(inst["nodes"]["demand_indices"][ii])]) * gamma for ii in range(num_I))
+            sum_supply_items = sum(z_jks[ji, ki, si] * float(sc["supply"][str(inst["nodes"]["origin_indices"][ji])]) for ji in range(num_J))
+            sum_trans_in     = sum(f_khms[hi, ki, m, si] for hi in range(num_H) for m in range(num_M))
+            sum_trans_out    = sum(f_khms[ki, hi, m, si] for hi in range(num_H) for m in range(num_M))
 
-            solver.Add(sum_demand + sum_trans_out <= q[ki] + sum_supply + sum_trans_in)
+            solver.Add(
+                inventory_s + sum_supply_items + sum_trans_in >= sum_demand_items + sum_trans_out
+            )
+            # (C12) Assignment/Flow only if active (planned-active or reactive)
+            solver.Add(y[ki, si] + x_act[ki, si] <= 1)
 
             # (C12) Throughput capacity: total inflow <= kappa * hub_active
             solver.Add(
-                q[ki] + sum_supply + sum_trans_in <= K_hub[ki] * (x_act[ki, si] + y[ki, si])
+                q[ki] + sum(z_jks[ji, ki, si] * float(sc["supply"][str(inst["nodes"]["origin_indices"][ji])]) for ji in range(num_J)) + sum(f_khms[hi, ki, m, si] for hi in range(num_H) for m in range(num_M)) <= K_hub[ki] * (x_act[ki, si] + y[ki, si])
             )
 
         # ---- Helicopter quota (Mode index 2 = air/helicopter) ---------------
@@ -324,7 +331,7 @@ def build_and_solve_milp(inst, w1=1.0, w2=0.0, eps_z1=None, eps_z2=None, time_li
     for si, sc in enumerate(inst["scenarios"]):
         pi = sc["probability"]
 
-        # Reactive hub setup cost
+        # Reactive hub setup cost (charged if y[ki,si] = 1)
         z1_expr += pi * solver.Sum(
             sc["hub_reactive_cost"][str(inst["nodes"]["hub_indices"][ki])] * y[ki, si]
             for ki in range(num_H)
@@ -367,8 +374,8 @@ def build_and_solve_milp(inst, w1=1.0, w2=0.0, eps_z1=None, eps_z2=None, time_li
                 z1_expr += pi * (theta_val * z_iks[ii, ki, si])
 
         # Penalty for slack (unassigned demand/supply)
-        z1_expr += pi * solver.Sum(u_is[ii, si] * big_M for ii in range(num_I))
-        z1_expr += pi * solver.Sum(v_js[ji, si] * big_M for ji in range(num_J))
+        z1_expr += pi * (sum(u_is[ii, si] for ii in range(num_I)) * big_M)
+        z1_expr += pi * (sum(v_js[ji, si] for ji in range(num_J)) * big_M)
 
     # Z2: expected maximum deprivation cost
     z2_expr = solver.Sum(
