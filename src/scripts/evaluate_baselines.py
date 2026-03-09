@@ -1,3 +1,17 @@
+"""
+evaluate_baselines.py — LEGACY: Standalone Pareto / HV / IGD+ Utilities
+=========================================================================
+STATUS: Not part of the current pipeline.
+        The canonical Experiment 1 metric computation is done by
+        evaluate_cv_small.py (which uses pymoo when available and
+        contains its own self-contained fallback implementations).
+
+This module was an early prototype for computing non-dominated fronts,
+hypervolume (HV), and IGD+ from raw solver JSON files.  The HV
+calculation here has a known off-by-one in the sweep integration; use
+evaluate_cv_small.py or analyze_exp2.py for published results.
+"""
+
 import json
 import glob
 import numpy as np

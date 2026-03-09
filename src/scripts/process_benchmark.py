@@ -1,21 +1,28 @@
 """
-process_benchmark.py
-====================
-Converts standard Hub Location Problem (HLP) benchmark datasets (TR81, AP)
-into the DRND (Disaster Relief Network Design) JSON format expected by the
-PB-NSGA-II solver.
+process_benchmark.py — HLP Benchmark-to-DRND Converter
+=======================================================
+STATUS: Active (data preparation) — called from run_experiments.bat / .sh when
+        regenerating datasets (run_experiments.bat data).
 
-Missing DRND parameters (risk index, accessibility, demand, Daganzo CA Theta,
-etc.) are synthetically generated following the same methodology as
-generate_synthetic.py, but adapted to the benchmark's coordinate space.
+Converts the standard Hub Location Problem (HLP) benchmark datasets (TR81, AP10/
+20/25/40/50/100) into the DRND (Disaster Relief Network Design) JSON format
+expected by the PB-NSGA-II solver.
 
-OUTPUTS (one file per instance, seed embedded in filename):
+Missing DRND fields (risk index, accessibility, demand, Daganzo CA Theta, etc.)
+are synthetically generated following the same four-criterion risk scoring
+methodology as generate_cv.py, adapted to each benchmark's coordinate space.
+
+OUTPUTS (written to --outdir, default data/hlp-benchmark/):
   AP10_seed<N>_drnd.json  ...  AP100_seed<N>_drnd.json
   TR81_seed<N>_drnd.json
 
-Usage:
-  python process_benchmark.py              # default seed=42
-  python process_benchmark.py --seed 7    # custom seed
+Note: The AP/TR81 benchmark runs are archived (see run_experiments.bat comment).
+      These datasets are preserved for potential future comparisons but are not
+      part of the current paper's primary narrative.
+
+Usage (canonical, from project root):
+  python src/scripts/process_benchmark.py --outdir data/hlp-benchmark   # default seed=42
+  python src/scripts/process_benchmark.py --outdir data/hlp-benchmark --seed 7
 """
 
 import math

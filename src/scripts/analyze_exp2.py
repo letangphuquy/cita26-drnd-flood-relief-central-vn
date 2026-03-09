@@ -1,24 +1,29 @@
 """
-analyze_exp2.py — Experiment 2: Case Study Central Vietnam
-===========================================================
-Analyses PB-NSGA results on the CV-Small and CV-Large instances.
+analyze_exp2.py — Experiment 2: Case Study Central Vietnam (CV-Large)
+======================================================================
+STATUS: Active — called from run_exp2_case_study.bat / run_exp2_case_study.sh
+        (Step 2 of 3).
 
-Outputs:
+Analyses PB-NSGA results on the CV-Large instance (20 seeds, seeds 0–19).
+Expects solver output files at: results/exp2/cv_large_seed{0..19}.json
+
+Outputs (written to results/exp2/ and figures/):
   exp2_metrics.csv              — HV, IGD+ mean±std across 20 seeds
   exp2_hub_stability.csv        — hub selection frequency + scenario safety profile
   figures/<grp>_pareto.pdf      — combined Pareto front across seeds
   figures/<grp>_hub_freq.pdf    — bar chart of hub selection frequency
   figures/<grp>_hub_heatmap.pdf — hub × scenario risk heatmap (sensitivity)
-  maps/<grp>_solution_map.pdf   — three representative solutions on CV map
-                                  (calls map_solution.py; requires contextily)
+
+Note: The solution map (1×3 composite) is generated separately by
+      map_solution_v2.py in Step 3 of run_exp2_case_study.bat.
 
 The sensitivity analysis (hub_heatmap) answers:
   "Which hubs become unsafe under different disaster scenarios?"
 This directly supports the managerial insights in the paper.
 
-Usage:
-  python scripts/analyze_exp2.py
-  python scripts/analyze_exp2.py <results_dir> [<cv_data_dir>]
+Usage (canonical, from project root):
+  python src/scripts/analyze_exp2.py results/exp2 data/cv
+  python src/scripts/analyze_exp2.py <results_dir> [<cv_data_dir>]
 """
 
 import os
