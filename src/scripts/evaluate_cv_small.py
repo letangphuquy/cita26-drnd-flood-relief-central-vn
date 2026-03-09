@@ -1,25 +1,34 @@
 """
-evaluate_cv_small.py — Baseline Comparison for CV-Small Instance
-================================================================
-Loads results from all available algorithms for the CV-Small instance:
-  • BB Complete Enumeration  (results/exp2/CV_small_bb.json)
-  • Greedy Heuristic         (results/exp1/cv_small_greedy.json)
-  • MILP ε-constraint        (results/exp1/cv_small_milp.json)
-  • PB-NSGA (20 seeds)       (results/exp2/CV_small_seed*.json)
+evaluate_cv_small.py — Experiment 1: Baseline Comparison for CV-Small Instance
+===============================================================================
+STATUS: Active — called from run_exp1_baselines.bat / run_exp1_baselines.sh
+        (Step 5 of 5).
 
-Metrics (using pymoo):
-  • HV  — Hypervolume indicator (Zitzler 1999), normalized to [0,1]
+Loads results from all available algorithms for the CV-Small instance:
+  • Greedy Heuristic         (results/exp1/cv_small_greedy.json)
+      produced by greedy_baseline.exe  --restarts 500 --seed 42
+  • MILP Adaptive Weighted Sum  (results/exp1/cv_small_milp_aws.json)
+      produced by milp_aws_baseline.py  --time_limit 600
+  • PB-NSGA (Ours)           (results/exp1/cv_small_pb_nsga.json)
+      produced by solver.exe  --pop 200 --gen 300 --seed 0
+
+Metrics (using pymoo if available, else built-in fallback):
+  • HV   — Hypervolume indicator (Zitzler 1999), normalized to [0,1]
   • IGD+ — Modified Inverted Generational Distance (Ishibuchi 2015)
 
-Reference front: non-dominated union of ALL algorithms combined.
-Normalization: ideal/nadir computed from combined reference front.
-Reference point for HV: (1.1, 1.1) in normalized space.
+Reference front: non-dominated union of all algorithms combined.
+Normalization : ideal/nadir from the combined reference front.
+HV reference point: (1.1, 1.1) in normalized space.
 
-Usage (from project root, with .venv active):
-  python scripts/evaluate_cv_small.py [--results-exp1 DIR] [--results-exp2 DIR]
+Usage (canonical, from project root with .venv active):
+  python src/scripts/evaluate_cv_small.py \
+      --results-exp1 results/exp1 \
+      --ours   results/exp1/cv_small_pb_nsga.json \
+      --greedy results/exp1/cv_small_greedy.json \
+      --milp   results/exp1/cv_small_milp_aws.json
 
 Outputs:
-  results/exp1/cv_small_metrics.csv  — per-algorithm metrics
+  results/exp1/cv_small_metrics.csv  — per-algorithm HV / IGD+ table
   Printed LaTeX table row ready to paste into main.tex
 """
 

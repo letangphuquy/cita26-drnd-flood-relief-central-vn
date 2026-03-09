@@ -1,3 +1,24 @@
+"""
+analyze_saa_oos.py — Standalone SAA & OOS Diagnostic Tool
+==========================================================
+STATUS: Standalone utility — NOT part of the main experiment pipeline.
+
+Reads pre-computed evaluation files produced by the C++ solver's SAA and
+OOS eval modes and prints a brief statistical summary:
+
+  • SAA (Sample Average Approximation): reads
+      results/exp2/CV_large_seed0_saa_eval.json
+    Reports mean Z1/Z2 objective drift and mean CV across the 100 SAA scenarios.
+
+  • OOS (Out-Of-Sample, double-typhoon stress test): reads
+      results/exp2/CV_large_seed0_oos_eval.json
+    Reports mean CV and count of solutions that remain feasible under the
+    novel extreme scenario.
+
+Usage (from project root):
+  python src/scripts/analyze_saa_oos.py
+"""
+
 import json
 
 def analyze():

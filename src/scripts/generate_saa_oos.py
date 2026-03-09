@@ -1,8 +1,24 @@
 """
-generate_saa_oos.py
-===================
-Generates the Sample Average Approximation (SAA) set (100 scenarios)
-and the Out-Of-Sample (OOS) evaluation set (1 novel extreme double-typhoon scenario).
+generate_saa_oos.py — SAA & OOS Scenario Generator
+====================================================
+STATUS: Standalone data-generation utility — NOT part of the main pipeline.
+
+Generates two supplementary evaluation datasets for CV-Large:
+
+  1. SAA set (100 scenarios, seed 2026)
+     Scenarios follow the same mild/severe/extreme distribution as the
+     main CV-Large instance (60% mild, 30% severe, 10% extreme) but
+     sampled independently.  Output: data/cv/cv_large_saa.json
+
+  2. OOS set (1 novel extreme double-typhoon scenario)
+     Represents a simultaneous dual-epicentre event not present in the
+     training scenarios.  Output: data/cv/cv_large_oos.json
+
+These files are consumed by the C++ solver's --eval-saa / --eval-oos
+modes, whose results are then summarised by analyze_saa_oos.py.
+
+Usage (from project root):
+  python src/scripts/generate_saa_oos.py
 """
 
 import math

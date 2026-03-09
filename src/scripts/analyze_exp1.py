@@ -1,19 +1,22 @@
 """
-analyze_exp1.py — Experiment 1: Algorithm Benchmarking
-=======================================================
-Compares PB-NSGA against complete enumeration (BB exact solver) on
-HLP-derived benchmark instances (AP10/20/25/40/50/100, TR81).
+analyze_exp1.py — LEGACY: HLP Benchmark Stress-Test Analysis
+=============================================================
+STATUS: Not part of the current paper pipeline.
+        The canonical Experiment 1 is run by evaluate_cv_small.py
+        (called from run_exp1_baselines.bat / run_exp1_baselines.sh).
 
-Two outputs:
+This script was used for an earlier narrative that ran PB-NSGA against
+BB complete enumeration across the full HLP benchmark suite
+(AP10/20/25/40/50/100, TR81).  That narrative has since been moved to
+the archive; the AP/TR81 benchmark data lives in data/benchmark/ and
+_archive/hlp-dataset/ for potential future use.
+
+Outputs (if run):
   1. exp1_metrics.csv    — per-instance per-algorithm: HV, IGD+, front size, runtime
   2. exp1_timing.csv     — stress-test table: mean runtime vs. instance size
   3. results/exp1/figures/<group>_pareto.pdf  — Pareto comparison plots
 
-Optimality verification: for AP10/20/25/40 and CV-Small (where BB exact is
-available), IGD+ of PB-NSGA vs combined BB+PBNSGA front measures proximity
-to the true Pareto front.
-
-Usage:
+Usage (legacy, not in current pipeline):
   python scripts/analyze_exp1.py                   # auto-discovers results/exp1/
   python scripts/analyze_exp1.py <results_dir>
 """

@@ -1,6 +1,23 @@
 """
-map_solution_v2.py — High-fidelity PB-NSGA-II Visualisation for MO-IHLNDP.
-Matches C++ decoder logic for accurate network mapping.
+map_solution_v2.py — High-Fidelity Solution Map for MO-IHLNDP (CV-Large)
+=========================================================================
+STATUS: Active — called from run_exp2_case_study.bat / run_exp2_case_study.sh
+        (Step 3 of 3).
+
+Produces a 1×3 composite network map (one panel per disaster scenario) for a
+representative PB-NSGA solution on the Central Vietnam instance.  The decoder
+logic mirrors the C++ solver decoder to ensure accurate hub/flow assignment.
+
+Canonical call (from run_exp2_case_study.bat):
+  python src/scripts/map_solution_v2.py \
+      --instance data/cv/cv_large_drnd.json \
+      --result   results/exp2/cv_large_seed0.json \
+      --out      figures/cv_large_map_detailed.pdf
+
+Optional dependencies:
+  contextily  — adds OpenStreetMap basemap tiles (falls back to plain axes)
+  pyproj      — accurate EPSG:4326 → EPSG:3857 projection (falls back to
+                Mercator approximation)
 """
 
 import argparse

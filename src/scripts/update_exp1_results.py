@@ -1,3 +1,13 @@
+"""
+update_exp1_results.py — LEGACY: Dev-time Result Patcher
+=========================================================
+STATUS: Not part of the current pipeline.  Kept for historical reference.
+
+Was used during development to recompute and rewrite HV/IGD+ metrics
+into existing result JSON files when the scoring formula changed.
+The canonical metric computation is now done end-to-end by
+evaluate_cv_small.py (Exp 1) and analyze_exp2.py (Exp 2).
+"""
 
 import json
 import os
