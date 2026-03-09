@@ -2,7 +2,7 @@
   "meta": {
     "solver": "MILP_AWS_Baseline",
     "instance": "/Users/quyle/cita26-drnd-flood-relief-central-vn/data/cv/cv_small_drnd.json",
-    "total_elapsed_s": 2.550374746322632,
+    "total_elapsed_s": 2.6346969604492188,
     "n_initial": 5,
     "delta_j": 0.1
   },
