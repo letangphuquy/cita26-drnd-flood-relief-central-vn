@@ -1,6 +1,6 @@
 """
-evaluate_cv_small.py — Experiment 1: Baseline Comparison for CV-Small Instance
-===============================================================================
+exp1_evaluate_cv_small.py — Experiment 1: Baseline Comparison for CV-Small Instance
+====================================================================================
 STATUS: Active — called from run_exp1_baselines.bat / run_exp1_baselines.sh
         (Step 5 of 5).
 
@@ -21,7 +21,7 @@ Normalization : ideal/nadir from the combined reference front.
 HV reference point: (1.1, 1.1) in normalized space.
 
 Usage (canonical, from project root with .venv active):
-  python src/scripts/evaluate_cv_small.py \
+  python src/scripts/exp1_evaluate_cv_small.py \
       --results-exp1 results/exp1 \
       --ours   results/exp1/cv_small_pb_nsga.json \
       --greedy results/exp1/cv_small_greedy.json \

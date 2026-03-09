@@ -40,13 +40,13 @@ REM ── Step 2: Statistical Analysis & Sensitivity ────────�
 echo.
 echo [Step 2] Analyzing Stability ^& Scenario Sensitivity...
 REM Args: <results_dir> <out_dir> <cv_data_dir>
-"%PYTHON%" "%PROJECT%src\scripts\analyze_exp2.py" "%RES2%" "%RES2%" "%PROJECT%data\cv"
+"%PYTHON%" "%PROJECT%src\scripts\exp2_analyze_case_study.py" "%RES2%" "%RES2%" "%PROJECT%data\cv"
 
 REM ── Step 3: High-Fidelity Mapping ─────────────────────────────────────────
 echo.
 echo [Step 3] Generating 1x3 Composite Network Map...
 REM We pick a representative solution (usually from seed 0 or combined)
-"%PYTHON%" "%PROJECT%src\scripts\map_solution_v2.py" --instance "%DATA_CV%" --result "%RES2%\cv_large_seed0.json" --out "%PROJECT%figures\cv_large_map_detailed.pdf"
+"%PYTHON%" "%PROJECT%src\scripts\exp2_map_solution.py" --instance "%DATA_CV%" --result "%RES2%\cv_large_seed0.json" --out "%PROJECT%figures\cv_large_map_detailed.pdf"
 
 echo.
 echo Experiment 2 (Case Study) Completed.

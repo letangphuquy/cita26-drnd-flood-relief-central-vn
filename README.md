@@ -76,10 +76,10 @@ If you prefer to run specific stages or analysis scripts manually:
 ./src/solver/solver data/cv/cv_large_drnd.json --pop 200 --gen 500 --seed 0 --out results/exp2/cv_large_seed0.json
 
 # Run Analysis for Experiment 2 (args: results_dir out_dir cv_data_dir)
-python src/scripts/analyze_exp2.py results/exp2 results/exp2 data/cv
+python src/scripts/exp2_analyze_case_study.py results/exp2 results/exp2 data/cv
 
 # Generate high-fidelity map (representative seed)
-python src/scripts/map_solution_v2.py --instance data/cv/cv_large_drnd.json --result results/exp2/cv_large_seed0.json --out figures/cv_large_map_detailed.pdf
+python src/scripts/exp2_map_solution.py --instance data/cv/cv_large_drnd.json --result results/exp2/cv_large_seed0.json --out figures/cv_large_map_detailed.pdf
 ```
 
 **Windows:**
@@ -88,10 +88,10 @@ python src/scripts/map_solution_v2.py --instance data/cv/cv_large_drnd.json --re
 .\src\solver\solver.exe data\cv\cv_large_drnd.json --pop 200 --gen 500 --seed 0 --out results\exp2\cv_large_seed0.json
 
 # Run Analysis for Experiment 2 (args: results_dir out_dir cv_data_dir)
-python src\scripts\analyze_exp2.py results\exp2 results\exp2 data\cv
+python src\scripts\exp2_analyze_case_study.py results\exp2 results\exp2 data\cv
 
 # Generate high-fidelity map (representative seed)
-python src\scripts\map_solution_v2.py --instance data\cv\cv_large_drnd.json --result results\exp2\cv_large_seed0.json --out figures\cv_large_map_detailed.pdf
+python src\scripts\exp2_map_solution.py --instance data\cv\cv_large_drnd.json --result results\exp2\cv_large_seed0.json --out figures\cv_large_map_detailed.pdf
 ```
 
 ## 6. CLI Reference & Parameters
@@ -129,7 +129,7 @@ Detailed command-line arguments for the solvers and reproduction scripts.
 | `bb_solver` | `--time-limit`| `3600` | Total global runtime limit (seconds). |
 | `greedy_baseline` | `--restarts` | `500` | Number of stochastic multi-restarts. |
 
-### 6.4. Evaluation Metrics (`src/scripts/evaluate_cv_small.py`)
+### 6.4. Evaluation Metrics (`src/scripts/exp1_evaluate_cv_small.py`)
 | Argument | Description |
 | :------- | :---------- |
 | `--results-exp1` | Directory containing baseline JSONs (`results/exp1/`). |

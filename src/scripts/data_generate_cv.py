@@ -1,13 +1,13 @@
 """
-generate_drnd.py
-================
+data_generate_cv.py
+===================
 Authoritative DRND (Disaster Relief Network Design) dataset generator
 for MO-IHLNDP experiments — Central Vietnam case study.
 
 Region  : Đà Nẵng · Quảng Nam · Thừa Thiên-Huế · Quảng Ngãi
 Nodes   : 100 demand + 20 hub + 12 origin (pre-curated, geography-verified)
-Output  : data_prep/cv_small_drnd.json   (I=20, H=5,  J=2)
-          data_prep/cv_large_drnd.json   (I=100,H=20, J=12)
+Output  : data/cv/cv_small_drnd.json   (I=20, H=5,  J=2)
+          data/cv/cv_large_drnd.json   (I=100,H=20, J=12)
 
 Methodology (following data-strategy.txt):
   1. Auxiliary risk r^a_u  — static, intrinsic per node; 4-criterion score:

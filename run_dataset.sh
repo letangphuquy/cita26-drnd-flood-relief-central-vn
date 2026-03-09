@@ -11,5 +11,5 @@ if [[ "$run_patch" =~ ^[Yy]$ ]]; then
     python3 data/prep/patch_coords.py
 fi
 
-python3 src/scripts/generate_cv.py --outdir data/cv
+python3 src/scripts/data_generate_cv.py --outdir data/cv
 python3 data/prep/dataset_visualizer.py

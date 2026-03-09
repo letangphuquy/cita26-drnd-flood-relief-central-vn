@@ -68,7 +68,7 @@ fi
 # ── Step 5: Final Comparison Table ────────────────────────────────────────
 echo ""
 echo "[Step 5] Generating Comparison Metrics (HV, IGD+)..."
-"$PYTHON" "$PROJECT/src/scripts/evaluate_cv_small.py" \
+"$PYTHON" "$PROJECT/src/scripts/exp1_evaluate_cv_small.py" \
     --results-exp1 "$RES1" \
     --ours "$RES1/cv_small_pb_nsga.json" \
     --greedy "$RES1/cv_small_greedy.json" \
