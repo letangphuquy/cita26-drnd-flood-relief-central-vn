@@ -4,8 +4,6 @@
 Moreover, as we can see in the solution `paper/figures/cv_large_map_detailed_v3.png`, the inventory filling variables is overfitted to a single configuration. 
 The inventory filling should not be present in reactive hubs.
 
-em nâng cấp paper rồi nha thầy :v nào thầy xem qua thử đã ổn chưa ạ
-
 - [x] We have new problem, the water mode is utilized everywhere. Please review the data and update the accessibility matrix sanely.
 
 - Apply the SAA methodology. Using combinatorial techniques to generate a diverse dataset consisting of 50 scenarios. You can read guide on SAA and OOS here:
