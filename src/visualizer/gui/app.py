@@ -636,17 +636,42 @@ def _guess_instance_path(result_path: str) -> Optional[str]:
     """
     Given a result JSON path, try to find the corresponding instance JSON.
 
+    Strategy (in order):
+      1. Read meta.instance field from the result JSON itself.
+      2. Extract the canonical instance prefix from the filename and search
+         data/benchmark → data/cv → data/hlp.
+
     E.g.  results/exp1/AP10_seed0.json  →  data/benchmark/AP10_seed42_drnd.json
+          results/exp1/cv_small_milp.json →  data/cv/cv_small_drnd.json
     """
-    stem = Path(result_path).stem        # e.g. "AP10_seed0"
-    # Extract instance name prefix (AP10, AP20, AP50, TR81, cv_small, ...)
-    import re
-    m = re.match(r"(AP\d+|TR\d+|cv_\w+)", stem, re.IGNORECASE)
+    import re, json as _json
+    repo = _REPO_ROOT
+
+    # ── 1. meta.instance field (MILP outputs carry this directly) ────────
+    try:
+        with open(result_path, "r", encoding="utf-8") as _f:
+            _meta_instance = _json.load(_f).get("meta", {}).get("instance")
+        if _meta_instance:
+            # path may be relative to repo root
+            candidate = repo / _meta_instance
+            if candidate.exists():
+                return str(candidate)
+    except Exception:
+        pass
+
+    # ── 2. Filename prefix heuristic ─────────────────────────────────────
+    stem = Path(result_path).stem        # e.g. "cv_small_milp", "AP10_seed0"
+
+    # Match known prefixes; stop before solver/seed suffixes.
+    # Order matters: longer patterns first.
+    m = re.match(
+        r"(AP\d+|TR\d+|cv_large|cv_small|cv_[a-z0-9]+)",
+        stem, re.IGNORECASE
+    )
     if not m:
         return None
 
     prefix = m.group(1)
-    repo = _REPO_ROOT
 
     # Search data/benchmark first, then data/cv, data/hlp
     for data_dir in ["data/benchmark", "data/cv", "data/hlp"]:
@@ -662,8 +687,10 @@ def _guess_instance_path(result_path: str) -> Optional[str]:
             if c.exists():
                 return str(c)
 
-        # Glob fallback  (first match wins)
-        hits = list(folder.glob(f"{prefix}*.json"))
+        # Glob fallback — exclude result-looking files (no 'seed<N>' in name)
+        hits = sorted(folder.glob(f"{prefix}*drnd*.json"))
+        if not hits:
+            hits = sorted(folder.glob(f"{prefix}*.json"))
         if hits:
             return str(hits[0])
 
