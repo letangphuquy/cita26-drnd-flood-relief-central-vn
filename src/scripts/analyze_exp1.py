@@ -153,6 +153,9 @@ def discover_benchmark_files(results_dir):
         elif base.endswith("_milp"):
             prefix = base[:-5]
             grp, algo, seed = prefix, "MILP-Exact", "0"
+        elif base.endswith("_aws"):
+            prefix = base[:-4]
+            grp, algo, seed = prefix, "MILP-AWS", "0"
         elif "_seed" in base:
             prefix, seed = base.split("_seed", 1)
             grp, algo = prefix, "PB-NSGA"
@@ -177,6 +180,7 @@ def discover_benchmark_files(results_dir):
 _STYLE = {
     "PB-NSGA":              dict(color="#1f77b4", marker="o", lw=1.8, ls="-"),
     "BB-Exact":             dict(color="#d62728", marker="D", lw=2.0, ls="-"),
+    "MILP-AWS":             dict(color="#2ca02c", marker="s", lw=1.8, ls="--"),
     "PB-NSGA (combined)":   dict(color="#1f77b4", marker="o", lw=1.8, ls="-"),
 }
 
@@ -246,7 +250,7 @@ def run(results_dir, out_dir):
         # Load runs
         algo_runs = {}
         algo_meta = {}
-        for algo in ["BB-Exact", "PB-NSGA", "MILP-Exact"]:
+        for algo in ["BB-Exact", "PB-NSGA", "MILP-Exact", "MILP-AWS"]:
             if algo not in algo_data:
                 continue
             algo_runs[algo] = []
@@ -280,6 +284,8 @@ def run(results_dir, out_dir):
         series = {}
         if bb_front:    series["BB-Exact"]            = bb_front
         if pb_combined: series["PB-NSGA (combined)"]  = pb_combined
+        if "MILP-AWS" in algo_runs and algo_runs["MILP-AWS"]:
+             series["MILP-AWS"] = dominant_pareto(algo_runs["MILP-AWS"])
         plot_pareto_comparison(
             series,
             os.path.join(fig_dir, f"{grp}_pareto.pdf"),
@@ -287,7 +293,7 @@ def run(results_dir, out_dir):
         )
 
         # Per-algorithm metrics
-        for algo in ["BB-Exact", "PB-NSGA", "MILP-Exact"]:
+        for algo in ["BB-Exact", "PB-NSGA", "MILP-Exact", "MILP-AWS"]:
             if algo not in algo_runs:
                 continue
             runs  = algo_runs[algo]

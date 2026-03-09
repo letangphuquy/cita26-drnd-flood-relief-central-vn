@@ -108,11 +108,12 @@ def main():
     
     sols_greedy = safe_load("results/exp1/cv_small_greedy.json")
     sols_milp = safe_load("results/exp1/cv_small_milp.json")
+    sols_aws = safe_load("results/exp1/cv_small_aws.json")
     sols_bb = safe_load("results/exp1/cv_small_bb.json")
     if not sols_bb:
         sols_bb = safe_load("results/exp2/CV_small_bb.json")
         
-    all_combined = sols_pbnsga_all + sols_greedy + sols_milp + sols_bb
+    all_combined = sols_pbnsga_all + sols_greedy + sols_milp + sols_aws + sols_bb
     true_front = get_pareto_front(all_combined)
     
     print(f"--- TRUTH ---")
@@ -123,10 +124,12 @@ def main():
     
     igd_greedy = compute_igd_plus(sols_greedy, true_front, ref)
     igd_milp = compute_igd_plus(sols_milp, true_front, ref)
+    igd_aws = compute_igd_plus(sols_aws, true_front, ref)
     igd_bb = compute_igd_plus(sols_bb, true_front, ref)
     
     print(f"IGD+ Greedy: {igd_greedy:.4f} ({len(sols_greedy)} points)")
     print(f"IGD+ MILP: {igd_milp:.4f} ({len(sols_milp)} points)")
+    print(f"IGD+ AWS: {igd_aws:.4f} ({len(sols_aws)} points)")
     print(f"IGD+ Exact (BB): {igd_bb:.4f} ({len(sols_bb)} points)")
     
     # Calculate HV with reference point slightly worse than the nadir points
@@ -139,10 +142,12 @@ def main():
         
     hv_greedy = norm_hv(sols_greedy)
     hv_milp = norm_hv(sols_milp)
+    hv_aws = norm_hv(sols_aws)
     hv_bb = norm_hv(sols_bb)
     
     print(f"HV (norm) Greedy: {hv_greedy:.4f}")
     print(f"HV (norm) MILP: {hv_milp:.4f}")
+    print(f"HV (norm) AWS: {hv_aws:.4f}")
     print(f"HV (norm) Exact (BB): {hv_bb:.4f}")
     
     igds_pbnsga = []
