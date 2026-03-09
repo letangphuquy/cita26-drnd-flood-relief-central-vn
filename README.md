@@ -1,108 +1,151 @@
 # Reproducing Experimental Results (MO-IHLNDP)
 
-This guide documents the exact commands required to reproduce the full experimental results (Messages 1 and 2) for the Central Vietnam (CV) case study, reflecting the PB-NSGA evaluation against the rigorous Greedy, Exact MILP, and Branch-and-Bound baselines. 
+This guide documents the procedures to reproduce the experimental results for the Central Vietnam (CV) Relief Network Design case study. The experiments benchmark the **PB-NSGA-II** solver against rigorous **Greedy**, **Exact MILP (AWS)**, and **Branch-and-Bound** baselines.
 
-> **Important Setup Notes:**
-> - Ensure your Python virtual environment is activated before running any `python` statements.
-> - Run all commands from the root directory of the `CITA_paper` project folder.
-> - For a detailed guide on the project layout, refer to [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md).
+## 1. Environment Setup
 
-## 1. Compilation
-First, compile the core `C++17` solvers. 
+- **Python**: Ensure `.venv` is activated.
+- **Dependencies**: `pip install -r requirements.txt` (requires `pymoo`, `ortools`, `numpy`, `matplotlib`, `contextily`).
+- **OS**: Scripts are provided for both Windows (`.bat`) and Mac/Linux (`.sh`).
 
+## 2. Compilation
+
+Compile the core `C++17` solvers using the provided universal scripts:
+
+**Mac / Linux:**
 ```bash
-# Main PB-NSGA solver
-g++ -O3 -std=c++17 src\solver\main.cpp -I src\solver -o src\solver\solver.exe
-
-# Branch-and-Bound solver for exact enumeration proxies
-g++ -O3 -std=c++17 src\solver\bb_solver.cpp -I src\solver -o src\solver\bb_solver.exe
-
-# Greedy Baseline heuristic solver
-g++ -O3 -std=c++17 src\solver\greedy_baseline.cpp -I src\solver -o src\solver\greedy_baseline.exe
-
-# Flow exporter for visualizations
-g++ -O3 -std=c++17 src\solver\export_flow.cpp -I src\solver -o src\solver\export_flow.exe
+bash compile.sh
 ```
 
-## 2. Running Experiment 1 (Baseline Comparisons on CV-Small)
-
-We benchmark PB-NSGA against three custom baselines. Generating the MILP and exact pareto boundaries will take substantial computational time.
-
-```bash
-# A. Run PB-NSGA on CV-Small (and other datasets across 20 independent seeds)
-# This evaluates the proposed evolutionary solver using the provided automation script.
-run_pbnsga.bat
-
-# B. Run Greedy Baselines (Min-Cost and Min-Deprivation anchors)
-src\solver\greedy_baseline.exe data\cv\cv_small_drnd.json results\exp1\cv_small_greedy.json
-
-# C. Run Branch-and-Bound (Exact Enumeration for ground truth proxy)
-src\solver\bb_solver.exe data\cv\cv_small_drnd.json --out results\exp1\cv_small_bb.json --mode enum --time-limit 1800
-
-# D. Run MILP formulation (epsilon-constraint method via OR-Tools)
-python src\solver\milp_baseline.py --instance data\cv\cv_small_drnd.json --out results\exp1\cv_small_milp.json --steps 5
+**Windows:**
+```powershell
+.\compile.bat
 ```
 
-Once all outputs are successfully saved to `results\exp1\`, run the evaluation script to calculate the Hypervolume (HV) and Inverted Generational Distance (IGD+) arrays against the unified ground truth proxy:
+This creates the following binaries in `src/solver/`:
+- `solver` (or `solver.exe`): Main PB-NSGA-II solver.
+- `bb_solver` (or `bb_solver.exe`): Branch-and-Bound solver for ground-truth proxies.
+- `greedy_baseline` (or `greedy_baseline.exe`): Stochastic multi-restart greedy heuristic.
 
+## 3. High-Level Experiment Pipeline
+
+The experiments are divided into two main parts:
+
+### Experiment 1: Baseline Comparison (CV-Small)
+Benchmarks algorithms on a smaller instance to validate Pareto optimality, Hypervolume (HV), and IGD+ metrics.
+- **Algorithms**: PB-NSGA, Greedy (500 restarts), MILP (Adaptive Weighted Sum), BB-Exact.
+- **Logic**: Calls `run_exp1_baselines.sh` / `.bat`.
+
+### Experiment 2: Case Study & Managerial Insights (CV-Large)
+Extended evaluation on a large-scale instance with 20 independent seeds.
+- **Outputs**: Stability analysis, scenario sensitivity (heatmap), and high-fidelity network maps.
+- **Logic**: Calls `run_exp2_case_study.sh` / `.bat`.
+
+## 4. Execution Commands
+
+### Full Reproduction (One-Click)
+To run the entire pipeline (Datasets → Exp 1 → Exp 2):
+
+**Mac / Linux:**
 ```bash
-# Calculate metrics and display the formatted outputs for Table 4 
-python src\scripts\evaluate_baselines.py
+./run_experiments.sh
 ```
 
-## 3. Running Experiment 2 (Detailed Flow Visualization on CV-Large)
-
-This step executes the case study visualization by identifying a Median-tradeoff solution from the extended `CV-Large` front, extracting its routing logic, and plotting the 3 scenarios.
-
-```bash
-# A. Run PB-NSGA on CV-Large (Assuming Seed 0 for the chosen analysis slice)
-src\solver\solver.exe data\cv\cv_large_drnd.json --pop 200 --gen 300 --seed 0 --out results\exp2\cv_large_seed0.json
-
-# B. Export routing and intermediate stage flow
-src\solver\export_flow.exe data\cv\cv_large_drnd.json results\exp2\cv_large_seed0.json results\exp2\cv_large_flow.json
-
-# C. Plot the Geographical Multi-Modal Network
-python src\scripts\map_solution_detailed.py --instance data\cv\cv_large_drnd.json --flow results\exp2\cv_large_flow.json --out figures\cv_large_map_detailed.pdf
+**Windows:**
+```powershell
+.\run_experiments.bat
 ```
 
-The resulting 1x3 composite figure mapping the truck, boat, and helicopter responses to the Mild, Severe, and Extreme topologies will be produced and saved directly as `figures\cv_large_map_detailed.pdf`.
+### Individual Experiment Runs
 
-## 4. Automated End-to-End Reproduction
-
-For a "one-click" reproduction of all results (recompile, run experiments, analyze, and sync to paper), use these scripts:
-
-```bash
-# A. Experiment 1: Benchmarks
-# Recompiles, runs baseline comparisons and benchmarks, analyzes, and syncs to paper/
-run_exp1_full.bat
-
-# B. Experiment 2: Case Study
-# Recompiles, runs 20-seed runs for CV-Small/Large, generates maps, and syncs to paper/
-run_exp2_full.bat
-```
+| Experiment | Mac / Linux | Windows |
+| :--- | :--- | :--- |
+| **All (Datasets + Exp1 + Exp2)** | `./run_experiments.sh` | `.\run_experiments.bat` |
+| **Experiment 1 (Baselines)** | `./run_exp1_baselines.sh` | `.\run_exp1_baselines.bat` |
+| **Experiment 2 (Case Study)** | `./run_exp2_case_study.sh` | `.\run_exp2_case_study.bat` |
+| **Regenerate Datasets Only** | `./run_experiments.sh data` | `.\run_experiments.bat data` |
 
 ## 5. Manual Running and Analysis
 
-If you prefer to run steps manually, follow these instructions:
+If you prefer to run specific stages or analysis scripts manually:
 
-### A. Compilation
+**Mac / Linux:**
 ```bash
-# Main PB-NSGA solver
-g++ -O3 -std=c++17 src\solver\main.cpp -I src\solver -o src\solver\solver.exe
+# Run PB-NSGA Seed 0 on CV-Large
+./src/solver/solver data/cv/cv_large_drnd.json --pop 200 --gen 300 --seed 0 --out results/exp2/cv_large_seed0.json
+
+# Run Analysis for Experiment 2
+python src/scripts/analyze_exp2.py results/exp2 results/exp2 data/cv
 ```
 
-### B. Analysis Scripts
-```bash
-# Exp1 Metrics
-python src\scripts\analyze_exp1.py results\exp1
+**Windows:**
+```powershell
+# Run PB-NSGA Seed 0 on CV-Large
+.\src\solver\solver.exe data\cv\cv_large_drnd.json --pop 200 --gen 300 --seed 0 --out results\exp2\cv_large_seed0.json
 
-# Exp2 Metrics & Maps
+# Run Analysis for Experiment 2
 python src\scripts\analyze_exp2.py results\exp2 results\exp2 data\cv
 ```
 
-## 6. Updating the Manuscript (LaTeX)
-The automated scripts above already handle syncing. If running manually, copy assets to `paper/`:
-```bash
-copy /Y results\exp1\exp1_metrics.csv paper\
-copy /Y results\exp2\figures\*.pdf paper\figures\
-```
+## 6. CLI Reference & Parameters
+
+Detailed command-line arguments for the solvers and reproduction scripts.
+
+### 6.1. Main PB-NSGA Solver (`src/solver/solver`)
+| Argument | Type | Default | Description |
+| :------- | :--- | :------ | :---------- |
+| `instance` | Path | (Required) | Positional: Path to the `.json` instance. |
+| `--pop` | Int | `200` | Population size (number of individuals). |
+| `--gen` | Int | `300` | Number of generations to evolve. |
+| `--seed` | Int | `0` | Base seed for the random number generator. |
+| `--algo` | Enum | `nsga2` | Solver type: `nsga2` or `nsma` (Memetic). |
+| `--pm-high` | Float | `0.40` | Initial mutation rate $(\eta/L)$. |
+| `--pm-low` | Float | `0.10` | Final mutation rate after annealing. |
+| `--stag` | Int | `20` | Generations before triggering stagnation reset. |
+| `--tourney` | Int | `2` | Tournament selection size. |
+| `--out` | Path | `stdout` | Destination path for the result JSON. |
+
+### 6.2. MILP Adaptive Weighted Sum (`src/solver/milp_aws_baseline.py`)
+| Argument | Type | Default | Description |
+| :------- | :--- | :------ | :---------- |
+| `--instance` | Path | (Required) | Path to the `.json` instance. |
+| `--out` | Path | (Required) | Destination path for result JSON. |
+| `--time_limit`| Int | `300` | Max seconds allowed PER objective solve. |
+| `--n_initial` | Int | `5` | Initial divisions for the weight sweep. |
+| `--delta_j` | Float | `0.1` | Target normalized segment length for AWS. |
+
+### 6.3. Branch-and-Bound / Greedy Baselines
+| Solver | Key Argument | Default | Effect |
+| :----- | :----------- | :------ | :----- |
+| `bb_solver` | `--mode` | `enum` | Use `enum` for ground-truth; `bb` for B&B pruning. |
+| `bb_solver` | `--trials` | `500` | Sub-problem trials per hub configuration. |
+| `bb_solver` | `--time-limit`| `3600` | Total global runtime limit (seconds). |
+| `greedy_baseline` | `--restarts` | `500` | Number of stochastic multi-restarts. |
+
+### 6.4. Evaluation Metrics (`src/scripts/evaluate_cv_small.py`)
+| Argument | Description |
+| :------- | :---------- |
+| `--results-exp1` | Directory containing baseline JSONs (CV-Small). |
+| `--results-exp2` | Directory containing seed JSONs (CV-Large/Small). |
+| `--ours` | Path or glob pattern for PB-NSGA results (e.g., `results/exp2/*.json`). |
+
+## 7. Strategic & Economic Parameters
+
+The following parameters are typically defined inside the instance JSON files but are critical to the solver's behavior:
+
+| Symbol | Parameter | Value (CV Case Study) | Description |
+| :----- | :-------- | :------------------- | :---------- |
+| $\chi$ | Risk Threshold | `0.5` | Max allowable risk score for planned hubs. |
+| $\gamma$ | Demand priority | `1.0` | Scaling factor for service level importance. |
+| $\lambda$ | Decay rate | `0.005-0.02` | Distance/Time deprivation decay per mode. |
+| $\Phi$ | Pre-positioned % | `0.5 - 1.0` | Inventory held for reactive response. |
+
+## 8. Result Locations
+
+- **Metrics**: `results/exp1/cv_small_metrics.csv` (Table 4 data).
+- **Stability**: `results/exp2/exp2_metrics.csv` and `results/exp2/exp2_hub_stability.csv`.
+- **Figures**: `results/exp2/figures/` (Pareto fronts, heatmaps).
+- **Maps**: `figures/cv_large_map_detailed.pdf` (1x3 Scenario Map).
+
+---
+*Note: Outdated benchmark datasets (AP, TR) are archived in the code and marked for future study. They can be triggered via `run_pbnsga.sh --instances AP TR81` or `run_pbnsga.bat --instances AP TR81` if needed for comparative research.*

@@ -1,0 +1,8 @@
+numpy
+ortools
+matplotlib
+pandas
+scipy
+cartopy
+geopandas
+pyproj
