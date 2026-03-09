@@ -1,8 +1,11 @@
 - [x] The figure is missing information like: + Reactive hubs   + Flows between hub   + Inventory filling ratio (decorate like a half-filled square for hub, for instance)   + Legends for demand 
-[ ] Also, in the figure I'm not seeing the Lateral Flow Arrow. Check and fix that. Is it due to solution, display or data?
+- [~] Also, in the figure I'm not seeing the Lateral Flow Arrow. Check and fix that. Is it due to solution, display or data?
  It seems like the model and the solver is omitting lateral hub trans-shipment. 
-Moreover, as we can see in the solution `paper/figures/cv_large_map_detailed_v3.png`, the inventory filling variables is overfitted to a single configuration. 
-The inventory filling should not be present in reactive hubs.
+ as we can see in the solution `paper/figures/cv_large_map_detailed_v3.png`
+- [x] The inventory filling should not be present in reactive hubs.
+
+- [ ] The inventory filling variables is overfitted to a single configuration. 
+Our next problem: You can see the R decision variables look the same for all three solution. It looks like our algorithm overfitted. Do RCA then suggest fixes.
 
 - [x] We have new problem, the water mode is utilized everywhere. Please review the data and update the accessibility matrix sanely.
 

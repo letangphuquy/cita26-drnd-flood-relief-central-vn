@@ -1,0 +1,5 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        ".\\src\\solver\\export_flow.exe": true
+    }
+}
