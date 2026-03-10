@@ -55,6 +55,16 @@ IF %ERRORLEVEL% NEQ 0 (
 )
 "%SOLVER_DIR%\bb_solver.exe" "%DATA_CV%" --out "%RES1%\cv_small_bb.json" --mode enum --trials 300 --time-limit 180
 
+REM ── Step 2c: Recompile + Run VNS-TS baseline ───────────────────────────
+echo.
+echo [Step 2c] Compiling and running VNS-TS baseline...
+g++ -O3 -std=c++17 "%SOLVER_DIR%\vns_ts_baseline.cpp" -o "%SOLVER_DIR%\vns_ts_baseline.exe"
+IF %ERRORLEVEL% NEQ 0 (
+    echo [Error] VNS-TS compilation failed.
+    exit /b 1
+)
+"%SOLVER_DIR%\vns_ts_baseline.exe" "%DATA_CV%" --out "%RES1%\cv_small_vns_ts.json" --seed 42 --iter 140 --time-limit 60 --tabu-tenure 7 --kmax 3 --starts 10
+
 REM ── Step 3: Run MILP Adaptive Weighted Sum ────────────────────────────────
 echo.
 echo [Step 3] Running MILP Adaptive Weighted Sum (AWS)...
@@ -87,13 +97,13 @@ IF "%AEGA_ON%"=="1" (
 REM ── Step 5: Final Comparison Table ────────────────────────────────────────
 echo.
 echo [Step 5] Generating Comparison Metrics (HV, IGD+)...
-"%PYTHON%" "%PROJECT%src\scripts\exp1_evaluate_cv_small.py" --results-exp1 "%RES1%" --ours "%RES1%\cv_small_pb_nsga.json" --bb "%RES1%\cv_small_bb.json" --greedy "%RES1%\cv_small_greedy.json" --milp-aws "%RES1%\cv_small_milp_aws.json" --milp-eps "%RES1%\cv_small_milp_eps.json"
+"%PYTHON%" "%PROJECT%src\scripts\exp1_evaluate_cv_small.py" --results-exp1 "%RES1%" --ours "%RES1%\cv_small_pb_nsga.json" --bb "%RES1%\cv_small_bb.json" --vns-ts "%RES1%\cv_small_vns_ts.json" --greedy "%RES1%\cv_small_greedy.json" --milp-aws "%RES1%\cv_small_milp_aws.json" --milp-eps "%RES1%\cv_small_milp_eps.json"
 
 REM ── Step 6: Audit Solver Outputs (optional) ───────────────────────────────
 IF "%AUDIT_ON%"=="1" (
     echo.
     echo [Step 6] Auditing output correctness/completeness...
-    "%PYTHON%" "%PROJECT%src\scripts\audit_solution_outputs.py" --instance "%DATA_CV%" --solutions "%RES1%\cv_small_pb_nsga.json" "%RES1%\cv_small_bb.json" "%RES1%\cv_small_greedy.json" "%RES1%\cv_small_milp_aws.json" "%RES1%\cv_small_milp_eps.json"
+    "%PYTHON%" "%PROJECT%src\scripts\audit_solution_outputs.py" --instance "%DATA_CV%" --solutions "%RES1%\cv_small_pb_nsga.json" "%RES1%\cv_small_bb.json" "%RES1%\cv_small_vns_ts.json" "%RES1%\cv_small_greedy.json" "%RES1%\cv_small_milp_aws.json" "%RES1%\cv_small_milp_eps.json"
 )
 
 echo.
