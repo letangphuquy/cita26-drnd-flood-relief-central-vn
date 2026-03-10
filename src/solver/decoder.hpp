@@ -30,6 +30,7 @@
 //   Step 7. Accumulate expected Z1 and Z2
 #pragma once
 
+#include "min_cost_flow.hpp"
 #include "representation.hpp"
 
 // Stochastic noise magnitude on normalised demand priority scores
@@ -54,7 +55,8 @@ static void normalise_inplace(vector<double> &v) {
 
 // ---------------------------------------------------------------------------
 void decode(Individual &ind, const DRNDInstance &inst,
-            FlowDetails *flow_out = nullptr) {
+            FlowDetails *flow_out = nullptr,
+            bool use_global_balancer = true) {
   const int num_H = inst.num_H;
   const int num_I = inst.num_I;
   const int num_J = inst.num_J;
@@ -406,140 +408,294 @@ void decode(Individual &ind, const DRNDInstance &inst,
       }
     } // end demand loop
 
-    // ── STEP 5: Origin assignment (largest-deficit-first) ─────────────
+    // ── STEP 5+6: Supply balancing (global MCMF or legacy greedy) ─────
     vector<double> net_inv(num_H);
     for (int ki = 0; ki < num_H; ki++)
       net_inv[ki] = inventory[ki] - hub_load[ki];
 
-    for (int jj = 0; jj < num_J; jj++) {
-      int j = inst.origin_idx[jj];
-      double O = sc.supply[j];
+    if (use_global_balancer) {
 
-      int best_ki = -1;
-      double worst_net = 1e18;
+      // Precompute best origin->hub and hub->hub movement options.
+      vector<vector<double>> o2h_cost(num_J, vector<double>(num_H, inst.big_M));
+      vector<vector<int>> o2h_mode(num_J, vector<int>(num_H, -1));
+      for (int jj = 0; jj < num_J; jj++) {
+        int j = inst.origin_idx[jj];
+        for (int ki = 0; ki < num_H; ki++) {
+          if (!active[ki] && !y[ki])
+            continue;
+          int k = inst.hub_idx[ki];
+          int b_m = -1;
+          double b_c = inst.big_M;
+          for (int m : {0, 1}) {
+            if (sc.acc(m, j, k) && inst.C_cost[m][j][k] < b_c) {
+              b_c = inst.C_cost[m][j][k];
+              b_m = m;
+            }
+          }
+          if (b_m == -1 && sc.acc(2, j, k)) {
+            b_c = inst.C_cost[2][j][k];
+            b_m = 2;
+          }
+          if (b_m != -1) {
+            o2h_cost[jj][ki] = b_c;
+            o2h_mode[jj][ki] = b_m;
+          }
+        }
+      }
+
+      vector<vector<double>> h2h_cost(num_H, vector<double>(num_H, inst.big_M));
+      vector<vector<int>> h2h_mode(num_H, vector<int>(num_H, -1));
+      for (int ski = 0; ski < num_H; ski++) {
+        if (!active[ski] && !y[ski])
+          continue;
+        int sk = inst.hub_idx[ski];
+        for (int dki = 0; dki < num_H; dki++) {
+          if (ski == dki || (!active[dki] && !y[dki]))
+            continue;
+          int dk = inst.hub_idx[dki];
+          int b_m = -1;
+          double b_c = inst.big_M;
+          for (int m : {0, 1}) {
+            if (sc.acc(m, sk, dk) && inst.C_cost[m][sk][dk] < b_c) {
+              b_c = inst.C_cost[m][sk][dk];
+              b_m = m;
+            }
+          }
+          if (b_m == -1 && sc.acc(2, sk, dk)) {
+            b_c = inst.C_cost[2][sk][dk];
+            b_m = 2;
+          }
+          if (b_m != -1) {
+            h2h_cost[ski][dki] = inst.alpha * b_c;
+            h2h_mode[ski][dki] = b_m;
+          }
+        }
+      }
+
+      int SRC = 0;
+      int ORG0 = 1;
+      int HUB0 = ORG0 + num_J;
+      int SNK = HUB0 + num_H;
+      int N = SNK + 1;
+      vector<vector<MCFEdge>> g(N);
+
+      auto origin_node = [&](int jj) { return ORG0 + jj; };
+      auto hub_node = [&](int ki) { return HUB0 + ki; };
+
+      double total_deficit = 0.0;
       for (int ki = 0; ki < num_H; ki++) {
         if (!active[ki] && !y[ki])
           continue;
-        int k = inst.hub_idx[ki];
-        bool reachable = false;
-        for (int m = 0; m < num_M; m++)
-          if (sc.acc(m, j, k)) {
-            reachable = true;
-            break;
-          }
-        if (!reachable)
-          continue;
-        if (net_inv[ki] < worst_net) {
-          worst_net = net_inv[ki];
-          best_ki = ki;
+        if (net_inv[ki] > EPS)
+          mcf_add_edge(g, SRC, hub_node(ki), net_inv[ki], 0.0);
+        else if (net_inv[ki] < -EPS) {
+          mcf_add_edge(g, hub_node(ki), SNK, -net_inv[ki], 0.0);
+          total_deficit += -net_inv[ki];
         }
       }
-      if (best_ki == -1) {
-        for (int ki = 0; ki < num_H; ki++)
-          if (active[ki] || y[ki]) {
-            best_ki = ki;
-            break;
-          }
-      }
-      if (best_ki != -1) {
-        int k = inst.hub_idx[best_ki];
 
-        // Find best mode among non-air first, then fallback to air if necessary
-        int cm = -1;
-        double best_c = inst.big_M;
-        for (int m : {0, 1}) {
-          if (sc.acc(m, j, k)) {
-            if (inst.C_cost[m][j][k] < best_c) {
+      double total_origin_supply = 0.0;
+      for (int jj = 0; jj < num_J; jj++) {
+        int j = inst.origin_idx[jj];
+        double O = sc.supply[j];
+        if (O <= EPS)
+          continue;
+        total_origin_supply += O;
+        mcf_add_edge(g, SRC, origin_node(jj), O, 0.0);
+        for (int ki = 0; ki < num_H; ki++) {
+          if (o2h_mode[jj][ki] == -1)
+            continue;
+          mcf_add_edge(g, origin_node(jj), hub_node(ki), O, o2h_cost[jj][ki], 1,
+                       jj, ki, o2h_mode[jj][ki]);
+        }
+      }
+
+      double big_cap = total_origin_supply;
+      for (int ki = 0; ki < num_H; ki++)
+        if (net_inv[ki] > EPS)
+          big_cap += net_inv[ki];
+      big_cap = std::max(1.0, big_cap);
+
+      for (int ski = 0; ski < num_H; ski++) {
+        if (!active[ski] && !y[ski])
+          continue;
+        for (int dki = 0; dki < num_H; dki++) {
+          if (h2h_mode[ski][dki] == -1)
+            continue;
+          mcf_add_edge(g, hub_node(ski), hub_node(dki), big_cap,
+                       h2h_cost[ski][dki], 2, ski, dki, h2h_mode[ski][dki]);
+        }
+      }
+
+      min_cost_flow(g, SRC, SNK, total_deficit);
+
+      // Fold used transport edges back into objectives, inventory balance and logs.
+      vector<double> origin_hub_flow(num_J * num_H, 0.0);
+      for (int u = 0; u < N; u++) {
+        for (const auto &e : g[u]) {
+          if (e.kind == 0)
+            continue;
+          double used = e.init_cap - e.cap;
+          if (used <= EPS)
+            continue;
+
+          Z1_s += e.cost * used;
+          act_num_links++;
+          if (e.mode == 2)
+            act_heli_links++;
+
+          if (e.kind == 1) {
+            net_inv[e.dst_idx] += used;
+            origin_hub_flow[e.src_idx * num_H + e.dst_idx] += used;
+          } else if (e.kind == 2) {
+            net_inv[e.src_idx] -= used;
+            net_inv[e.dst_idx] += used;
+            if (flow_out)
+              flow_out->f_khms[si].push_back({e.src_idx, e.dst_idx, e.mode, used});
+          }
+        }
+      }
+
+      // Preserve compatibility with single z_jks per origin by storing the
+      // dominant destination hub (largest allocated flow).
+      if (flow_out) {
+        for (int jj = 0; jj < num_J; jj++) {
+          int best_ki = -1;
+          double best_f = 0.0;
+          for (int ki = 0; ki < num_H; ki++) {
+            double f = origin_hub_flow[jj * num_H + ki];
+            if (f > best_f + EPS) {
+              best_f = f;
+              best_ki = ki;
+            }
+          }
+          if (best_ki >= 0) {
+            flow_out->z_jks[si][jj] = best_ki;
+            flow_out->z_jks_m[si][jj] = o2h_mode[jj][best_ki];
+          }
+        }
+      }
+    } else {
+      // Legacy greedy balancing path: nearest-deficit origin assignment +
+      // pairwise surplus->deficit transshipment.
+      for (int jj = 0; jj < num_J; jj++) {
+        int j = inst.origin_idx[jj];
+        double O = sc.supply[j];
+
+        int best_ki = -1;
+        double worst_net = 1e18;
+        for (int ki = 0; ki < num_H; ki++) {
+          if (!active[ki] && !y[ki])
+            continue;
+          int k = inst.hub_idx[ki];
+          bool reachable = false;
+          for (int m = 0; m < num_M; m++)
+            if (sc.acc(m, j, k)) {
+              reachable = true;
+              break;
+            }
+          if (!reachable)
+            continue;
+          if (net_inv[ki] < worst_net) {
+            worst_net = net_inv[ki];
+            best_ki = ki;
+          }
+        }
+        if (best_ki == -1) {
+          for (int ki = 0; ki < num_H; ki++)
+            if (active[ki] || y[ki]) {
+              best_ki = ki;
+              break;
+            }
+        }
+        if (best_ki != -1) {
+          int k = inst.hub_idx[best_ki];
+          int cm = -1;
+          double best_c = inst.big_M;
+          for (int m : {0, 1}) {
+            if (sc.acc(m, j, k) && inst.C_cost[m][j][k] < best_c) {
               best_c = inst.C_cost[m][j][k];
               cm = m;
             }
           }
-        }
-        if (cm == -1 && sc.acc(2, j, k)) {
-          best_c = inst.C_cost[2][j][k];
-          cm = 2;
-        }
-
-        if (cm != -1) {
-          Z1_s += best_c * O;
-          net_inv[best_ki] += O;
-          act_num_links++;
-          if (cm == 2)
-            act_heli_links++;
-
-          if (flow_out) {
-            flow_out->z_jks[si][jj] = best_ki;
-            flow_out->z_jks_m[si][jj] = cm;
+          if (cm == -1 && sc.acc(2, j, k)) {
+            best_c = inst.C_cost[2][j][k];
+            cm = 2;
           }
-        }
-      }
-    }
-
-    // ── STEP 6: Greedy transshipment (surplus → deficit) ──────────────
-    // Revised greedy loop: repeatedly pick the best reachable (surplus, deficit) pair.
-    for (int iter = 0; iter < num_H * num_H; iter++) {
-      int src_ki = -1, dst_ki = -1;
-      double best_pair_score = -1e18;
-
-      for (int ski = 0; ski < num_H; ski++) {
-        if ((!active[ski] && !y[ski]) || net_inv[ski] <= EPS) continue;
-        for (int dki = 0; dki < num_H; dki++) {
-          if ((!active[dki] && !y[dki]) || net_inv[dki] >= -EPS) continue;
-
-          // Reachability check
-          int sk = inst.hub_idx[ski], dk = inst.hub_idx[dki];
-          bool reachable = false;
-          for (int m = 0; m < num_M; m++) {
-            if (sc.acc(m, sk, dk)) {
-              reachable = true;
-              break;
+          if (cm != -1) {
+            Z1_s += best_c * O;
+            net_inv[best_ki] += O;
+            act_num_links++;
+            if (cm == 2)
+              act_heli_links++;
+            if (flow_out) {
+              flow_out->z_jks[si][jj] = best_ki;
+              flow_out->z_jks_m[si][jj] = cm;
             }
           }
-          if (!reachable)
-            continue;
-
-          double score = net_inv[ski] - net_inv[dki];
-          if (score > best_pair_score) {
-            best_pair_score = score;
-            src_ki = ski;
-            dst_ki = dki;
-          }
         }
       }
 
-      if (src_ki == -1 || dst_ki == -1)
-        break;
+      for (int iter = 0; iter < num_H * num_H; iter++) {
+        int src_ki = -1, dst_ki = -1;
+        double best_pair_score = -1e18;
 
-      int k = inst.hub_idx[src_ki];
-      int h = inst.hub_idx[dst_ki];
+        for (int ski = 0; ski < num_H; ski++) {
+          if ((!active[ski] && !y[ski]) || net_inv[ski] <= EPS)
+            continue;
+          for (int dki = 0; dki < num_H; dki++) {
+            if ((!active[dki] && !y[dki]) || net_inv[dki] >= -EPS)
+              continue;
+            int sk = inst.hub_idx[ski], dk = inst.hub_idx[dki];
+            bool reachable = false;
+            for (int m = 0; m < num_M; m++) {
+              if (sc.acc(m, sk, dk)) {
+                reachable = true;
+                break;
+              }
+            }
+            if (!reachable)
+              continue;
+            double score = net_inv[ski] - net_inv[dki];
+            if (score > best_pair_score) {
+              best_pair_score = score;
+              src_ki = ski;
+              dst_ki = dki;
+            }
+          }
+        }
 
-      int cm = -1;
-      double best_c = inst.big_M;
-      for (int m : {0, 1}) {
-        if (sc.acc(m, k, h)) {
-          if (inst.C_cost[m][k][h] < best_c) {
+        if (src_ki == -1 || dst_ki == -1)
+          break;
+
+        int k = inst.hub_idx[src_ki];
+        int h = inst.hub_idx[dst_ki];
+        int cm = -1;
+        double best_c = inst.big_M;
+        for (int m : {0, 1}) {
+          if (sc.acc(m, k, h) && inst.C_cost[m][k][h] < best_c) {
             best_c = inst.C_cost[m][k][h];
             cm = m;
           }
         }
-      }
-      if (cm == -1 && sc.acc(2, k, h)) {
-        best_c = inst.C_cost[2][k][h];
-        cm = 2;
-      }
+        if (cm == -1 && sc.acc(2, k, h)) {
+          best_c = inst.C_cost[2][k][h];
+          cm = 2;
+        }
+        if (cm == -1)
+          break;
 
-      if (cm == -1) break; // Should not happen due to pre-check
+        double flow = std::min(net_inv[src_ki], -net_inv[dst_ki]);
+        Z1_s += inst.alpha * best_c * flow;
+        net_inv[src_ki] -= flow;
+        net_inv[dst_ki] += flow;
+        act_num_links++;
+        if (cm == 2)
+          act_heli_links++;
 
-      double flow = std::min(net_inv[src_ki], -net_inv[dst_ki]);
-      Z1_s += inst.alpha * best_c * flow;
-      net_inv[src_ki] -= flow;
-      net_inv[dst_ki] += flow;
-      act_num_links++;
-      if (cm == 2)
-        act_heli_links++;
-
-      if (flow_out) {
-        flow_out->f_khms[si].push_back({src_ki, dst_ki, cm, flow});
+        if (flow_out) {
+          flow_out->f_khms[si].push_back({src_ki, dst_ki, cm, flow});
+        }
       }
     }
 
@@ -593,4 +749,9 @@ void decode(Individual &ind, const DRNDInstance &inst,
     ind.Z1 += pi_s * Z1_s;
     ind.Z2 += pi_s * Z2_s;
   } // end scenario loop
+}
+
+inline void decode_legacy(Individual &ind, const DRNDInstance &inst,
+                          FlowDetails *flow_out = nullptr) {
+  decode(ind, inst, flow_out, false);
 }
