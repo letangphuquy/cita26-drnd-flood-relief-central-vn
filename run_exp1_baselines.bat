@@ -86,8 +86,8 @@ IF NOT EXIST "%SOLVER_DIR%\solver.exe" (
 
 SET "AEGA_ARGS="
 IF "%AEGA_ON%"=="1" (
-    SET "AEGA_ARGS=--aega-pop --aega-min 120 --aega-max 320 --aega-step 30"
-    echo           AEGA: ON  (min=120, max=320, step=30)
+    SET "AEGA_ARGS=--aega-pop --aega-min 220 --aega-max 280 --aega-step 10"
+    echo          AEGA: ON  (min=220, max=280, step=10)
 ) ELSE (
     echo           AEGA: OFF
 )

@@ -21,6 +21,7 @@
 //   --no-hamming         disable Hamming tiebreak in elitist selection
 //   --no-x-niche         disable X-niche quota preservation
 //   --no-immigrants      disable partial random immigrants
+//   --legacy-seeding     rollback to legacy random-only seeding
 //   --aega-pop           enable AEGA-style adaptive population control
 //   --aega-min  <N>      minimum adaptive population size
 //   --aega-max  <N>      maximum adaptive population size
@@ -64,6 +65,7 @@ struct Args {
   bool enable_hamming_tiebreak = true;
   bool enable_x_niche_quota = true;
   bool enable_random_immigrants = true;
+  bool legacy_seeding = false;
   bool enable_aega_pop = false;
   int aega_min = 120;
   int aega_max = 320;
@@ -78,7 +80,7 @@ Args parse_args(int argc, char *argv[]) {
             "[--sbx-eta-rw f] [--pm-eta-rw f] "
             "[--stag N] [--tourney N] "
             "[--hyper-pulse] [--no-stag-boost] [--no-hyper-pulse] [--no-hamming] "
-            "[--no-x-niche] [--no-immigrants] [--aega-pop] [--aega-min N] "
+            "[--no-x-niche] [--no-immigrants] [--legacy-seeding] [--aega-pop] [--aega-min N] "
             "[--aega-max N] [--aega-step N]\n";
   };
 
@@ -135,6 +137,8 @@ Args parse_args(int argc, char *argv[]) {
       a.enable_x_niche_quota = false;
     else if (flag == "--no-immigrants")
       a.enable_random_immigrants = false;
+    else if (flag == "--legacy-seeding")
+      a.legacy_seeding = true;
     else if (flag == "--aega-pop")
       a.enable_aega_pop = true;
     else if (flag == "--aega-min" && i + 1 < argc)
@@ -170,6 +174,7 @@ void write_output(const vector<Individual> &pop, std::ostream &out,
   j["meta"]["pm_eta_rw"] = args.pm_eta_rw;
   j["meta"]["stag_threshold"] = args.stag_threshold;
   j["meta"]["tournament_size"] = args.tournament_sz;
+  j["meta"]["legacy_seeding"] = args.legacy_seeding;
   j["meta"]["solver"] = string(args.use_local_search ? "PB-NSMA" : "PB-NSGA");
 
   // De-duplicate the Pareto front
@@ -242,6 +247,7 @@ int main(int argc, char *argv[]) {
       << " hamming=" << (args.enable_hamming_tiebreak ? "on" : "off")
       << " x_niche=" << (args.enable_x_niche_quota ? "on" : "off")
       << " immigrants=" << (args.enable_random_immigrants ? "on" : "off")
+      << " legacy_seeding=" << (args.legacy_seeding ? "on" : "off")
       << " aega_pop=" << (args.enable_aega_pop ? "on" : "off")
       << "\n";
   if (args.enable_aega_pop) {
@@ -278,6 +284,7 @@ int main(int argc, char *argv[]) {
   cfg.enable_hamming_tiebreak = args.enable_hamming_tiebreak;
   cfg.enable_x_niche_quota = args.enable_x_niche_quota;
   cfg.enable_random_immigrants = args.enable_random_immigrants;
+  cfg.use_legacy_seeding = args.legacy_seeding;
   cfg.enable_aega_adaptive_pop = args.enable_aega_pop;
   cfg.aega_pop_min = args.aega_min;
   cfg.aega_pop_max = args.aega_max;

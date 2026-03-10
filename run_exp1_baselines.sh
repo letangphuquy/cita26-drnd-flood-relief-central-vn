@@ -113,8 +113,8 @@ fi
 
 AEGA_ARGS=()
 if [ "$AEGA_ON" -eq 1 ]; then
-    AEGA_ARGS=(--aega-pop --aega-min 120 --aega-max 320 --aega-step 30)
-    echo "          AEGA: ON  (min=120, max=320, step=30)"
+    AEGA_ARGS=(--aega-pop --aega-min 220 --aega-max 280 --aega-step 10)
+    echo "          AEGA: ON  (min=220, max=280, step=10)"
 else
     echo "          AEGA: OFF"
 fi
