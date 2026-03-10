@@ -50,6 +50,22 @@ echo "[Step 2] Running Greedy Heuristic (500 restarts)..."
     --seed 42 \
     --out "$RES1/cv_small_greedy.json"
 
+# ── Step 2b: Recompile + Run BB-Exact baseline ────────────────────────────
+echo ""
+echo "[Step 2b] Compiling and running BB-Exact baseline..."
+g++ -O3 -std=c++17 \
+    "$SOLVER_DIR/bb_solver.cpp" \
+    -o "$SOLVER_DIR/bb_solver"
+if [ $? -ne 0 ]; then
+    echo "[Error] BB compilation failed."
+    exit 1
+fi
+"$SOLVER_DIR/bb_solver" "$DATA_CV" \
+    --out "$RES1/cv_small_bb.json" \
+    --mode enum \
+    --trials 300 \
+    --time-limit 180
+
 # ── Step 3: Run MILP Adaptive Weighted Sum (unchanged) ───────────────────
 echo ""
 echo "[Step 3] Running MILP Adaptive Weighted Sum (AWS)..."
@@ -102,6 +118,7 @@ echo "[Step 5] Generating Comparison Metrics (HV, IGD+)..."
 "$PYTHON" "$PROJECT/src/scripts/exp1_evaluate_cv_small.py" \
     --results-exp1 "$RES1" \
     --ours "$RES1/cv_small_pb_nsga.json" \
+    --bb "$RES1/cv_small_bb.json" \
     --greedy "$RES1/cv_small_greedy.json" \
     --milp-aws "$RES1/cv_small_milp_aws.json" \
     --milp-eps "$RES1/cv_small_milp_eps.json"
@@ -114,6 +131,7 @@ if [ "$AUDIT_ON" -eq 1 ]; then
         --instance "$DATA_CV" \
         --solutions \
         "$RES1/cv_small_pb_nsga.json" \
+        "$RES1/cv_small_bb.json" \
         "$RES1/cv_small_greedy.json" \
         "$RES1/cv_small_milp_aws.json" \
         "$RES1/cv_small_milp_eps.json"

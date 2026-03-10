@@ -269,6 +269,31 @@ def main():
     print(f"[Data] PB-NSGA seeds     : {len(pbnsga_runs)} "
           f"(total pts: {sum(len(r) for r in pbnsga_runs)})")
 
+    # Sanity check: objective-scale mismatch can make HV/IGD comparisons misleading.
+    scale_samples = {}
+    if greedy_pts:
+        scale_samples["Greedy"] = np.median([p[0] for p in greedy_pts])
+    if milp_aws_pts:
+        scale_samples["MILP AWS"] = np.median([p[0] for p in milp_aws_pts])
+    if milp_eps_pts:
+        scale_samples["MILP EPS"] = np.median([p[0] for p in milp_eps_pts])
+    if bb_pts:
+        scale_samples["BB-Exact"] = np.median([p[0] for p in bb_pts])
+    if pbnsga_runs and any(pbnsga_runs):
+        pb_flat = [p[0] for run in pbnsga_runs for p in run]
+        if pb_flat:
+            scale_samples["PB-NSGA"] = np.median(pb_flat)
+
+    if len(scale_samples) >= 2:
+        z1_vals = [v for v in scale_samples.values() if np.isfinite(v) and v > 0]
+        if z1_vals:
+            z1_ratio = max(z1_vals) / max(min(z1_vals), 1e-12)
+            if z1_ratio > 20.0:
+                print("\n[Warning] Large Z1 scale mismatch detected across solvers.")
+                print("          HV/IGD may be misleading until objective formulations are aligned.")
+                for k, v in scale_samples.items():
+                    print(f"          median Z1 [{k:<8}] = {v:.4e}")
+
     # ── Build combined reference front (all algorithms) ─────────────────────
     all_runs = (
         [bb_pts] if bb_pts else []
