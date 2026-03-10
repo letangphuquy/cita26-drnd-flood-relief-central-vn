@@ -1,16 +1,24 @@
 // vns_ts_baseline.cpp
 // -----------------------------------------------------------------------------
-// VNS-TS baseline aligned to Sangsawang & Chanta (Comput Optim Appl):
-//   - Array solution representation.
-//   - Initialization with random p and high-flow-biased hub set.
-//   - Three neighborhood structures: intra-cluster, inter-cluster, allocation.
-//   - VNS shaking + TS local search with tabu list on (node, hub) allocations.
-//   - Stopping by Tmax and/or max iterations.
+// VNS-TS baseline (simplified encoding)
 //
-// Problem-specific adaptation:
-//   This project solves MO-IHLNDP with decoder-based evaluation. We keep the
-//   paper search framework and adapt move operators/feasibility repair to the
-//   project representation (X, R, A, W) and constraints.
+// Encoding used in search:
+//   - H/X: opened hub set
+//   - A  : demand-to-hub assignment
+//
+// Deterministic reconstruction:
+//   - R is reconstructed from assignment load (not directly searched)
+//   - W is fixed (not searched)
+//
+// Operators:
+//   1) swap_hub         : close one hub, open one hub
+//   2) move_node        : reassign one demand node to another open hub
+//   3) path_relink_lite : one-step move toward elite solution
+//
+// Search framework:
+//   - VNS shaking over 3 neighborhoods
+//   - TS local search with tabu on move signatures and aspiration
+//   - Pareto archive of feasible decoded solutions
 // -----------------------------------------------------------------------------
 
 #include "decoder.hpp"
@@ -22,6 +30,7 @@
 #include <limits>
 #include <numeric>
 #include <random>
+#include <unordered_map>
 
 using Clock = std::chrono::high_resolution_clock;
 using Duration = std::chrono::duration<double>;
@@ -33,6 +42,20 @@ struct Solution {
   vector<double> R;
   vector<int> A;
   vector<double> W;
+};
+
+struct Candidate {
+  Individual ind;
+  double Z1 = 0.0;
+  double Z2 = 0.0;
+  double CV = 0.0;
+  long long move_key = -1;
+};
+
+struct EliteEntry {
+  Individual ind;
+  double Z1 = 0.0;
+  double Z2 = 0.0;
 };
 
 struct ParetoArchive {
@@ -66,41 +89,10 @@ static vector<int> opened_hubs(const vector<int> &X) {
   return open_ki;
 }
 
-static void ensure_open_hub(Individual &ind, std::mt19937 &rng) {
-  if (!opened_hubs(ind.X).empty())
-    return;
-  std::uniform_int_distribution<int> ud(0, (int)ind.X.size() - 1);
-  ind.X[ud(rng)] = 1;
-}
-
-static void assign_nearest_anchors(Individual &ind, const DRNDInstance &inst) {
-  auto open_ki = opened_hubs(ind.X);
-  if (open_ki.empty()) {
-    std::fill(ind.A.begin(), ind.A.end(), 0);
-    return;
-  }
-  for (int ii = 0; ii < inst.num_I; ++ii) {
-    int di = inst.demand_idx[ii];
-    double best = 1e100;
-    int best_ki = open_ki[0];
-    for (int ki : open_ki) {
-      int hi = inst.hub_idx[ki];
-      double dx = inst.lat[di] - inst.lat[hi];
-      double dy = inst.lon[di] - inst.lon[hi];
-      double d2 = dx * dx + dy * dy;
-      if (d2 < best) {
-        best = d2;
-        best_ki = ki;
-      }
-    }
-    ind.A[ii] = best_ki;
-  }
-}
-
 static vector<double> expected_demand(const DRNDInstance &inst) {
   vector<double> e(inst.num_I, 0.0);
   for (int si = 0; si < inst.num_S; ++si) {
-    double p = inst.scenarios[si].prob;
+    const double p = inst.scenarios[si].prob;
     for (int ii = 0; ii < inst.num_I; ++ii) {
       int di = inst.demand_idx[ii];
       e[ii] += p * inst.scenarios[si].demand[di];
@@ -109,30 +101,36 @@ static vector<double> expected_demand(const DRNDInstance &inst) {
   return e;
 }
 
-static vector<double> flow_score_hubs(const DRNDInstance &inst,
-                                      const vector<double> &exp_dem) {
-  vector<double> score(inst.num_H, 0.0);
-  for (int ki = 0; ki < inst.num_H; ++ki) {
-    int h = inst.hub_idx[ki];
-    double s = 0.0;
-    for (int ii = 0; ii < inst.num_I; ++ii) {
-      int d = inst.demand_idx[ii];
+static void assign_nearest_open_hub(Individual &ind, const DRNDInstance &inst) {
+  auto open_ki = opened_hubs(ind.X);
+  if (open_ki.empty()) {
+    std::fill(ind.A.begin(), ind.A.end(), 0);
+    return;
+  }
+  for (int ii = 0; ii < inst.num_I; ++ii) {
+    int d = inst.demand_idx[ii];
+    int best_ki = open_ki[0];
+    double best_d2 = std::numeric_limits<double>::infinity();
+    for (int ki : open_ki) {
+      int h = inst.hub_idx[ki];
       double dx = inst.lat[d] - inst.lat[h];
       double dy = inst.lon[d] - inst.lon[h];
-      double dist = std::sqrt(dx * dx + dy * dy);
-      s += exp_dem[ii] / (1.0 + dist);
+      double d2 = dx * dx + dy * dy;
+      if (d2 < best_d2) {
+        best_d2 = d2;
+        best_ki = ki;
+      }
     }
-    score[ki] = s;
+    ind.A[ii] = best_ki;
   }
-  return score;
 }
 
-static void refresh_R_from_assignments(Individual &ind, const DRNDInstance &inst,
-                                       const vector<double> &exp_dem) {
+static void reconstruct_R(Individual &ind, const DRNDInstance &inst,
+                          const vector<double> &exp_dem) {
   vector<double> load(inst.num_H, 0.0);
   for (int ii = 0; ii < inst.num_I; ++ii) {
     int ki = ind.A[ii];
-    if (0 <= ki && ki < inst.num_H && ind.X[ki])
+    if (ki >= 0 && ki < inst.num_H && ind.X[ki])
       load[ki] += inst.gamma * exp_dem[ii];
   }
   for (int ki = 0; ki < inst.num_H; ++ki) {
@@ -145,19 +143,17 @@ static void refresh_R_from_assignments(Individual &ind, const DRNDInstance &inst
       continue;
     }
     double ratio = load[ki] / inst.kappa[ki];
-    ratio = std::max(0.0, std::min(1.0, ratio));
-    ind.R[ki] = ratio;
+    ind.R[ki] = std::max(0.0, std::min(1.0, ratio));
   }
 }
 
 static void repair_capacity(Individual &ind, const DRNDInstance &inst,
-                            const vector<double> &exp_dem, std::mt19937 &rng,
-                            int max_moves = 3) {
+                            const vector<double> &exp_dem,
+                            std::mt19937 &rng,
+                            int max_moves = 20) {
   auto open_ki = opened_hubs(ind.X);
   if (open_ki.size() <= 1)
     return;
-
-  std::uniform_int_distribution<int> ud(0, (int)open_ki.size() - 1);
 
   for (int mv = 0; mv < max_moves; ++mv) {
     vector<double> load(inst.num_H, 0.0);
@@ -165,7 +161,7 @@ static void repair_capacity(Individual &ind, const DRNDInstance &inst,
       if (ind.X[ind.A[ii]])
         load[ind.A[ii]] += inst.gamma * exp_dem[ii];
 
-    int over = -1;
+    int over_ki = -1;
     double worst_ratio = 1.0;
     for (int ki : open_ki) {
       if (inst.kappa[ki] <= EPS)
@@ -173,343 +169,563 @@ static void repair_capacity(Individual &ind, const DRNDInstance &inst,
       double ratio = load[ki] / inst.kappa[ki];
       if (ratio > worst_ratio + 1e-9) {
         worst_ratio = ratio;
-        over = ki;
+        over_ki = ki;
       }
     }
-    if (over < 0)
+    if (over_ki < 0)
       break;
 
-    vector<int> spokes;
-    for (int ii = 0; ii < inst.num_I; ++ii)
-      if (ind.A[ii] == over)
-        spokes.push_back(ii);
-    if (spokes.empty())
+    int picked_ii = -1;
+    double picked_dem = -1.0;
+    for (int ii = 0; ii < inst.num_I; ++ii) {
+      if (ind.A[ii] != over_ki)
+        continue;
+      if (exp_dem[ii] > picked_dem) {
+        picked_dem = exp_dem[ii];
+        picked_ii = ii;
+      }
+    }
+    if (picked_ii < 0)
       break;
 
-    int ii = spokes[std::uniform_int_distribution<int>(0, (int)spokes.size() - 1)(rng)];
-    int best_alt = over;
-    double best_dist = std::numeric_limits<double>::infinity();
-    int d = inst.demand_idx[ii];
+    int d = inst.demand_idx[picked_ii];
+    int best_alt = over_ki;
+    double best_score = std::numeric_limits<double>::infinity();
+
     for (int ki : open_ki) {
-      if (ki == over)
+      if (ki == over_ki)
         continue;
       int h = inst.hub_idx[ki];
       double dx = inst.lat[d] - inst.lat[h];
       double dy = inst.lon[d] - inst.lon[h];
-      double d2 = dx * dx + dy * dy;
-      if (d2 < best_dist) {
-        best_dist = d2;
+      double dist2 = dx * dx + dy * dy;
+
+      double next_load = load[ki] + inst.gamma * exp_dem[picked_ii];
+      double cap_ratio = (inst.kappa[ki] > EPS) ? (next_load / inst.kappa[ki]) : 1e9;
+      double cap_penalty = std::max(0.0, cap_ratio - 1.0);
+      double score = dist2 + 1e6 * cap_penalty;
+
+      if (score < best_score) {
+        best_score = score;
         best_alt = ki;
       }
     }
-    if (best_alt != over)
-      ind.A[ii] = best_alt;
-    else
-      ind.A[ii] = open_ki[ud(rng)];
+
+    if (best_alt == over_ki)
+      break;
+    ind.A[picked_ii] = best_alt;
   }
 
-  refresh_R_from_assignments(ind, inst, exp_dem);
+  reconstruct_R(ind, inst, exp_dem);
 }
 
-static double scalar_score(const Individual &ind, double lambda) {
-  // Simple fixed scaling to keep both objectives active in search.
-  const double z2_scale = 5.0;
-  return lambda * ind.Z1 + (1.0 - lambda) * (z2_scale * ind.Z2) + 1e6 * ind.CV;
-}
+static bool evaluate_candidate(Candidate &cand, const DRNDInstance &inst,
+                               ParetoArchive *archive = nullptr) {
+  decode(cand.ind, inst);
+  cand.Z1 = cand.ind.Z1;
+  cand.Z2 = cand.ind.Z2;
+  cand.CV = cand.ind.CV;
 
-static bool eval_candidate(Individual &ind, const DRNDInstance &inst,
-                           ParetoArchive &archive) {
-  decode(ind, inst);
-  if (ind.CV <= EPS) {
+  if (archive && cand.CV <= EPS) {
     Solution s;
-    s.Z1 = ind.Z1;
-    s.Z2 = ind.Z2;
-    s.X = ind.X;
-    s.R = ind.R;
-    s.A = ind.A;
-    s.W = ind.W;
-    archive.add(std::move(s));
-    return true;
+    s.Z1 = cand.Z1;
+    s.Z2 = cand.Z2;
+    s.X = cand.ind.X;
+    s.R = cand.ind.R;
+    s.A = cand.ind.A;
+    s.W = cand.ind.W;
+    archive->add(std::move(s));
   }
-  return false;
+  return cand.CV <= EPS;
 }
 
-static Individual enum_hubset_seed(const DRNDInstance &inst,
-                                   const vector<double> &exp_dem,
-                                   double lambda,
-                                   ParetoArchive &archive,
-                                   long long &eval_count,
-                                   std::mt19937 &rng) {
-  Individual best(inst.num_H, inst.num_I);
-  best.CV = std::numeric_limits<double>::infinity();
-  double best_sc = std::numeric_limits<double>::infinity();
-  bool found = false;
+static bool better_feasible(double z1a, double z2a, double z1b, double z2b,
+                            int mode) {
+  if (mode == 0) {
+    if (z1a != z1b)
+      return z1a < z1b;
+    return z2a < z2b;
+  }
+  if (mode == 1) {
+    if (z2a != z2b)
+      return z2a < z2b;
+    return z1a < z1b;
+  }
+  double sa = z1a + 10.0 * z2a;
+  double sb = z1b + 10.0 * z2b;
+  return sa < sb;
+}
 
-  if (inst.num_H > 20)
-    return best;
+static bool better_candidate(const Candidate &a, const Candidate &b, int mode) {
+  bool fa = (a.CV <= EPS), fb = (b.CV <= EPS);
+  if (fa && !fb)
+    return true;
+  if (!fa && fb)
+    return false;
+  if (!fa && !fb)
+    return a.CV < b.CV;
+  return better_feasible(a.Z1, a.Z2, b.Z1, b.Z2, mode);
+}
 
-  const vector<vector<double>> w_presets = {
-      {0.8, 0.4, 0.6, 0.6, 0.8, 0.6},
-      {0.7, 0.6, 0.5, 0.5, 0.7, 0.5},
-      {0.5, 0.5, 0.5, 0.5, 0.5, 0.5},
-      {0.3, 0.7, 0.5, 0.7, 0.6, 0.7},
-      {0.9, 0.2, 0.4, 0.4, 0.9, 0.4},
-  };
+static bool dominates_2d(double a1, double a2, double b1, double b2) {
+  return (a1 <= b1 && a2 <= b2 && (a1 < b1 || a2 < b2));
+}
 
-  const int total = 1 << inst.num_H;
-  for (int mask = 1; mask < total; ++mask) {
-    for (const auto &w : w_presets) {
-      Individual cand(inst.num_H, inst.num_I);
-      for (int ki = 0; ki < inst.num_H; ++ki)
-        cand.X[ki] = ((mask >> ki) & 1);
+static double elite_distance(const EliteEntry &a, const EliteEntry &b) {
+  return std::abs(a.Z1 - b.Z1) + 10.0 * std::abs(a.Z2 - b.Z2);
+}
 
-      assign_nearest_anchors(cand, inst);
-      repair_capacity(cand, inst, exp_dem, rng, 8);
-      cand.W = w;
+static void update_elite_pool(vector<EliteEntry> &elite_pool,
+                              const Candidate &cand,
+                              int cap = 24,
+                              double merge_eps = 1e-6) {
+  if (cand.CV > EPS)
+    return;
 
-      eval_candidate(cand, inst, archive);
-      ++eval_count;
-      if (cand.CV > EPS)
-        continue;
+  EliteEntry e{cand.ind, cand.Z1, cand.Z2};
 
-      double sc = scalar_score(cand, lambda);
-      if (!found || sc + 1e-9 < best_sc) {
-        found = true;
-        best = cand;
-        best_sc = sc;
+  for (const auto &x : elite_pool) {
+    if (std::abs(x.Z1 - e.Z1) <= merge_eps && std::abs(x.Z2 - e.Z2) <= merge_eps)
+      return;
+  }
+
+  for (const auto &x : elite_pool) {
+    if (dominates_2d(x.Z1, x.Z2, e.Z1, e.Z2))
+      return;
+  }
+
+  elite_pool.erase(std::remove_if(elite_pool.begin(), elite_pool.end(),
+                                  [&](const EliteEntry &x) {
+                                    return dominates_2d(e.Z1, e.Z2, x.Z1, x.Z2);
+                                  }),
+                   elite_pool.end());
+
+  elite_pool.push_back(std::move(e));
+
+  while ((int)elite_pool.size() > cap) {
+    int drop_i = 0;
+    double min_sep = std::numeric_limits<double>::infinity();
+    for (int i = 0; i < (int)elite_pool.size(); ++i) {
+      double nearest = std::numeric_limits<double>::infinity();
+      for (int j = 0; j < (int)elite_pool.size(); ++j) {
+        if (i == j)
+          continue;
+        nearest = std::min(nearest, elite_distance(elite_pool[i], elite_pool[j]));
+      }
+      if (nearest < min_sep) {
+        min_sep = nearest;
+        drop_i = i;
       }
     }
+    elite_pool.erase(elite_pool.begin() + drop_i);
   }
-  return best;
+}
+
+static int hamming_x(const Individual &a, const Individual &b) {
+  int d = 0;
+  int n = std::min((int)a.X.size(), (int)b.X.size());
+  for (int i = 0; i < n; ++i)
+    if (a.X[i] != b.X[i])
+      ++d;
+  return d;
+}
+
+static void update_mode_bank(vector<EliteEntry> &bank,
+                             const Candidate &cand,
+                             int mode,
+                             int cap = 8,
+                             int min_hamming = 1) {
+  if (cand.CV > EPS)
+    return;
+
+  EliteEntry e{cand.ind, cand.Z1, cand.Z2};
+
+  for (const auto &x : bank) {
+    if (hamming_x(x.ind, e.ind) < min_hamming &&
+        std::abs(x.Z1 - e.Z1) < 1e-6 && std::abs(x.Z2 - e.Z2) < 1e-6)
+      return;
+  }
+
+  bank.push_back(std::move(e));
+  std::sort(bank.begin(), bank.end(), [&](const EliteEntry &a, const EliteEntry &b) {
+    return better_feasible(a.Z1, a.Z2, b.Z1, b.Z2, mode);
+  });
+
+  vector<EliteEntry> kept;
+  kept.reserve(std::min(cap, (int)bank.size()));
+  for (const auto &x : bank) {
+    bool diverse = true;
+    for (const auto &y : kept) {
+      if (hamming_x(x.ind, y.ind) < min_hamming) {
+        diverse = false;
+        break;
+      }
+    }
+    if (diverse)
+      kept.push_back(x);
+    if ((int)kept.size() >= cap)
+      break;
+  }
+  if (kept.empty() && !bank.empty())
+    kept.push_back(bank.front());
+  bank.swap(kept);
+}
+
+static long long key_swap(int close_ki, int open_ki) {
+  return (1LL << 60) | ((long long)close_ki << 30) | (long long)open_ki;
+}
+
+static long long key_move(int ii, int from_ki, int to_ki) {
+  return (2LL << 60) | ((long long)ii << 40) | ((long long)from_ki << 20) |
+         (long long)to_ki;
 }
 
 static Individual initial_solution(const DRNDInstance &inst, std::mt19937 &rng,
-                                   const vector<double> &hub_flow_score,
                                    const vector<double> &exp_dem,
-                                   ParetoArchive &archive) {
-  std::uniform_int_distribution<int> p_dist(
-      1, std::max(1, std::min(inst.num_H, inst.num_H / 2 + 1)));
-  std::uniform_real_distribution<double> u01(0.0, 1.0);
+                                   int p) {
+  Individual ind(inst.num_H, inst.num_I);
+  std::fill(ind.X.begin(), ind.X.end(), 0);
 
-  vector<int> hubs(inst.num_H);
-  std::iota(hubs.begin(), hubs.end(), 0);
-  std::stable_sort(hubs.begin(), hubs.end(), [&](int a, int b) {
-    return hub_flow_score[a] > hub_flow_score[b];
-  });
-
-  Individual best(inst.num_H, inst.num_I);
-  double best_cv = std::numeric_limits<double>::infinity();
-
-  for (int trial = 0; trial < 24; ++trial) {
-    Individual ind(inst.num_H, inst.num_I);
-    int p = p_dist(rng);
-
-    // Flow-ranked hub set with mild randomization among top candidates.
-    int top_band = std::min(inst.num_H, std::max(p, p + inst.num_H / 4));
-    vector<int> pick(hubs.begin(), hubs.begin() + top_band);
-    std::shuffle(pick.begin(), pick.end(), rng);
-    for (int i = 0; i < p; ++i)
-      ind.X[pick[i]] = 1;
-
-    ensure_open_hub(ind, rng);
-    assign_nearest_anchors(ind, inst);
-    repair_capacity(ind, inst, exp_dem, rng, 8);
-
-    ind.W = {0.5 + 0.2 * (u01(rng) - 0.5), 0.5, 0.5,
-             0.5 + 0.2 * (u01(rng) - 0.5), 0.5, 0.5};
-
-    eval_candidate(ind, inst, archive);
-    if (ind.CV < best_cv) {
-      best_cv = ind.CV;
-      best = ind;
-      if (ind.CV <= EPS)
-        break;
-    }
-  }
-  return best;
-}
-
-static bool apply_intra_cluster_move(Individual &cand, const DRNDInstance &inst,
-                                     std::mt19937 &rng,
-                                     const vector<double> &exp_dem) {
-  auto open_ki = opened_hubs(cand.X);
-  if (open_ki.empty())
-    return false;
-
-  int from = open_ki[std::uniform_int_distribution<int>(0, (int)open_ki.size() - 1)(rng)];
-  vector<int> cluster;
-  for (int ii = 0; ii < inst.num_I; ++ii)
-    if (cand.A[ii] == from)
-      cluster.push_back(ii);
-  if (cluster.empty())
-    return false;
-
-  // Problem-specific analogue: replace hub with a nearby closed candidate.
-  int best_closed = -1;
-  double best_d2 = std::numeric_limits<double>::infinity();
+  vector<pair<double, int>> hub_rank;
+  hub_rank.reserve(inst.num_H);
   for (int ki = 0; ki < inst.num_H; ++ki) {
-    if (cand.X[ki])
-      continue;
     int h = inst.hub_idx[ki];
-    double acc = 0.0;
-    for (int ii : cluster) {
+    double score = 0.0;
+    for (int ii = 0; ii < inst.num_I; ++ii) {
       int d = inst.demand_idx[ii];
       double dx = inst.lat[d] - inst.lat[h];
       double dy = inst.lon[d] - inst.lon[h];
-      acc += dx * dx + dy * dy;
+      double dist = std::sqrt(dx * dx + dy * dy);
+      score += exp_dem[ii] / (1.0 + dist);
     }
-    if (acc < best_d2) {
-      best_d2 = acc;
-      best_closed = ki;
-    }
+    hub_rank.push_back({score, ki});
   }
-  if (best_closed < 0)
-    return false;
+  std::sort(hub_rank.begin(), hub_rank.end(),
+            [](const auto &a, const auto &b) { return a.first > b.first; });
 
-  cand.X[from] = 0;
-  cand.X[best_closed] = 1;
-  assign_nearest_anchors(cand, inst);
-  repair_capacity(cand, inst, exp_dem, rng, 4);
-  return true;
+  int top_band = std::max(p, std::min(inst.num_H, p + std::max(1, inst.num_H / 3)));
+  vector<int> cand;
+  for (int i = 0; i < top_band; ++i)
+    cand.push_back(hub_rank[i].second);
+  std::shuffle(cand.begin(), cand.end(), rng);
+
+  for (int i = 0; i < p && i < (int)cand.size(); ++i)
+    ind.X[cand[i]] = 1;
+  if (opened_hubs(ind.X).empty())
+    ind.X[hub_rank[0].second] = 1;
+
+  assign_nearest_open_hub(ind, inst);
+  repair_capacity(ind, inst, exp_dem, rng, 30);
+
+  ind.W = {0.6, 0.5, 0.5, 0.6, 0.6, 0.5};
+  return ind;
 }
 
-static bool apply_inter_cluster_move(Individual &cand, const DRNDInstance &inst,
-                                     std::mt19937 &rng,
-                                     const vector<double> &exp_dem) {
-  auto open_ki = opened_hubs(cand.X);
-  if (open_ki.empty() || (int)open_ki.size() == inst.num_H)
+static vector<Candidate> build_seed_candidates(const DRNDInstance &inst,
+                                               const vector<double> &exp_dem,
+                                               std::mt19937 &rng,
+                                               ParetoArchive &archive,
+                                               long long &eval_count) {
+  vector<Candidate> seeds;
+
+  if (inst.num_H <= 12) {
+    int total = 1 << inst.num_H;
+    for (int mask = 1; mask < total; ++mask) {
+      Candidate c;
+      c.ind = Individual(inst.num_H, inst.num_I);
+      for (int ki = 0; ki < inst.num_H; ++ki)
+        c.ind.X[ki] = ((mask >> ki) & 1);
+      assign_nearest_open_hub(c.ind, inst);
+      repair_capacity(c.ind, inst, exp_dem, rng, 40);
+      c.ind.W = {0.6, 0.5, 0.5, 0.6, 0.6, 0.5};
+      evaluate_candidate(c, inst, &archive);
+      ++eval_count;
+      if (c.CV <= EPS)
+        seeds.push_back(c);
+    }
+  }
+
+  if (seeds.empty()) {
+    int pmax = std::max(1, std::min(inst.num_H, inst.num_H / 2 + 1));
+    for (int t = 0; t < 16; ++t) {
+      Candidate c;
+      int p = std::uniform_int_distribution<int>(1, pmax)(rng);
+      c.ind = initial_solution(inst, rng, exp_dem, p);
+      evaluate_candidate(c, inst, &archive);
+      ++eval_count;
+      if (c.CV <= EPS)
+        seeds.push_back(c);
+    }
+  }
+
+  std::sort(seeds.begin(), seeds.end(), [](const Candidate &a, const Candidate &b) {
+    if (a.Z1 != b.Z1)
+      return a.Z1 < b.Z1;
+    return a.Z2 < b.Z2;
+  });
+
+  if ((int)seeds.size() > 32)
+    seeds.resize(32);
+  return seeds;
+}
+
+static bool op_swap_hub(const Candidate &base, Candidate &out,
+                        const DRNDInstance &inst,
+                        const vector<double> &exp_dem,
+                        std::mt19937 &rng) {
+  auto open = opened_hubs(base.ind.X);
+  if (open.empty() || (int)open.size() == inst.num_H)
     return false;
 
-  int from = open_ki[std::uniform_int_distribution<int>(0, (int)open_ki.size() - 1)(rng)];
   vector<int> closed;
   for (int ki = 0; ki < inst.num_H; ++ki)
-    if (!cand.X[ki])
+    if (!base.ind.X[ki])
       closed.push_back(ki);
   if (closed.empty())
     return false;
 
-  int to = closed[std::uniform_int_distribution<int>(0, (int)closed.size() - 1)(rng)];
-  cand.X[from] = 0;
-  cand.X[to] = 1;
-  assign_nearest_anchors(cand, inst);
-  repair_capacity(cand, inst, exp_dem, rng, 4);
+  int close_ki = open[std::uniform_int_distribution<int>(0, (int)open.size() - 1)(rng)];
+  int open_ki = closed[std::uniform_int_distribution<int>(0, (int)closed.size() - 1)(rng)];
+
+  out = base;
+  out.ind.X[close_ki] = 0;
+  out.ind.X[open_ki] = 1;
+  assign_nearest_open_hub(out.ind, inst);
+  repair_capacity(out.ind, inst, exp_dem, rng, 30);
+  out.move_key = key_swap(close_ki, open_ki);
   return true;
 }
 
-static bool apply_allocation_move(Individual &cand, const DRNDInstance &inst,
-                                  std::mt19937 &rng,
-                                  const vector<double> &exp_dem,
-                                  pair<int, int> *alloc_pair = nullptr) {
-  auto open_ki = opened_hubs(cand.X);
-  if (open_ki.size() <= 1)
+static bool op_move_node(const Candidate &base, Candidate &out,
+                         const DRNDInstance &inst,
+                         const vector<double> &exp_dem,
+                         std::mt19937 &rng) {
+  auto open = opened_hubs(base.ind.X);
+  if ((int)open.size() <= 1)
     return false;
 
-  int ii = std::uniform_int_distribution<int>(0, inst.num_I - 1)(rng);
-  int cur = cand.A[ii];
-  int to = cur;
-  for (int tries = 0; tries < 8 && to == cur; ++tries)
-    to = open_ki[std::uniform_int_distribution<int>(0, (int)open_ki.size() - 1)(rng)];
-  if (to == cur)
+  out = base;
+
+  int picked_ii = std::uniform_int_distribution<int>(0, inst.num_I - 1)(rng);
+  int from_ki = out.ind.A[picked_ii];
+
+  int d = inst.demand_idx[picked_ii];
+  int best_to = from_ki;
+  double best_score = std::numeric_limits<double>::infinity();
+
+  for (int ki : open) {
+    if (ki == from_ki)
+      continue;
+    int h = inst.hub_idx[ki];
+    double dx = inst.lat[d] - inst.lat[h];
+    double dy = inst.lon[d] - inst.lon[h];
+    double score = dx * dx + dy * dy;
+    if (score < best_score) {
+      best_score = score;
+      best_to = ki;
+    }
+  }
+  if (best_to == from_ki)
     return false;
 
-  cand.A[ii] = to;
-  refresh_R_from_assignments(cand, inst, exp_dem);
-  repair_capacity(cand, inst, exp_dem, rng, 2);
-  if (alloc_pair)
-    *alloc_pair = {ii, to};
+  out.ind.A[picked_ii] = best_to;
+  repair_capacity(out.ind, inst, exp_dem, rng, 8);
+  out.move_key = key_move(picked_ii, from_ki, best_to);
   return true;
 }
 
-static bool shake_by_k(Individual &cand, int k, const DRNDInstance &inst,
-                       std::mt19937 &rng, const vector<double> &exp_dem,
-                       pair<int, int> *alloc_pair = nullptr) {
-  if (k == 1)
-    return apply_intra_cluster_move(cand, inst, rng, exp_dem);
-  if (k == 2)
-    return apply_inter_cluster_move(cand, inst, rng, exp_dem);
-  return apply_allocation_move(cand, inst, rng, exp_dem, alloc_pair);
+static bool path_relink_to_target(const Candidate &base, Candidate &out,
+                                  const Individual &target,
+                                  const DRNDInstance &inst,
+                                  const vector<double> &exp_dem,
+                                  int mode,
+                                  std::mt19937 &rng) {
+
+  Candidate cur = base;
+  Candidate best = base;
+  evaluate_candidate(cur, inst, nullptr);
+  evaluate_candidate(best, inst, nullptr);
+
+  const int max_steps = std::max(3, inst.num_H + inst.num_I / 2);
+  bool made_move = false;
+
+  for (int step = 0; step < max_steps; ++step) {
+    vector<int> diff_open_close;
+    vector<int> diff_open_add;
+    for (int ki = 0; ki < inst.num_H; ++ki) {
+      if (cur.ind.X[ki] == 1 && target.X[ki] == 0)
+        diff_open_close.push_back(ki);
+      if (cur.ind.X[ki] == 0 && target.X[ki] == 1)
+        diff_open_add.push_back(ki);
+    }
+
+    bool step_done = false;
+    if (!diff_open_close.empty() && !diff_open_add.empty()) {
+      int close_ki = diff_open_close[
+          std::uniform_int_distribution<int>(0, (int)diff_open_close.size() - 1)(rng)];
+      int open_ki = diff_open_add[
+          std::uniform_int_distribution<int>(0, (int)diff_open_add.size() - 1)(rng)];
+      cur.ind.X[close_ki] = 0;
+      cur.ind.X[open_ki] = 1;
+      assign_nearest_open_hub(cur.ind, inst);
+      repair_capacity(cur.ind, inst, exp_dem, rng, 20);
+      cur.move_key = key_swap(close_ki, open_ki);
+      step_done = true;
+    } else {
+      vector<int> diff_assign;
+      for (int ii = 0; ii < inst.num_I; ++ii) {
+        if (cur.ind.A[ii] != target.A[ii] && cur.ind.X[target.A[ii]])
+          diff_assign.push_back(ii);
+      }
+      if (!diff_assign.empty()) {
+        int ii = diff_assign[
+            std::uniform_int_distribution<int>(0, (int)diff_assign.size() - 1)(rng)];
+        int from_ki = cur.ind.A[ii];
+        int to_ki = target.A[ii];
+        cur.ind.A[ii] = to_ki;
+        repair_capacity(cur.ind, inst, exp_dem, rng, 10);
+        cur.move_key = key_move(ii, from_ki, to_ki);
+        step_done = true;
+      }
+    }
+
+    if (!step_done)
+      break;
+
+    made_move = true;
+    evaluate_candidate(cur, inst, nullptr);
+    if (better_candidate(cur, best, mode))
+      best = cur;
+  }
+
+  if (!made_move)
+    return false;
+
+  out = best;
+  return true;
 }
 
-static Individual ts_local_search(const Individual &start, const DRNDInstance &inst,
-                                  std::mt19937 &rng,
-                                  const vector<double> &exp_dem,
-                                  vector<vector<int>> &tabu_until,
-                                  int iter_idx,
-                                  int tabu_tenure,
-                                  double lambda,
-                                  double best_score,
-                                  ParetoArchive &archive,
-                                  long long &eval_count,
-                                  pair<int, int> *accepted_pair = nullptr) {
-  Individual current = start;
-  eval_candidate(current, inst, archive);
-  ++eval_count;
+static bool op_path_relink_lite(const Candidate &base, Candidate &out,
+                                const DRNDInstance &inst,
+                                const vector<double> &exp_dem,
+                                const vector<EliteEntry> &elite_pool,
+                                int mode,
+                                std::mt19937 &rng) {
+  if (elite_pool.empty())
+    return false;
 
-  Individual best_nb = current;
-  double best_nb_sc = std::numeric_limits<double>::infinity();
-  pair<int, int> best_pair = {-1, -1};
-  bool found_admissible = false;
+  const Individual &target = elite_pool[
+      std::uniform_int_distribution<int>(0, (int)elite_pool.size() - 1)(rng)]
+                               .ind;
+  return path_relink_to_target(base, out, target, inst, exp_dem, mode, rng);
+}
 
-  for (int nk = 1; nk <= 3; ++nk) {
-    for (int s = 0; s < 12; ++s) {
-      Individual cand = current;
-      pair<int, int> moved = {-1, -1};
-      if (!shake_by_k(cand, nk, inst, rng, exp_dem, &moved))
+static bool op_mode_bank_relink(const Candidate &base, Candidate &out,
+                                const DRNDInstance &inst,
+                                const vector<double> &exp_dem,
+                                const vector<EliteEntry> &mode_bank,
+                                int mode,
+                                std::mt19937 &rng) {
+  if (mode_bank.empty())
+    return false;
+
+  vector<int> cand_idx;
+  for (int i = 0; i < (int)mode_bank.size(); ++i) {
+    if (hamming_x(base.ind, mode_bank[i].ind) > 0)
+      cand_idx.push_back(i);
+  }
+  if (cand_idx.empty())
+    return false;
+
+  int idx = cand_idx[std::uniform_int_distribution<int>(0, (int)cand_idx.size() - 1)(rng)];
+  return path_relink_to_target(base, out, mode_bank[idx].ind, inst, exp_dem,
+                               mode, rng);
+}
+
+static Candidate ts_local_search(
+    const Candidate &start, const DRNDInstance &inst,
+    const vector<double> &exp_dem, int mode, int tabu_tenure,
+    int ls_iter, int nhood_samples,
+    std::unordered_map<long long, int> &tabu_until,
+    int iter_idx, const Candidate &global_best,
+    const vector<EliteEntry> &elite_pool,
+    const vector<EliteEntry> &mode_bank,
+  bool enable_option3,
+    std::mt19937 &rng,
+    ParetoArchive &archive, long long &eval_count) {
+
+  Candidate current = start;
+  Candidate best_seen = start;
+
+  for (int ls = 0; ls < ls_iter; ++ls) {
+    bool found = false;
+    Candidate best_nb;
+
+    for (int t = 0; t < nhood_samples; ++t) {
+      Candidate cand;
+      bool ok = false;
+      int which = std::uniform_int_distribution<int>(1, enable_option3 ? 4 : 3)(rng);
+      if (which == 1)
+        ok = op_swap_hub(current, cand, inst, exp_dem, rng);
+      else if (which == 2)
+        ok = op_move_node(current, cand, inst, exp_dem, rng);
+      else if (which == 3)
+        ok = op_path_relink_lite(current, cand, inst, exp_dem, elite_pool, mode,
+                                 rng);
+      else if (enable_option3)
+        ok = op_mode_bank_relink(current, cand, inst, exp_dem, mode_bank, mode,
+                                 rng);
+      if (!ok)
         continue;
 
-      eval_candidate(cand, inst, archive);
+      evaluate_candidate(cand, inst, &archive);
       ++eval_count;
-      if (cand.CV > EPS)
-        continue;
-      double sc = scalar_score(cand, lambda);
 
       bool tabu = false;
-      if (moved.first >= 0 && moved.second >= 0)
-        tabu = (tabu_until[moved.first][moved.second] > iter_idx);
-      bool aspiration = (sc + 1e-9 < best_score);
+      auto it = tabu_until.find(cand.move_key);
+      if (it != tabu_until.end() && it->second > iter_idx)
+        tabu = true;
+
+      bool aspiration = better_candidate(cand, global_best, mode);
       if (tabu && !aspiration)
         continue;
 
-      if (!found_admissible || sc + 1e-9 < best_nb_sc) {
+      if (!found || better_candidate(cand, best_nb, mode)) {
         best_nb = cand;
-        best_nb_sc = sc;
-        best_pair = moved;
-        found_admissible = true;
+        found = true;
       }
     }
+
+    if (!found)
+      break;
+
+    current = best_nb;
+    tabu_until[current.move_key] = iter_idx + tabu_tenure;
+
+    if (better_candidate(current, best_seen, mode))
+      best_seen = current;
   }
 
-  // If all candidates were tabu and non-aspiring, stay at current.
-  if (!found_admissible) {
-    best_nb = current;
-    best_nb_sc = scalar_score(current, lambda);
-    best_pair = {-1, -1};
-  }
-
-  if (accepted_pair)
-    *accepted_pair = best_pair;
-
-  if (best_pair.first >= 0 && best_pair.second >= 0)
-    tabu_until[best_pair.first][best_pair.second] = iter_idx + tabu_tenure;
-
-  return best_nb;
+  return best_seen;
 }
 
 int main(int argc, char *argv[]) {
   if (argc < 2) {
     cerr << "Usage: vns_ts_baseline <instance.json> [--out <path>] [--seed S] "
-            "[--iter N] [--time-limit S] [--tabu-tenure T] [--kmax K]\n";
+            "[--iter N] [--time-limit S] [--tabu-tenure T] [--kmax K] [--starts R] "
+            "[--enable-option3]\n";
     return 1;
   }
 
   string inst_path = argv[1];
   string out_path = "";
   int seed = 42;
-  int max_iter = 100;
-  double time_limit = 300.0;
+  int max_iter = 120;
+  double time_limit = 60.0;
   int tabu_tenure = 7;
   int kmax = 3;
-  int starts = 5;
+  int starts = 8;
+  bool enable_option3 = false;
 
   for (int i = 2; i < argc; ++i) {
     string arg = argv[i];
@@ -527,6 +743,8 @@ int main(int argc, char *argv[]) {
       kmax = std::stoi(argv[++i]);
     else if (arg == "--starts" && i + 1 < argc)
       starts = std::max(1, std::stoi(argv[++i]));
+    else if (arg == "--enable-option3")
+      enable_option3 = true;
   }
 
   DRNDInstance inst;
@@ -540,79 +758,102 @@ int main(int argc, char *argv[]) {
   std::mt19937 rng(seed);
   ParetoArchive archive;
   const auto exp_dem = expected_demand(inst);
-  const auto hub_flow_score = flow_score_hubs(inst, exp_dem);
 
   auto t0 = Clock::now();
   std::clock_t c0 = std::clock();
 
-  vector<double> lambdas = {0.5, 0.8, 0.95, 0.98};
   long long eval_count = 0;
+  vector<int> modes = {0, 1, 2};
+  vector<EliteEntry> elite_pool;
+  vector<vector<EliteEntry>> mode_banks(3);
+  vector<Candidate> seed_pool = build_seed_candidates(inst, exp_dem, rng, archive, eval_count);
 
-  for (double lambda : lambdas) {
-    Individual enum_seed =
-        enum_hubset_seed(inst, exp_dem, lambda, archive, eval_count, rng);
-
-    for (int start = 0; start < starts; ++start) {
+  for (int mode : modes) {
+    for (int rs = 0; rs < starts; ++rs) {
       if (Duration(Clock::now() - t0).count() > time_limit)
         break;
 
-      Individual current =
-          (start == 0 && enum_seed.CV <= EPS)
-              ? enum_seed
-              : initial_solution(inst, rng, hub_flow_score, exp_dem, archive);
-      Individual best = current;
+      Candidate current;
+      if (!seed_pool.empty()) {
+        current = seed_pool[std::uniform_int_distribution<int>(0, (int)seed_pool.size() - 1)(rng)];
+      } else {
+        int pmax = std::max(1, std::min(inst.num_H, inst.num_H / 2 + 1));
+        int p = std::uniform_int_distribution<int>(1, pmax)(rng);
+        current.ind = initial_solution(inst, rng, exp_dem, p);
+        evaluate_candidate(current, inst, &archive);
+        ++eval_count;
+      }
+      update_elite_pool(elite_pool, current);
+      if (enable_option3)
+        update_mode_bank(mode_banks[mode], current, mode);
 
-      vector<vector<int>> tabu_until(inst.num_I, vector<int>(inst.num_H, -1));
+      Candidate best = current;
+      std::unordered_map<long long, int> tabu_until;
 
       for (int it = 0; it < max_iter; ++it) {
         if (Duration(Clock::now() - t0).count() > time_limit)
           break;
 
         int k = 1;
-        bool moved_in_iter = false;
+        bool moved = false;
 
         while (k <= std::max(1, kmax)) {
-          if (Duration(Clock::now() - t0).count() > time_limit)
-            break;
+          Candidate shaken;
+          bool ok = false;
+          if (k == 1)
+            ok = op_swap_hub(current, shaken, inst, exp_dem, rng);
+          else if (k == 2)
+            ok = op_move_node(current, shaken, inst, exp_dem, rng);
+          else
+            ok = op_path_relink_lite(current, shaken, inst, exp_dem, elite_pool,
+                                     mode, rng);
 
-          Individual shaken = current;
-          if (!shake_by_k(shaken, k, inst, rng, exp_dem)) {
+          if (!ok) {
             ++k;
             continue;
           }
 
-          pair<int, int> accepted_pair = {-1, -1};
-          const double best_score = scalar_score(best, lambda);
-          Individual local_best = ts_local_search(
-              shaken, inst, rng, exp_dem, tabu_until, it, tabu_tenure, lambda,
-              best_score, archive, eval_count, &accepted_pair);
+          evaluate_candidate(shaken, inst, &archive);
+          ++eval_count;
+          update_elite_pool(elite_pool, shaken);
+          if (enable_option3)
+            update_mode_bank(mode_banks[mode], shaken, mode);
 
-          double cur_sc = scalar_score(current, lambda);
-          double loc_sc = scalar_score(local_best, lambda);
+          Candidate local_best = ts_local_search(
+              shaken, inst, exp_dem, mode, tabu_tenure,
+              16, 20, tabu_until, it, best, elite_pool, mode_banks[mode],
+              enable_option3, rng,
+              archive, eval_count);
+            update_elite_pool(elite_pool, local_best);
+            if (enable_option3)
+              update_mode_bank(mode_banks[mode], local_best, mode);
 
-          // TS intensification allows non-improving admissible moves to escape
-          // local optima; keep best-so-far separately.
-          if (local_best.CV <= EPS &&
-              loc_sc + 1e-12 < std::numeric_limits<double>::infinity()) {
+          if (better_candidate(local_best, current, mode)) {
             current = local_best;
-            moved_in_iter = true;
-            if (loc_sc + 1e-9 < scalar_score(best, lambda)) {
-              best = local_best;
+            moved = true;
+            if (better_candidate(current, best, mode)) {
+              best = current;
               k = 1;
             } else {
               ++k;
             }
           } else {
+            // TS accepts non-improving move occasionally to diversify.
+            if (std::uniform_real_distribution<double>(0.0, 1.0)(rng) < 0.15) {
+              current = local_best;
+              moved = true;
+            }
             ++k;
           }
         }
 
-        if (!moved_in_iter)
+        if (!moved)
           break;
       }
 
-      eval_candidate(best, inst, archive);
-      ++eval_count;
+      update_elite_pool(elite_pool, best);
+      if (enable_option3)
+        update_mode_bank(mode_banks[mode], best, mode);
     }
   }
 
@@ -637,6 +878,7 @@ int main(int argc, char *argv[]) {
   j["meta"]["tabu_tenure"] = tabu_tenure;
   j["meta"]["kmax"] = kmax;
   j["meta"]["starts"] = starts;
+  j["meta"]["enable_option3"] = enable_option3;
   j["meta"]["evaluations"] = eval_count;
   j["meta"]["pareto_size"] = (int)front.size();
 
