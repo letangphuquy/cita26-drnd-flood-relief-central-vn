@@ -15,6 +15,14 @@ SET "DATA_CV=%PROJECT%data\cv\cv_small_drnd.json"
 SET "RES1=%PROJECT%results\exp1"
 SET "SOLVER_DIR=%PROJECT%src\solver"
 
+REM Toggle temporary AEGA population adaptation in PB-NSGA step.
+REM 1 = on, 0 = off
+SET "AEGA_ON=1"
+
+REM Toggle post-run solution audit (structure + consistency checks).
+REM 1 = on, 0 = off
+SET "AUDIT_ON=1"
+
 REM Python venv
 SET "PYTHON=%PROJECT%.venv\Scripts\python.exe"
 IF NOT EXIST "%PYTHON%" (
@@ -51,12 +59,27 @@ IF NOT EXIST "%SOLVER_DIR%\solver.exe" (
     call "%PROJECT%compile.bat"
 )
 
-"%SOLVER_DIR%\solver.exe" "%DATA_CV%" --pop 200 --gen 300 --seed 0 --out "%RES1%\cv_small_pb_nsga.json"
+SET "AEGA_ARGS="
+IF "%AEGA_ON%"=="1" (
+    SET "AEGA_ARGS=--aega-pop --aega-min 120 --aega-max 320 --aega-step 30"
+    echo           AEGA: ON  (min=120, max=320, step=30)
+) ELSE (
+    echo           AEGA: OFF
+)
+
+"%SOLVER_DIR%\solver.exe" "%DATA_CV%" --pop 200 --gen 300 --seed 0 --pc 0.98 --pm-high 0.40 --pm-low 0.10 --sbx-eta-rw 1.5 --pm-eta-rw 8 %AEGA_ARGS% --out "%RES1%\cv_small_pb_nsga.json"
 
 REM ── Step 5: Final Comparison Table ────────────────────────────────────────
 echo.
 echo [Step 5] Generating Comparison Metrics (HV, IGD+)...
 "%PYTHON%" "%PROJECT%src\scripts\exp1_evaluate_cv_small.py" --results-exp1 "%RES1%" --ours "%RES1%\cv_small_pb_nsga.json" --greedy "%RES1%\cv_small_greedy.json" --milp "%RES1%\cv_small_milp_aws.json"
+
+REM ── Step 6: Audit Solver Outputs (optional) ───────────────────────────────
+IF "%AUDIT_ON%"=="1" (
+    echo.
+    echo [Step 6] Auditing output correctness/completeness...
+    "%PYTHON%" "%PROJECT%src\scripts\audit_solution_outputs.py" --instance "%DATA_CV%" --solutions "%RES1%\cv_small_pb_nsga.json" "%RES1%\cv_small_greedy.json" "%RES1%\cv_small_milp_aws.json"
+)
 
 echo.
 echo Experiment 1 (Baselines) Completed.
