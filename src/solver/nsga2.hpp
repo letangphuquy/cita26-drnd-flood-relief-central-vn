@@ -457,6 +457,7 @@ vector<Individual> run_nsga2(const DRNDInstance &inst, const NSGAConfig &cfg) {
     cur_pop_size = std::clamp(cfg.pop_size, cfg.aega_pop_min, cfg.aega_pop_max);
   }
   const char *algo_name = cfg.use_local_search ? "PB-NSMA" : "PB-NSGA";
+  auto decode_in_place = [&](Individual &ind) { decode(ind, inst); };
 
   // ── Initial population ───────────────────────────────────────────────────
   vector<Individual> pop;
@@ -465,7 +466,7 @@ vector<Individual> run_nsga2(const DRNDInstance &inst, const NSGAConfig &cfg) {
        << " pm=" << cfg.pm_high << "→" << cfg.pm_low << "\n";
   while ((int)pop.size() < cur_pop_size) {
     Individual ind = random_individual(inst);
-    decode(ind, inst);
+    decode_in_place(ind);
     pop.push_back(ind);
   }
   elitist_select(pop, cur_pop_size, cfg);
@@ -568,8 +569,8 @@ vector<Individual> run_nsga2(const DRNDInstance &inst, const NSGAConfig &cfg) {
       // (we always mutate now; pm_base is baked into per-gene probability)
       mutate(c1, cfg, cur_pm, w_scale);
       mutate(c2, cfg, cur_pm, w_scale);
-      decode(c1, inst);
-      decode(c2, inst);
+      decode_in_place(c1);
+      decode_in_place(c2);
       offspring.push_back(c1);
       if ((int)offspring.size() < cur_pop_size)
         offspring.push_back(c2);
@@ -642,7 +643,7 @@ vector<Individual> run_nsga2(const DRNDInstance &inst, const NSGAConfig &cfg) {
         for (int i = 0; i < target_imm; i++) {
           int at = replaceable[i];
           pop[at] = random_individual(inst);
-          decode(pop[at], inst);
+          decode_in_place(pop[at]);
         }
         immigrants_used = target_imm;
         last_imm_gen = gen;

@@ -132,6 +132,41 @@ void decode(Individual &ind, const DRNDInstance &inst,
     int act_num_links = 0;
     int act_heli_links = 0;
 
+    // Shared transport-mode selectors:
+    // 1) Prefer road/water, fallback to air.
+    // 2) Return {-1, big_M} if unreachable.
+    auto best_mode_time = [&](int from_node, int to_node) -> pair<int, double> {
+      int best_mode = -1;
+      double best_time = inst.big_M;
+      for (int m : {0, 1}) {
+        if (sc.acc(m, from_node, to_node) && inst.C_time[m][from_node][to_node] < best_time) {
+          best_time = inst.C_time[m][from_node][to_node];
+          best_mode = m;
+        }
+      }
+      if (best_mode == -1 && sc.acc(2, from_node, to_node)) {
+        best_time = inst.C_time[2][from_node][to_node];
+        best_mode = 2;
+      }
+      return {best_mode, best_time};
+    };
+
+    auto best_mode_cost = [&](int from_node, int to_node) -> pair<int, double> {
+      int best_mode = -1;
+      double best_cost = inst.big_M;
+      for (int m : {0, 1}) {
+        if (sc.acc(m, from_node, to_node) && inst.C_cost[m][from_node][to_node] < best_cost) {
+          best_cost = inst.C_cost[m][from_node][to_node];
+          best_mode = m;
+        }
+      }
+      if (best_mode == -1 && sc.acc(2, from_node, to_node)) {
+        best_cost = inst.C_cost[2][from_node][to_node];
+        best_mode = 2;
+      }
+      return {best_mode, best_cost};
+    };
+
     for (int ki = 0; ki < num_H; ki++) {
       int k = inst.hub_idx[ki];
       if (x[ki] && sc.risk[k] <= inst.chi) {
@@ -240,26 +275,8 @@ void decode(Individual &ind, const DRNDInstance &inst,
         if (!active[ki] && !y[ki])
           continue;
         int k = inst.hub_idx[ki];
-        double best_t = inst.big_M;
-        bool reachable = false;
-        int b_m = -1;
-        // Priority 1: Non-air modes (Road=0, Water=1)
-        for (int m : {0, 1}) {
-          if (sc.acc(m, i, k)) {
-            reachable = true;
-            if (inst.C_time[m][i][k] < best_t) {
-              best_t = inst.C_time[m][i][k];
-              b_m = m;
-            }
-          }
-        }
-        // Priority 2: Air mode (Helicopter=2) as last resort
-        if (b_m == -1 && sc.acc(2, i, k)) {
-          reachable = true;
-          best_t = inst.C_time[2][i][k];
-          b_m = 2;
-        }
-        if (!reachable)
+        auto [b_m, best_t] = best_mode_time(i, k);
+        if (b_m == -1)
           continue;
         double residual = inventory[ki] - hub_load[ki];
         
@@ -295,26 +312,9 @@ void decode(Individual &ind, const DRNDInstance &inst,
           if (!active[ki] && !y[ki])
             continue;
           int k = inst.hub_idx[ki];
-          double best_t = inst.big_M;
-          bool reachable = false;
-          int b_m = -1;
-          // Priority 1
-          for (int m : {0, 1}) {
-            if (sc.acc(m, i, k)) {
-              reachable = true;
-              if (inst.C_time[m][i][k] < best_t) {
-                best_t = inst.C_time[m][i][k];
-                b_m = m;
-              }
-            }
-          }
-          // Priority 2
-          if (b_m == -1 && sc.acc(2, i, k)) {
-            reachable = true;
-            best_t = inst.C_time[2][i][k];
-            b_m = 2;
-          }
-          if (!reachable)
+          auto [b_m, best_t] = best_mode_time(i, k);
+          (void)best_t;
+          if (b_m == -1)
             continue;
           best_ki = ki;
           chosen_m = b_m;
@@ -332,24 +332,9 @@ void decode(Individual &ind, const DRNDInstance &inst,
             if (sc.risk[k] > inst.chi)
               continue;
 
-            bool reachable = false;
-            int b_m = -1;
-            double best_t = inst.big_M;
-            for (int m : {0, 1}) {
-              if (sc.acc(m, i, k)) {
-                reachable = true;
-                if (inst.C_time[m][i][k] < best_t) {
-                  best_t = inst.C_time[m][i][k];
-                  b_m = m;
-                }
-              }
-            }
-            if (b_m == -1 && sc.acc(2, i, k)) {
-              reachable = true;
-              best_t = inst.C_time[2][i][k];
-              b_m = 2;
-            }
-            if (!reachable)
+            auto [b_m, best_t] = best_mode_time(i, k);
+            (void)best_t;
+            if (b_m == -1)
               continue;
 
             y[ki] = true;
@@ -424,18 +409,7 @@ void decode(Individual &ind, const DRNDInstance &inst,
           if (!active[ki] && !y[ki])
             continue;
           int k = inst.hub_idx[ki];
-          int b_m = -1;
-          double b_c = inst.big_M;
-          for (int m : {0, 1}) {
-            if (sc.acc(m, j, k) && inst.C_cost[m][j][k] < b_c) {
-              b_c = inst.C_cost[m][j][k];
-              b_m = m;
-            }
-          }
-          if (b_m == -1 && sc.acc(2, j, k)) {
-            b_c = inst.C_cost[2][j][k];
-            b_m = 2;
-          }
+          auto [b_m, b_c] = best_mode_cost(j, k);
           if (b_m != -1) {
             o2h_cost[jj][ki] = b_c;
             o2h_mode[jj][ki] = b_m;
@@ -453,18 +427,7 @@ void decode(Individual &ind, const DRNDInstance &inst,
           if (ski == dki || (!active[dki] && !y[dki]))
             continue;
           int dk = inst.hub_idx[dki];
-          int b_m = -1;
-          double b_c = inst.big_M;
-          for (int m : {0, 1}) {
-            if (sc.acc(m, sk, dk) && inst.C_cost[m][sk][dk] < b_c) {
-              b_c = inst.C_cost[m][sk][dk];
-              b_m = m;
-            }
-          }
-          if (b_m == -1 && sc.acc(2, sk, dk)) {
-            b_c = inst.C_cost[2][sk][dk];
-            b_m = 2;
-          }
+          auto [b_m, b_c] = best_mode_cost(sk, dk);
           if (b_m != -1) {
             h2h_cost[ski][dki] = inst.alpha * b_c;
             h2h_mode[ski][dki] = b_m;
@@ -610,18 +573,7 @@ void decode(Individual &ind, const DRNDInstance &inst,
         }
         if (best_ki != -1) {
           int k = inst.hub_idx[best_ki];
-          int cm = -1;
-          double best_c = inst.big_M;
-          for (int m : {0, 1}) {
-            if (sc.acc(m, j, k) && inst.C_cost[m][j][k] < best_c) {
-              best_c = inst.C_cost[m][j][k];
-              cm = m;
-            }
-          }
-          if (cm == -1 && sc.acc(2, j, k)) {
-            best_c = inst.C_cost[2][j][k];
-            cm = 2;
-          }
+          auto [cm, best_c] = best_mode_cost(j, k);
           if (cm != -1) {
             Z1_s += best_c * O;
             net_inv[best_ki] += O;
@@ -670,18 +622,7 @@ void decode(Individual &ind, const DRNDInstance &inst,
 
         int k = inst.hub_idx[src_ki];
         int h = inst.hub_idx[dst_ki];
-        int cm = -1;
-        double best_c = inst.big_M;
-        for (int m : {0, 1}) {
-          if (sc.acc(m, k, h) && inst.C_cost[m][k][h] < best_c) {
-            best_c = inst.C_cost[m][k][h];
-            cm = m;
-          }
-        }
-        if (cm == -1 && sc.acc(2, k, h)) {
-          best_c = inst.C_cost[2][k][h];
-          cm = 2;
-        }
+        auto [cm, best_c] = best_mode_cost(k, h);
         if (cm == -1)
           break;
 
@@ -716,9 +657,6 @@ void decode(Individual &ind, const DRNDInstance &inst,
 
         // CV: mathematical infeasibility if load strictly exceeds max physical
         // capacity + supply
-        double max_possible_inv = inst.kappa[ki];
-        double total_in = max_possible_inv; // plus supply, but transshipment
-                                            // already moved supply around
         // A stricter, correct way to check physical bounds without re-tracing
         // flow: Did the base load + transshipments exceed kappa + incoming
         // supply? Since net_inv[ki] = inventory[ki] - (load +
