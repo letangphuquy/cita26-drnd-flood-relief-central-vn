@@ -45,6 +45,16 @@ echo.
 echo [Step 2] Running Greedy Heuristic (500 restarts)...
 "%SOLVER_DIR%\greedy_baseline.exe" "%DATA_CV%" --restarts 500 --seed 42 --out "%RES1%\cv_small_greedy.json"
 
+REM ── Step 2b: Recompile + Run BB-Exact baseline ───────────────────────────
+echo.
+echo [Step 2b] Compiling and running BB-Exact baseline...
+g++ -O3 -std=c++17 "%SOLVER_DIR%\bb_solver.cpp" -o "%SOLVER_DIR%\bb_solver.exe"
+IF %ERRORLEVEL% NEQ 0 (
+    echo [Error] BB compilation failed.
+    exit /b 1
+)
+"%SOLVER_DIR%\bb_solver.exe" "%DATA_CV%" --out "%RES1%\cv_small_bb.json" --mode enum --trials 300 --time-limit 180
+
 REM ── Step 3: Run MILP Adaptive Weighted Sum ────────────────────────────────
 echo.
 echo [Step 3] Running MILP Adaptive Weighted Sum (AWS)...
@@ -77,13 +87,13 @@ IF "%AEGA_ON%"=="1" (
 REM ── Step 5: Final Comparison Table ────────────────────────────────────────
 echo.
 echo [Step 5] Generating Comparison Metrics (HV, IGD+)...
-"%PYTHON%" "%PROJECT%src\scripts\exp1_evaluate_cv_small.py" --results-exp1 "%RES1%" --ours "%RES1%\cv_small_pb_nsga.json" --greedy "%RES1%\cv_small_greedy.json" --milp-aws "%RES1%\cv_small_milp_aws.json" --milp-eps "%RES1%\cv_small_milp_eps.json"
+"%PYTHON%" "%PROJECT%src\scripts\exp1_evaluate_cv_small.py" --results-exp1 "%RES1%" --ours "%RES1%\cv_small_pb_nsga.json" --bb "%RES1%\cv_small_bb.json" --greedy "%RES1%\cv_small_greedy.json" --milp-aws "%RES1%\cv_small_milp_aws.json" --milp-eps "%RES1%\cv_small_milp_eps.json"
 
 REM ── Step 6: Audit Solver Outputs (optional) ───────────────────────────────
 IF "%AUDIT_ON%"=="1" (
     echo.
     echo [Step 6] Auditing output correctness/completeness...
-    "%PYTHON%" "%PROJECT%src\scripts\audit_solution_outputs.py" --instance "%DATA_CV%" --solutions "%RES1%\cv_small_pb_nsga.json" "%RES1%\cv_small_greedy.json" "%RES1%\cv_small_milp_aws.json" "%RES1%\cv_small_milp_eps.json"
+    "%PYTHON%" "%PROJECT%src\scripts\audit_solution_outputs.py" --instance "%DATA_CV%" --solutions "%RES1%\cv_small_pb_nsga.json" "%RES1%\cv_small_bb.json" "%RES1%\cv_small_greedy.json" "%RES1%\cv_small_milp_aws.json" "%RES1%\cv_small_milp_eps.json"
 )
 
 echo.

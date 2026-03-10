@@ -43,7 +43,6 @@ def build_and_solve_milp(inst, w1=1.0, w2=0.0, eps_z1=None, eps_z2=None,
     f_khms = {}
     w_trans = {}
     u_is = {}
-    v_js = {}
     z2_max_s = {}
     x_act = {}
 
@@ -97,17 +96,17 @@ def build_and_solve_milp(inst, w1=1.0, w2=0.0, eps_z1=None, eps_z2=None,
                 for ki in range(num_H): solver.Add(z_iks[ii, ki, si] == 0)
 
         for ji in range(num_J):
-            v_js[ji, si] = solver.NumVar(0, solver.infinity(), f'v_{ji}_{si}')
             j_node = inst["nodes"]["origin_indices"][ji]
             if sc["supply"][str(j_node)] > 1e-6:
-                solver.Add(sum(z_jks[ji, ki, si] for ki in range(num_H)) + v_js[ji, si] == 1)
+                # Match decoder semantics: origins may remain unused if no beneficial/reachable assignment exists.
+                solver.Add(sum(z_jks[ji, ki, si] for ki in range(num_H)) <= 1)
                 for ki in range(num_H):
                     solver.Add(z_jks[ji, ki, si] <= x_act[ki, si] + y[ki, si])
                     acc_sum = sum(sc["accessibility"][m][j_node][inst["nodes"]["hub_indices"][ki]] for m in range(num_M))
                     solver.Add(z_jks[ji, ki, si] <= acc_sum)
             else:
-                solver.Add(v_js[ji, si] == 0)
-                for ki in range(num_H): solver.Add(z_jks[ji, ki, si] == 0)
+                for ki in range(num_H):
+                    solver.Add(z_jks[ji, ki, si] == 0)
 
         for ki in range(num_H):
             k_node = inst["nodes"]["hub_indices"][ki]
@@ -165,7 +164,6 @@ def build_and_solve_milp(inst, w1=1.0, w2=0.0, eps_z1=None, eps_z2=None,
             for ki in range(num_H):
                 z1_expr += pi * inst["theta"][ki][ii][si] * z_iks[ii, ki, si]
         z1_expr += pi * sum(u_is[ii, si] * big_M for ii in range(num_I))
-        z1_expr += pi * sum(v_js[ji, si] * big_M for ji in range(num_J))
 
     z2_expr = sum(inst["scenarios"][si]["probability"] * z2_max_s[si] for si in range(num_S))
 
@@ -191,7 +189,7 @@ def build_and_solve_milp(inst, w1=1.0, w2=0.0, eps_z1=None, eps_z2=None,
             "Z1": z1_expr.solution_value(), "Z2": z2_expr.solution_value(),
             "X": [int(x[ki].solution_value() > 0.5) for ki in range(num_H)],
             "R": [q[ki].solution_value() / K_hub[ki] if K_hub[ki] > 0 else 0.0 for ki in range(num_H)],
-            "CV": sum(u_is[ii, si].solution_value() for ii in range(num_I) for si in range(num_S)) + sum(v_js[ji, si].solution_value() for ji in range(num_J) for si in range(num_S))
+            "CV": sum(u_is[ii, si].solution_value() for ii in range(num_I) for si in range(num_S))
         }
     return {"status": "INFEASIBLE"}
 
