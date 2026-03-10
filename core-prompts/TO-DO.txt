@@ -82,6 +82,7 @@ GOAL: MAKE EXPERIMENT 1 RELIABLE
 - [x] Implement exact solvers.
     - [~] Furthermore, tune them so they achieve best results (ideally, true Pareto front)
 - The baseline should be "smart" enough
+- Implement VNS-TS (baseline from Sunarin's paper)
 
 - [x] Update the MILP solver so that it apply the correct linearization formula. Debug it carefully, then re-run. Use weighted sum method instead of epsilon-constraint
 - [x] We have defined the milp_baseline.py solver. It produces result and runs quite fast. However:
@@ -96,11 +97,11 @@ GOAL: MAKE EXPERIMENT 1 RELIABLE
 
 - [x] Revamp and make the greedy heuristic smarter. Remember: Not giving it any metaheuristic capability (like GRASP, ACO or TS). Not give it access to the MCF decoder. The greedy should be close to manager's natural ad-hoc decision-making.
 
-- [ ] Update the BnB solver. For first-stage decision variables, enumerate through 2^|H| configurations for X. Then, for each opened hub, backtrack through 20 levels of hub inventory fillings from 0% to 100%. 
+- [^] Update the BnB solver. For first-stage decision variables, enumerate through 2^|H| configurations for X. Then, for each opened hub, backtrack through 20 levels of hub inventory fillings from 0% to 100%. 
 For second-stage decisions, under each scenario s, enumerate all configuration for z_{iks} and z_{jks} assignment variables. 
 From then, having some heuristics to assign the flow and remaining variables. Can re-use the greedy heuristics.
 
-- Add a new algorithm basline: VNS-TS, as in the paper "Capacitated single‐allocation hub location model for a flood relief distribution network coin.12374"
+- [~] Add a new algorithm basline: VNS-TS, as in the paper "Capacitated single‐allocation hub location model for a flood relief distribution network coin.12374"
 
 - [^] The results in experiment 1 show that: PB-NSGA performs poorly compared to MILP AWS. I see it stuck and converges to local optimum very soon.
 I also observed that: The inventory filling variables is overfitted to a single configuration.
@@ -120,7 +121,7 @@ Our algorithm overfitted.
   + Brainstorm to get more plausible ideas on your own
   + Note: Don't activate local search yet, it will be for a later phase.
 
-- [ ] Clean-up the current algorithm solver implementations so that it follows best practices and clean code.
+- [x] Clean-up the current algorithm solver implementations so that it follows best practices and clean code.
 
 Do RCA then suggest fixes.
 
