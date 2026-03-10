@@ -1,3 +1,15 @@
+======================
+IMPROVE EXPERIMENTAL METHODOLOGY
+
+- Improve the dataset by combinatorial generation technique. It should have 50 scenarios. Then rewrite the experimental methodology prose text in the paper.
+
+- Extend experiments 2 by:
+0. Add Pareto front for trade-off analysis. Pareto should compare PB-NSGA against a strong solultion method in literature.
+1. Measuring HV and IGD over 5000 generations, and reports at the milestones: 10,20,50,100,200,500,1000,2000,5000. Plot convergence. HV and IGD lines are plotted per each generation step (horizontal axis) in the same figure.
+2. 
+
+GOAL: IMRPOVE METHODOLOGY OF EXPERIMENTS 2
+
 - [x] Clean up `src\scripts`
 - [x] Information-rich map visualization figures
 - [~] Fix Lateral hub trans-shipment. In the figure I'm not seeing the Lateral Flow Arrow. Check and fix that. Is it due to solution, display or data?
@@ -126,13 +138,3 @@ Our algorithm overfitted.
 Do RCA then suggest fixes.
 
 
-======================
-IMPROVE EXPERIMENTAL METHODOLOGY
-
-- Improve the dataset by combinatorial generation technique. It should have 50 scenarios. Then rewrite the experimental methodology prose text in the paper.
-
-- Extend experiments 2 by:
-0. Add Pareto front for trade-off analysis.
-1. Measuring HV and IGD over 5000 generations, and reports at the milestones: 10,20,50,100,200,500,1000,2000,5000. Plot convergence. HV and IGD lines are plotted per each generation step (horizontal axis) in the same figure.
-
-2. 
