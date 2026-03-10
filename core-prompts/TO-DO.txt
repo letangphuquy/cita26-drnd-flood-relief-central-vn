@@ -1,17 +1,16 @@
 ======================
 IMPROVE EXPERIMENTAL METHODOLOGY
 
-- Improve the dataset by combinatorial generation technique. It should have 50 scenarios. Then rewrite the experimental methodology prose text in the paper.
+- [x] Improve the dataset by combinatorial generation technique. It should have 50 scenarios. Then rewrite the experimental methodology prose text in the paper.
 
-- Extend experiments 2 by:
-0. Add Pareto front for trade-off analysis. Pareto should compare PB-NSGA against a strong solultion method in literature (I choose VNS-TS).
+- EXTEND EXPERIMENTS 2 BY:
+[~] Add Pareto front for trade-off analysis. Pareto should compare PB-NSGA against a strong solultion method in literature (I choose VNS-TS).
 
 1. Measuring HV and IGD over 5000 generations, and reports at the milestones: 10,20,50,100,200,500,1000,2000,5000. Plot convergence. HV and IGD lines are plotted per each generation step (horizontal axis) in the same figure.
 2. 
 
 GOAL: IMRPOVE METHODOLOGY OF EXPERIMENTS 2
 
-- [x] Clean up `src\scripts`
 - [x] Information-rich map visualization figures
 - [~] Fix Lateral hub trans-shipment. In the figure I'm not seeing the Lateral Flow Arrow. Check and fix that. Is it due to solution, display or data?
  It seems like the model and the solver is omitting lateral hub trans-shipment. 
@@ -21,7 +20,7 @@ GOAL: IMRPOVE METHODOLOGY OF EXPERIMENTS 2
 - [~] The inventory filling variables is overfitted to a single configuration. 
 Our next problem: You can see the R decision variables look the same for all three solution. It looks like our algorithm overfitted. Do RCA then suggest fixes.
 
-- Apply the SAA methodology. Using combinatorial techniques to generate a diverse dataset consisting of 50 scenarios. You can read guide on SAA and OOS here:
+- [x] Apply the SAA methodology. Using combinatorial techniques to generate a diverse dataset consisting of 50 scenarios. You can read guide on SAA and OOS here:
 Here is the precise guidance on Sample Average Approximation (SAA) and Out-Of-Sample (OOS) evaluation, tailored directly to your MO-IHLNDP formulation.
 
 ### 1. Core Concepts
