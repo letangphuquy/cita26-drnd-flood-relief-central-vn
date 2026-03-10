@@ -446,11 +446,18 @@ To supplement critical logistics bottlenecks, the model triggers a reactive hub 
 
 \subsubsection*{Sample Average Approximation and Out-Of-Sample Validation}
 
-To evaluate whether PB-NSGA's solutions generalize beyond the three training scenarios, we validated the CV-Large Pareto front against two Out-Of-Sample tests. 
+To evaluate generalization beyond the three training scenarios, we adopted a two-stage SAA/OOS protocol aligned with stochastic-programming practice.
 
-First, we generated a Sample Average Approximation (SAA) set of 100 scenarios with randomized geographic flood risk decay and stochastic epicenter placements. Evaluating PB-NSGA's first-stage hub decisions and trained weights $\mathbf{W}$ on this unseen set yielded $0.00$ expected Constraint Violations (CV), confirming operational feasibility across a dense distribution of disaster realizations.
+\textit{Step 1 (In-sample SAA).} We generated a combinatorial SAA dataset with $N=100$ i.i.d. scenarios for CV-Large. Instead of sampling only from a single severity mix, scenarios were drawn from a profile bank spanning mild, severe, and extreme flood regimes with varying epicenter count, intensity range, accessibility disruption factor, and circuity coefficient. Each SAA scenario was assigned equal probability $\pi_s=1/N$. This larger in-sample set improves coverage of plausible disaster patterns while preserving tractable optimization time.
 
-Second, we confronted the trained model with an extreme Out-Of-Sample (OOS) \quo{Double Typhoon} event -- a catastrophic scenario featuring four simultaneous epicenters and a $3.5\times$ severity threshold outside the training distribution. PB-NSGA's stored priority-allocation strategy absorbed this shock with $0$ CV across all Pareto solutions, indicating that the learned hub-choice anchors $\mathbf{A}$ and priority weights $\mathbf{W}$ encode a robust emergency response policy rather than overfitting to training sample geometry.
+\textit{Step 2 (Out-of-sample evaluation).} Let $(\hat{x},\hat{q})$ denote first-stage hub-opening and pre-positioning decisions returned by SAA optimization. We then evaluated these fixed first-stage decisions on an independent adversarial OOS sample with $N'=10$ catastrophic scenarios (disjoint from SAA), each generated with high epicenter multiplicity and severe accessibility disruption. Recourse was solved per scenario and aggregated as:
+\[
+Z_1^{\mathrm{OOS}}(\hat{x},\hat{q})=
+\sum_{k\in\mathcal{H}}(F_k\hat{x}_k+c_k\hat{q}_k)+\frac{1}{N'}\sum_{s'=1}^{N'}Z_{1,s'}
+\]
+with the analogous computation for $Z_2^{\mathrm{OOS}}$.
+
+\textit{Step 3 (Gap analysis).} We report the SAA-OOS gap by comparing in-sample estimates $(\hat{Z}_1^N,\hat{Z}_2^N)$ against $(Z_1^{\mathrm{OOS}},Z_2^{\mathrm{OOS}})$. Small gaps indicate robust first-stage design; large positive gaps indicate optimizer's-curse overfitting and motivate increasing $N$ and repeating the SAA cycle.
 
 \subsubsection*{Methodological Framework for Decision Support}
 

@@ -66,6 +66,39 @@ To run the entire pipeline (Datasets → Exp 1 → Exp 2):
 | **Experiment 2 (Case Study)** | `./run_exp2_case_study.sh` | `.\run_exp2_case_study.bat` |
 | **Regenerate Datasets Only** | `./run_experiments.sh data` | `.\run_experiments.bat data` |
 
+### Dataset Regeneration (Detailed)
+
+Use this section when you need to rebuild dataset artifacts explicitly.
+
+1. Regenerate base CV instances (`cv_small_drnd.json`, `cv_large_drnd.json`):
+
+**Mac / Linux:**
+```bash
+./run_dataset.sh
+```
+
+**Windows:**
+```powershell
+.\run_dataset.bat
+```
+
+2. Regenerate SAA/OOS datasets for Experiment 2 (combinatorial protocol):
+
+**Mac / Linux:**
+```bash
+python src/scripts/data_generate_saa_oos.py --saa-scenarios 100 --oos-scenarios 10 --out-dir data/prep
+```
+
+**Windows:**
+```powershell
+python src\scripts\data_generate_saa_oos.py --saa-scenarios 100 --oos-scenarios 10 --out-dir data\prep
+```
+
+Key outputs written to `data/prep/`:
+- `cv_large_saa100.json` (in-sample SAA training set)
+- `cv_large_oos10.json` (hard OOS evaluation set)
+- `cv_large_saa50.json` and `cv_large_oos.json` (compatibility aliases for older scripts)
+
 ## 5. Manual Running and Analysis
 
 If you prefer to run specific stages or analysis scripts manually:
