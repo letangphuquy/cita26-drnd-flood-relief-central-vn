@@ -102,7 +102,21 @@ From then, having some heuristics to assign the flow and remaining variables. Ca
 
 - [~] The results in experiment 1 show tha: PB-NSGA performs poorly compared to MILP AWS. I see it stuck and converges to local optimum very soon.
 I also observed that: The inventory filling variables is overfitted to a single configuration.
-Our next problem: You can see the R decision variables look the same for all three solution. It looks like our algorithm overfitted.
+As you can see, the R decision variables look the same for all three solution. 
+Our algorithm overfitted.
+- [ ] Please think of standard ways to tune hyper-parameters for the proposed algorithm accordingly.
+- [~] Suggest some other mechanism to maintain persistent selection pressure rather than just stagnation book-keeping? For example, favor crossover between highly different parents. Or, add aging as an criteria (too old solution get mutated or replaced?). Or do we have better seeding strategy, that is, we inject |X| solutions that cover all different hubs to open?
+- [ ] Take a look at the AEGA `Adaptive_population_-App_Soft_Comp_2011` to see if we can adopt the idea easily to our algorithm without large re-design.
+- [ ] First design some local refinement operator heuristics. They should all be defined in a separated .hpp:
+  + Trimming inventory post-all-scenario evaluation
+  + Re-route lateral flow, adding or deducting flow as an mechanism to diversify flow configuration
+  + Open or close 1 hub (planned or reactive), then adjust the decisions.
+  + Change assignment of a demand or origin.
+  + Adapt the anchor hub per-individiual.
+  + Gradient-based optimization of (Z1, Z2) based on W.
+  + Refer to `intern`'s implementation
+  + Brainstorm to get more plausible ideas on your own
+  + Note: Don't activate local search yet, it will be for a later phase.
 
 Do RCA then suggest fixes.
 
