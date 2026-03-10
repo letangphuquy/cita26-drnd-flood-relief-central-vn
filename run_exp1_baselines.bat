@@ -63,7 +63,7 @@ IF %ERRORLEVEL% NEQ 0 (
     echo [Error] VNS-TS compilation failed.
     exit /b 1
 )
-"%SOLVER_DIR%\vns_ts_baseline.exe" "%DATA_CV%" --out "%RES1%\cv_small_vns_ts.json" --seed 42 --iter 140 --time-limit 60 --tabu-tenure 7 --kmax 3 --starts 10
+"%SOLVER_DIR%\vns_ts_baseline.exe" "%DATA_CV%" --out "%RES1%\cv_small_vns_ts.json" --seed 42 --iter 120 --time-limit 60 --tabu-tenure 5 --kmax 3 --starts 8
 
 REM ── Step 3: Run MILP Adaptive Weighted Sum ────────────────────────────────
 echo.

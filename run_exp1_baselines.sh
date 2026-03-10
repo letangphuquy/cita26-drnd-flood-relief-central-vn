@@ -79,11 +79,11 @@ fi
 "$SOLVER_DIR/vns_ts_baseline" "$DATA_CV" \
     --out "$RES1/cv_small_vns_ts.json" \
     --seed 42 \
-    --iter 140 \
+    --iter 120 \
     --time-limit 60 \
-    --tabu-tenure 7 \
+    --tabu-tenure 5 \
     --kmax 3 \
-    --starts 10
+    --starts 8
 
 # ── Step 3: Run MILP Adaptive Weighted Sum (unchanged) ───────────────────
 echo ""
