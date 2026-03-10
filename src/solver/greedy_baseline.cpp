@@ -106,7 +106,7 @@ Solution evaluate_subset(const vector<int> &open_set, double r_fill,
     ind.A[ii] = best_ki;
   }
   ind.W = {0.5, 0.5, 0.5, 0.5, 0.5, 0.5};
-  decode(ind, inst);
+  decode_legacy(ind, inst);
 
   Solution s;
   s.Z1 = ind.Z1;
@@ -289,7 +289,7 @@ int main(int argc, char *argv[]) {
       w = udist(rng);
 
     set_rolling_seed(base_seed + r + 10);
-    decode(ind, inst);
+    decode_legacy(ind, inst);
     push_solution(ind, "stochastic_r" + std::to_string(r));
   }
 
