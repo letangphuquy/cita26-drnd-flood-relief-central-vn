@@ -24,10 +24,10 @@ if [[ ! -f "$RES/cv_small_greedy.json" || ! -f "$RES/cv_small_milp_aws.json" ]];
   exit 1
 fi
 
-# Keep AEGA at the current best from prior sweep; now tune pm/pc on top.
-AEGA_MIN=180
-AEGA_MAX=260
-AEGA_STEP=20
+# Keep AEGA fixed at canonical defaults; tune pm/pc on top.
+AEGA_MIN=220
+AEGA_MAX=280
+AEGA_STEP=10
 
 PM_HIGHS=(0.35 0.40 0.45)
 PM_LOWS=(0.08 0.10 0.12)

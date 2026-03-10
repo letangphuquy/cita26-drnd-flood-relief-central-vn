@@ -52,8 +52,8 @@
     }
   ],
   "meta": {
-    "cpu_time_s": 0.951402,
-    "elapsed_s": 0.951816125,
+    "cpu_time_s": 0.958085,
+    "elapsed_s": 0.958254292,
     "enable_option3": false,
     "evaluations": 29717,
     "iter": 120,

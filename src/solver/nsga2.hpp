@@ -77,6 +77,7 @@ struct NSGAConfig {
   bool enable_hamming_tiebreak = true;   // Hamming tie-break in elitist select
   bool enable_x_niche_quota = true;      // preserve missing X niches
   bool enable_random_immigrants = true;  // guarded immigrant injection
+  bool use_legacy_seeding = false;       // rollback init seeding strategy
 };
 
 // ── Constrained comparison (crowded comparison with CV) ─────────────────────
@@ -458,6 +459,90 @@ vector<Individual> run_nsga2(const DRNDInstance &inst, const NSGAConfig &cfg) {
   }
   const char *algo_name = cfg.use_local_search ? "PB-NSMA" : "PB-NSGA";
   auto decode_in_place = [&](Individual &ind) { decode(ind, inst); };
+  int sample_tick = 0;
+  auto sample_individual = [&]() {
+    if (cfg.use_legacy_seeding)
+      return random_individual(inst);
+
+    Individual ind(inst.num_H, inst.num_I);
+    int max_open = std::max(1, inst.num_H * 3 / 5);
+    int tier = sample_tick++ % 3;
+    int lo = 1, hi = max_open;
+    if (tier == 0) {
+      hi = std::max(1, max_open / 3);
+    } else if (tier == 1) {
+      lo = std::max(1, max_open / 3);
+      hi = std::max(lo, (2 * max_open) / 3);
+    } else {
+      lo = std::max(1, (2 * max_open) / 3);
+      hi = max_open;
+    }
+    int n_open = (int)rand_int(lo, hi);
+
+    vector<int> hubs(inst.num_H);
+    std::iota(hubs.begin(), hubs.end(), 0);
+    shuffle_vec(hubs);
+    std::stable_sort(all(hubs), [&](int a, int b) {
+      return inst.F_hub[a] < inst.F_hub[b];
+    });
+    int pool = (tier == 2) ? inst.num_H : std::max(n_open, inst.num_H / 2);
+    pool = std::clamp(pool, n_open, inst.num_H);
+    std::shuffle(hubs.begin(), hubs.begin() + pool, rng);
+    for (int i = 0; i < n_open; i++)
+      ind.X[hubs[i]] = 1;
+
+    for (int k = 0; k < inst.num_H; k++) {
+      if (ind.X[k]) {
+        ind.R[k] = std::clamp(0.45 + 0.5 * rand01(), 0.0, 1.0);
+      } else {
+        ind.R[k] = 0.25 * rand01();
+      }
+    }
+
+    vector<int> open;
+    open.reserve(inst.num_H);
+    for (int k = 0; k < inst.num_H; k++) {
+      if (ind.X[k])
+        open.push_back(k);
+    }
+    if (open.empty()) {
+      int k = (int)rand_int(0, inst.num_H - 1);
+      ind.X[k] = 1;
+      open.push_back(k);
+    }
+
+    for (int ii = 0; ii < inst.num_I; ii++) {
+      int chosen = open[0];
+      double best_d = 1e100;
+      int abs_i = inst.demand_idx[ii];
+      for (int k : open) {
+        int abs_h = inst.hub_idx[k];
+        double dx = inst.lat[abs_i] - inst.lat[abs_h];
+        double dy = inst.lon[abs_i] - inst.lon[abs_h];
+        double d2 = dx * dx + dy * dy;
+        if (d2 < best_d) {
+          best_d = d2;
+          chosen = k;
+        }
+      }
+      if (rand01() < 0.20)
+        chosen = open[(int)rand_int(0, (int)open.size() - 1)];
+      ind.A[ii] = chosen;
+    }
+
+    const vector<vector<double>> w_templates = {
+        {0.75, 0.65, 0.50, 0.70, 0.35, 0.45},
+        {0.55, 0.80, 0.75, 0.40, 0.60, 0.35},
+        {0.85, 0.40, 0.35, 0.80, 0.50, 0.60},
+        {0.45, 0.55, 0.85, 0.55, 0.70, 0.30},
+    };
+    const vector<double> &wt = w_templates[(size_t)(sample_tick % (int)w_templates.size())];
+    for (int t = 0; t < (int)ind.W.size(); t++) {
+      double noise = 0.10 * (rand01() - 0.5);
+      ind.W[t] = std::clamp(wt[t] + noise, 0.0, 1.0);
+    }
+    return ind;
+  };
 
   // ── Initial population ───────────────────────────────────────────────────
   vector<Individual> pop;
@@ -465,7 +550,7 @@ vector<Individual> run_nsga2(const DRNDInstance &inst, const NSGAConfig &cfg) {
   cerr << "[" << algo_name << "] Init pop N=" << cur_pop_size << " gen=" << cfg.num_gen
        << " pm=" << cfg.pm_high << "→" << cfg.pm_low << "\n";
   while ((int)pop.size() < cur_pop_size) {
-    Individual ind = random_individual(inst);
+    Individual ind = sample_individual();
     decode_in_place(ind);
     pop.push_back(ind);
   }
@@ -642,7 +727,7 @@ vector<Individual> run_nsga2(const DRNDInstance &inst, const NSGAConfig &cfg) {
 
         for (int i = 0; i < target_imm; i++) {
           int at = replaceable[i];
-          pop[at] = random_individual(inst);
+          pop[at] = sample_individual();
           decode_in_place(pop[at]);
         }
         immigrants_used = target_imm;

@@ -101,7 +101,7 @@ GOAL: MAKE EXPERIMENT 1 RELIABLE
 For second-stage decisions, under each scenario s, enumerate all configuration for z_{iks} and z_{jks} assignment variables. 
 From then, having some heuristics to assign the flow and remaining variables. Can re-use the greedy heuristics.
 
-- [~] Add a new algorithm basline: VNS-TS, as in the paper "Capacitated single‐allocation hub location model for a flood relief distribution network coin.12374"
+- [x] Add a new algorithm basline: VNS-TS, as in the paper "Capacitated single‐allocation hub location model for a flood relief distribution network coin.12374"
 
 - [^] The results in experiment 1 show that: PB-NSGA performs poorly compared to MILP AWS. I see it stuck and converges to local optimum very soon.
 I also observed that: The inventory filling variables is overfitted to a single configuration.
