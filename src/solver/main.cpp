@@ -20,6 +20,7 @@
 //   g++ -O2 -std=c++17 main.cpp -o solver.exe
 
 #include "nsga2.hpp"
+#include "local_search.hpp" // LS operators (not yet activated in main loop)
 
 #include <chrono>
 #include <ctime>

@@ -2,7 +2,7 @@
   "meta": {
     "solver": "MILP_AWS_Baseline",
     "instance": "E:\\Computer Science\\Research\\project-sos (Quang-Vu Nguyen)\\CITA_paper\\data\\cv\\cv_small_drnd.json",
-    "total_elapsed_s": 4.416274785995483,
+    "total_elapsed_s": 4.886123180389404,
     "n_initial": 5,
     "delta_j": 0.1
   },

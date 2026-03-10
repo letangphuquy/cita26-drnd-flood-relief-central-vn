@@ -45,14 +45,6 @@ struct NSGAConfig {
   // for one generation to escape the local basin.
   int stagnation_threshold = 20; // gens without new X-config in rank-1
   int tournament_size = 2;       // base tournament size (binary)
-  // [F3] Random immigrant injection: fraction of pop replaced with fresh
-  // random individuals every immigrant_interval generations.
-  double immigrant_fraction = 0.10; // 10% of pop
-  int immigrant_interval = 20;      // every 20 gens
-  // [F6] Stagnation restart: if stagnation persists for restart_threshold
-  // generations, reinitialize restart_fraction of the population randomly.
-  int restart_threshold = 40;       // 2× stagnation_threshold
-  double restart_fraction = 0.30;   // 30% of pop
 };
 
 // ── Constrained comparison (crowded comparison with CV) ─────────────────────
@@ -335,6 +327,57 @@ void elitist_select(vector<Individual> &combined, int target_size) {
       break;
     }
   }
+
+  // ── [M1] X-Niche Quota Preservation ──────────────────────────────────────
+  // Guarantee at least 1 survivor per unique X-config that exists in the
+  // combined pool.  Without this, rare X-configs get crowding-killed when
+  // Pareto=N (all rank-1), because their Z1/Z2 sits in a dense region.
+  // Cost: at most 2^H reserved slots (31 for H=5, ~15% of pop=200).
+  {
+    // 1. Index new_pop by X-config
+    std::map<vector<int>, vector<int>> x_to_idx; // X → indices in new_pop
+    for (int i = 0; i < (int)new_pop.size(); i++)
+      x_to_idx[new_pop[i].X].push_back(i);
+
+    // 2. Collect X-configs present in *combined* pool but missing from new_pop
+    std::set<vector<int>> missing;
+    for (const auto &ind : combined) {
+      if (x_to_idx.find(ind.X) == x_to_idx.end())
+        missing.insert(ind.X);
+    }
+
+    // 3. For each missing X-config, find its best representative in combined
+    //    and swap it in for the worst member of the most over-represented niche.
+    for (const auto &mx : missing) {
+      // Find best representative of missing config (lowest rank, then highest crowding)
+      int best_src = -1;
+      for (int i = 0; i < (int)combined.size(); i++) {
+        if (combined[i].X != mx) continue;
+        if (best_src < 0 ||
+            combined[i].rank < combined[best_src].rank ||
+            (combined[i].rank == combined[best_src].rank &&
+             combined[i].crowding > combined[best_src].crowding))
+          best_src = i;
+      }
+      if (best_src < 0) continue;
+
+      // Find the most over-represented niche (largest count, > 1 member)
+      vector<int> *largest_niche = nullptr;
+      for (auto &[xk, idxs] : x_to_idx) {
+        if ((int)idxs.size() <= 1) continue;
+        if (!largest_niche || (int)idxs.size() > (int)largest_niche->size())
+          largest_niche = &idxs;
+      }
+      if (!largest_niche || largest_niche->empty()) break; // no room
+
+      // Replace the worst member (last after sort = lowest crowding) of that niche
+      int victim = largest_niche->back();
+      largest_niche->pop_back();
+      new_pop[victim] = combined[best_src];
+      x_to_idx[mx].push_back(victim);
+    }
+  }
+
   combined = std::move(new_pop);
 }
 
@@ -343,20 +386,18 @@ void elitist_select(vector<Individual> &combined, int target_size) {
 // Returns a fingerprint string of all unique X-configs in rank-1 front.
 // Used to detect when the Pareto front has stopped evolving.
 string rank1_fingerprint(const vector<Individual> &pop) {
-  // Collect all rank-1 (Z1, Z2) pairs as strings for canonical identification.
-  vector<string> configs;
+  // Fingerprint the set of unique X-configs in rank-1 front.
+  // Using X vectors (not Z1/Z2) so stagnation fires only when hub topology stops changing.
+  std::set<vector<int>> configs;
   for (const auto &ind : pop) {
     if (ind.rank != 1)
       continue;
-    std::stringstream ss;
-    ss << std::fixed << std::setprecision(2) << ind.Z1 << "," << ind.Z2;
-    configs.push_back(ss.str());
+    configs.insert(ind.X);
   }
-  std::sort(configs.begin(), configs.end());
-  configs.erase(std::unique(configs.begin(), configs.end()), configs.end());
   string fp;
-  for (const auto &c : configs) {
-    fp += c;
+  for (const auto &xv : configs) {
+    for (int b : xv)
+      fp += ('0' + b);
     fp += '|';
   }
   return fp;
@@ -416,38 +457,6 @@ vector<Individual> run_nsga2(const DRNDInstance &inst, const NSGAConfig &cfg) {
              << " W-hypermut on\n";
         boosting = true;
       }
-    }
-
-    // ── [F6] Stagnation restart: reinitialize 30% of pop if deeply stuck ────
-    if (stag_gens >= cfg.restart_threshold && stag_gens % cfg.restart_threshold == 0) {
-      int n_restart = std::max(1, (int)(POP * cfg.restart_fraction));
-      cerr << "[Gen " << gen << "] Deep stagnation (" << stag_gens
-           << " gens) — restarting " << n_restart << " individuals\n";
-      // Sort pop: worst-ranked / lowest-crowding first → replace them
-      std::sort(all(pop), [](const Individual &a, const Individual &b) {
-        if (a.rank != b.rank) return a.rank > b.rank;
-        return a.crowding < b.crowding;
-      });
-      for (int ri = 0; ri < n_restart && ri < (int)pop.size(); ri++) {
-        pop[ri] = random_individual(inst);
-        decode(pop[ri], inst);
-      }
-      elitist_select(pop, POP);
-    }
-
-    // ── [F3] Random immigrant injection ─────────────────────────────────────
-    if (cfg.immigrant_interval > 0 && gen % cfg.immigrant_interval == 0) {
-      int n_imm = std::max(1, (int)(POP * cfg.immigrant_fraction));
-      // Replace the worst n_imm individuals
-      std::sort(all(pop), [](const Individual &a, const Individual &b) {
-        if (a.rank != b.rank) return a.rank > b.rank;
-        return a.crowding < b.crowding;
-      });
-      for (int ri = 0; ri < n_imm && ri < (int)pop.size(); ri++) {
-        pop[ri] = random_individual(inst);
-        decode(pop[ri], inst);
-      }
-      elitist_select(pop, POP);
     }
 
     // ── Generate offspring ─────────────────────────────────────────────────
