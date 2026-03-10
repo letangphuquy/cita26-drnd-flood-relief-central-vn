@@ -94,7 +94,7 @@ GOAL: MAKE EXPERIMENT 1 RELIABLE
     - Re-run the experiment 1
 - [x] Apply the strategy adaptive weighted sum as in the paper "Adaptive weighted-sum method for bi-objective optimization s00158-004-0465-1"
 
-- [ ] Revamp and make the greedy heuristic smarter. Remember: Not giving it any metaheuristic capability (like GRASP, ACO or TS). Not give it access to the MCF decoder. The greedy should be close to manager's natural ad-hoc decision-making.
+- [x] Revamp and make the greedy heuristic smarter. Remember: Not giving it any metaheuristic capability (like GRASP, ACO or TS). Not give it access to the MCF decoder. The greedy should be close to manager's natural ad-hoc decision-making.
 
 - [ ] Update the BnB solver. For first-stage decision variables, enumerate through 2^|H| configurations for X. Then, for each opened hub, backtrack through 20 levels of hub inventory fillings from 0% to 100%. 
 For second-stage decisions, under each scenario s, enumerate all configuration for z_{iks} and z_{jks} assignment variables. 
