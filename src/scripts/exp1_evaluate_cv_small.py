@@ -7,6 +7,8 @@ STATUS: Active — called from run_exp1_baselines.bat / run_exp1_baselines.sh
 Loads results from all available algorithms for the CV-Small instance:
     • VNS-TS Baseline         (results/exp1/cv_small_vns_ts.json)
             produced by vns_ts_baseline(.exe)
+    • GWO-HD Baseline         (results/exp1/cv_small_gwo_hd.json)
+            produced by gwo_hd_baseline(.exe)
   • Greedy Heuristic         (results/exp1/cv_small_greedy.json)
       produced by greedy_baseline.exe  --restarts 500 --seed 42
   • MILP Adaptive Weighted Sum  (results/exp1/cv_small_milp_aws.json)
@@ -29,6 +31,7 @@ Usage (canonical, from project root with .venv active):
       --results-exp1 results/exp1 \
       --ours   results/exp1/cv_small_pb_nsga.json \
     --vns-ts results/exp1/cv_small_vns_ts.json \
+            --gwo-hd results/exp1/cv_small_gwo_hd.json \
       --greedy results/exp1/cv_small_greedy.json \
       --milp-aws results/exp1/cv_small_milp_aws.json \
       --milp-eps results/exp1/cv_small_milp_eps.json
@@ -192,6 +195,7 @@ def main():
     parser.add_argument("--results-exp2", default=None, help="Path to results/exp2/")
     parser.add_argument("--bb",      default=None, help="Explicit path to BB result JSON")
     parser.add_argument("--vns-ts",  default=None, help="Explicit path to VNS-TS result JSON")
+    parser.add_argument("--gwo-hd",  default=None, help="Explicit path to GWO-HD result JSON")
     parser.add_argument("--greedy",  default=None, help="Explicit path to Greedy result JSON")
     parser.add_argument("--milp", default=None, help="Legacy alias for --milp-aws")
     parser.add_argument("--milp-aws", default=None, help="Explicit path to MILP AWS result JSON")
@@ -210,6 +214,7 @@ def main():
 
     greedy_path = args.greedy or os.path.join(exp1_dir, "cv_small_greedy.json")
     vns_ts_path = args.vns_ts or os.path.join(exp1_dir, "cv_small_vns_ts.json")
+    gwo_hd_path = args.gwo_hd or os.path.join(exp1_dir, "cv_small_gwo_hd.json")
     milp_aws_path = args.milp_aws or args.milp or os.path.join(exp1_dir, "cv_small_milp_aws.json")
     milp_eps_path = args.milp_eps or os.path.join(exp1_dir, "cv_small_milp_eps.json")
 
@@ -243,6 +248,7 @@ def main():
 
     bb_pts,     bb_meta     = safe_load(bb_path)
     vns_ts_pts, vns_ts_meta = safe_load(vns_ts_path)
+    gwo_hd_pts, gwo_hd_meta = safe_load(gwo_hd_path)
     greedy_pts, greedy_meta = safe_load(greedy_path)
     milp_aws_pts, milp_aws_meta = safe_load(milp_aws_path)
     milp_eps_pts, milp_eps_meta = safe_load(milp_eps_path)
@@ -257,6 +263,7 @@ def main():
     milp_eps_wall, milp_eps_cpu_val = get_time(milp_eps_meta)
     bb_wall,   bb_cpu_val   = get_time(bb_meta)
     vns_ts_wall, vns_ts_cpu_val = get_time(vns_ts_meta)
+    gwo_hd_wall, gwo_hd_cpu_val = get_time(gwo_hd_meta)
     greedy_wall, greedy_cpu_val = get_time(greedy_meta)
 
     pbnsga_runs = []
@@ -271,6 +278,7 @@ def main():
 
     print(f"\n[Data] BB solutions      : {len(bb_pts)}")
     print(f"[Data] VNS-TS solutions  : {len(vns_ts_pts)}")
+    print(f"[Data] GWO-HD solutions  : {len(gwo_hd_pts)}")
     print(f"[Data] Greedy solutions  : {len(greedy_pts)}")
     print(f"[Data] MILP AWS solutions: {len(milp_aws_pts)}")
     print(f"[Data] MILP EPS solutions: {len(milp_eps_pts)}")
@@ -283,6 +291,8 @@ def main():
         scale_samples["Greedy"] = np.median([p[0] for p in greedy_pts])
     if vns_ts_pts:
         scale_samples["VNS-TS"] = np.median([p[0] for p in vns_ts_pts])
+    if gwo_hd_pts:
+        scale_samples["GWO-HD"] = np.median([p[0] for p in gwo_hd_pts])
     if milp_aws_pts:
         scale_samples["MILP AWS"] = np.median([p[0] for p in milp_aws_pts])
     if milp_eps_pts:
@@ -309,6 +319,8 @@ def main():
         [bb_pts] if bb_pts else []
     ) + (
         [vns_ts_pts] if vns_ts_pts else []
+    ) + (
+        [gwo_hd_pts] if gwo_hd_pts else []
     ) + (
         [greedy_pts] if greedy_pts else []
     ) + (
@@ -378,6 +390,9 @@ def main():
 
     evaluate_single("VNS-TS", [vns_ts_pts] if vns_ts_pts else [[]])
     results["VNS-TS"]["wall"], results["VNS-TS"]["cpu"] = vns_ts_wall, vns_ts_cpu_val
+
+    evaluate_single("GWO-HD", [gwo_hd_pts] if gwo_hd_pts else [[]])
+    results["GWO-HD"]["wall"], results["GWO-HD"]["cpu"] = gwo_hd_wall, gwo_hd_cpu_val
     
     evaluate_single("MILP AWS", [milp_aws_pts] if milp_aws_pts else [[]])
     results["MILP AWS"]["wall"], results["MILP AWS"]["cpu"] = milp_aws_wall, milp_aws_cpu_val
@@ -415,7 +430,7 @@ def main():
             return f"{igd_m:.3f} ± {igd_s:.3f}"
         return f"{igd_m:.3f}"
 
-    for name in ["Greedy", "VNS-TS", "MILP AWS", "MILP EPS", "BB-Exact", "PB-NSGA"]:
+    for name in ["Greedy", "VNS-TS", "GWO-HD", "MILP AWS", "MILP EPS", "BB-Exact", "PB-NSGA"]:
         r = results[name]
         w_str = f"{r['wall']:.1f}" if not np.isnan(r["wall"]) else "—"
         c_str = f"{r['cpu']:.1f}" if not np.isnan(r["cpu"]) else "—"
@@ -430,6 +445,7 @@ def main():
     # ── LaTeX table row ─────────────────────────────────────────────────────
     g = results["Greedy"]
     v = results["VNS-TS"]
+    gw = results["GWO-HD"]
     m_aws = results["MILP AWS"]
     m_eps = results["MILP EPS"]
     b = results["BB-Exact"]
@@ -441,6 +457,10 @@ def main():
     vns_hv_str  = f"${v['hv_mean']:.3f}$" if vns_ts_pts else "$-$"
     vns_igd_str = f"${v['igd_mean']:.3f}$" if (vns_ts_pts and np.isfinite(v["igd_mean"])) else "$-$"
     vns_t_str   = f"${v['wall']:.1f}$" if vns_ts_pts else "$-$"
+
+    gwo_hv_str  = f"${gw['hv_mean']:.3f}$" if gwo_hd_pts else "$-$"
+    gwo_igd_str = f"${gw['igd_mean']:.3f}$" if (gwo_hd_pts and np.isfinite(gw["igd_mean"])) else "$-$"
+    gwo_t_str   = f"${gw['wall']:.1f}$" if gwo_hd_pts else "$-$"
 
     if milp_aws_pts:
         milp_aws_hv_str  = f"${m_aws['hv_mean']:.3f}$"
@@ -477,6 +497,8 @@ def main():
           f" {greedy_hv_str} & {greedy_igd_str} & $\\mathbf{{<0.1}}$" + latex_eol)
     print(r"VNS-TS Baseline                 &"
           f" {vns_hv_str} & {vns_igd_str} & {vns_t_str}" + latex_eol)
+    print(r"GWO-HD Baseline                 &"
+          f" {gwo_hv_str} & {gwo_igd_str} & {gwo_t_str}" + latex_eol)
     print(r"MILP (Adaptive Weighted Sum)    &"
           f" {milp_aws_hv_str} & {milp_aws_igd_str} & {milp_aws_t_str}" + latex_eol)
     print(r"MILP (Epsilon Constraint)       &"
@@ -492,7 +514,7 @@ def main():
     with open(out_csv, "w", newline="") as fh:
         writer = csv.writer(fh)
         writer.writerow(fields)
-        for name in ["Greedy", "VNS-TS", "MILP AWS", "MILP EPS", "BB-Exact", "PB-NSGA"]:
+        for name in ["Greedy", "VNS-TS", "GWO-HD", "MILP AWS", "MILP EPS", "BB-Exact", "PB-NSGA"]:
             r = results[name]
             writer.writerow([
                 name, r["n_runs"],

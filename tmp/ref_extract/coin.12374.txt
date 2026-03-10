@@ -1,0 +1,948 @@
+
+--- PAGE 1 ---
+Received: 22 June 2019 Revised: 22 May 2020 Accepted: 28 May 2020
+DOI:10.1111/coin.12374
+ORIGINAL ARTICLE
+Capacitated single-allocation hub location
+model for a flood relief distribution network
+Ornurai Sangsawang Sunarin Chanta
+DepartmentofIndustrialManagement,
+KingMongkut’sUniversityofTechnology
+NorthBangkok,Prachinburi,Thailand
+Correspondence
+OrnuraiSangsawang,Departmentof
+IndustrialManagement,KingMongkut’s
+UniversityofTechnologyNorthBangkok,
+Prachinburi,Thailand.
+Email:ornurai.s@fitm.kmutnb.ac.th
+Abstract
+In disaster management, the logistics for disaster relief
+mustdealwithuncontrolledvariables,includingtrans-
+portation difficulties, limited resources, and demand
+variations.Inthiswork,anoptimizationmodelbasedon
+the capacitated single-allocation hub location problem
+is proposed to determine an optimal location of flood
+relieffacilitieswiththeadvantageofeconomiesofscale
+to transport commodities during a disaster. The objec-
+tive is to minimize the total transportation cost, which
+dependsonthefloodseverity.Thetraveltimeisbounded
+to ensure that survival packages will be delivered to
+victims in a reasonable time. Owing to complexity of
+the problem, a hybrid algorithm is developed based
+on a variable neighborhood search and tabu search
+(VNS-TS).ThecomputationalresultsshowthattheVNS
+foundtheoptimalsolutionswithina2%gap,whilethe
+proposedVNS-TSfoundtheoptimalsolutionwitha0%
+gap.AcasestudyofseverefloodinginThailandispre-
+sentedwithconsiderationofrelatedparameterssuchas
+waterlevel,hubcapacity,anddiscountfactors.Sensitiv-
+ity analyses on the number of flows, discount factors,
+capacity, and bound length are provided. The results
+indicated that demand variation has an impact on the
+transportationcost,numberofhubs,androutepatterns.
+KEYWORDS
+flood,hublocation,optimization,Tabusearch,variable
+neighborhoodsearch
+Computational Intelligence.2020;1–28. wileyonlinelibrary.com/journal/coin ©2020WileyPeriodicalsLLC. 1
+
+
+
+--- PAGE 2 ---
+2
+ SANGSAWANGandCHANTA
+1 INTRODUCTION
+Natural disasters lead to human suffering, especially in situations in which many victims need
+assistanceatthesametimeunderuncontrollable emergencyconditions.Examplesofsuchdis-
+astersincludeearthquakes,floods,droughts,hurricanes,andepidemics.Torelievethesuffering,
+assistance such as survival packages, medications, and rescue teams need to be distributed as
+rapidly as possible. In this case, the transportation structure is a key factor affecting the deliv-
+ery time. Generally, assistance is provided by many organizations, for example, public and
+private organizations and government agencies, while the needs of victims are also spread
+out over the affected areas. Thus, independent shipments from an origin to a destination can
+lead to high costs and unusually long delivery times. To speed up the delivery process, we
+can develop a design to establish hubs where supplies from different sources can be grouped
+and distributed in large quantities for delivery to the final destinations. These hubs serve as
+relief centers and have functions including receiving supplies, determining personnel needs,
+sorting packages, and distributing packages to victims. Many significant factors affect relief
+operations, such as the number of volunteers, number of victims, available equipment, and
+locations of victims in affected areas, including the locations of relief centers. During disas-
+ters in particular, it is necessary to manage these uncontrolled factors against the limitation
+of available resources and difficulty of transportation. Unlike in a business network flow, in
+which the overall system cost is a priority and those in remote areas are left behind, a focus
+on the sufferers’ satisfaction and travel assurance capability should be imposed in disaster
+management.
+1
+In this study, we determine the locations of relief centers using a hub location problem
+(HLP), in which nodes represent sources of help and destinations of needs, and hubs repre-
+sent relief centers. A transportation network during a flood disaster is created by establishing
+hubs and assigning nodes to the hubs to minimize total transportation costs. The HLP is a
+type of facility location problem that aims to identify the locations of various facilities such
+as warehouses,2 service centers,3 and rescue units.4 There are several different types of hub
+problems. The differences are based on related factors such as the capacity of the facilities,
+number of hubs to be established, number of hubs allowed to connect with nodes, and model
+objective. The capacitated single-allocation HLP (CSAHLP) limits the capacity of the facilities,
+which is the opposite of the uncapacitated single-allocation hub location problem (USAHLP),
+which does not consider the facility capacities. In the uncapacitated single-allocationp-hub
+location problem (USApHLP) and the capacitated single allocationp-hub location problem
+(CSApHLP), the number of hubs is already known or fixed as equal top.T h ed e m a n d
+node assignment to hub locations is commonly classified into two types: the uncapacitated
+multiple-allocation p-hublocationproblem(UMA pHLP)andthecapacitatedmultiple-allocation
+p-hublocationproblem(CMA pHLP).Demandnodesmayroutethrougheitherasinglehubor
+several hubs. Moreover, there are specific types of hub location problems based on the objec-
+tive function employed, such as the uncapacitated single allocationp-hub median problem
+(UMApHMP) and the uncapacitated single allocationp-hub center problem (UMApHCP). Dif-
+ferenttypesofhublocationproblemmodelsaredetailedinFarahanietal
+5 andMahmutogullari
+and Kara.6 However, these general models are applicable for typical transportation problems
+only and not for transportation during a flood disaster. Thus, we developed an appropri-
+ate model for this particular situation, which considers the limitations and involved variable
+changes.
+
+
+--- PAGE 3 ---
+SANGSAWANGandCHANTA
+ 3
+WeproposeanextendedversionoftheCSAHLP,inwhichthenumberofhubsisunknown,
+thedemandnodesareroutedtosinglehubs,andthehubshavealimitedcapacity.Theoptimal
+number of hubs is investigated by considering the fixed costs of locating the hub. The opti-
+mal routes from sources to destinations are assigned by considering the travel cost between
+pairs. Important factors that affect transportation during flood disasters are also considered,
+such as different water levels, the maximum distance from nodes to hubs, and limitation of
+hub capacities. The number of variables and large scales of real problems can further com-
+plicate the issue. In addition, hub location problems areNP-hard problems, consisting of
+two subproblems: locating the hubs and allocating nodes to hubs,7 which can be solved in
+polynomialtime.
+Inthiscase,anexactmethodisnotpractical.Thus,wedevelopahybridalgorithm,thevari-
+ableneighborhoodsearchwithtabusearch(VNS-TS),tosolvetheproblem.Theperformanceof
+the algorithm is validated by a comparison with the VNS using Australian Post (AP) data. The
+proposedalgorithmisthenappliedtosolveareal-worldfloodingcasestudyinThailand.Thepro-
+posedalgorithmshowsanefficientperformancewithacceptablesolvingtimeandhighsolution
+quality.
+The remainder of this article is organized as follows. A brief review of related literature
+is provided in Section 2, followed by the details and formulations of the proposed model in
+Section3.Next,wedescribethedetailsoftheVNSanditsintegrationwiththeTSinSection4.
+In Section 5, experiments are conducted to test the performance of the proposed algorithm
+using the standard problem, and then in Section 6, we present a real-world case study using
+data collected from the severe flooding in Thailand in 2011. In Section 7, a sensitivity analysis
+of the related factors is provided. Finally, conclusions are discussed with a direction for future
+research.
+2 LITERATURE REVIEW
+2.1 Applications of hub location problems
+Hub location problems are applied to solve distribution problems in many systems such as
+airlines,8-11 postalnetworks,12-14 andtransportationsystems. 15-18
+Thebasicstructureofhublocationproblemsandnetworkdesignsiscomposedofnodesand
+hubs, where commodities are shipped from node to node via hubs. We take advantage of the
+economiesofscalebytransferringflowsbetweenhubs.Intransportationproblems,therearespe-
+cialtypesofhublocationsforwhichtheformulationsareadjustedtosolvedifferentsituations.
+Berman et al19 investigated the location of a facility and several transfer points, in which the
+transferpointsserveascollectionpointsofdemandsthatneededtheservicefromacentralfacil-
+ity.Threeheuristics,thedecentapproach,simulatedannealing(SA),andTS,weredevelopedto
+solve the problem. The computational results showed that SA performed the best among these
+three heuristics. Chong et al20 considered a problem of scheduling and routing shipments in a
+hybridhubnetwork,inwhichdirectdeliverywasallowed,andasetofintershipmenttimeswas
+given.Theobjectivewastominimizethetransportationandinventory holdingcosts.Themul-
+tiple frequency hybrid system (MFHS) heuristic procedure was proposed to solve the problem.
+Theprocedurestartsbydecomposingthenetworkintoaseriesofsinglelinkswithasinglesup-
+plierandcustomerandthensearchesforpossibleimprovementsinthenetworktofindthebest
+route.Correiaetal
+21 studiedacapacitatedsingle-assignmenthublocationproblemwithmultiple
+
+
+--- PAGE 4 ---
+4
+ SANGSAWANGandCHANTA
+capacity levels, in which the size of the hubs was a decision variable. They proposed for-
+mulations and valid inequalities to solve the problem. Kartal et al22 proposed a single allo-
+cation p-hub median location and routing problem, for which they considered the routing
+between nodes in a network. Two heuristics were proposed: the multi-start SA and ant colony
+system(ACS).
+Oneimportantfactorthathastobeconsideredintransportationisresponsetime,especially
+during a disaster. Because the objective is to provide timely help, some studies focus on the
+response time or time to transfer supplies from hub to node in addition to the design of the
+relief network. Yaman and Elloumi23 proposed a starp-hub center problem and a starp-hub
+medianproblemwithboundedpathlengthsfordesigningatelecommunicationnetwork.Hasan-
+zadehandBashiri
+24 designedarelieflogisticsnetworkfordisasterpreparednessbyconsidering
+emergency conditions in which relief operations can be performed for a node if it is inside
+of the relief radius. The proposed model is based on the hub covering location problem, and
+Lagrangianrelaxationwasselectedtosolvetheproblem.Xing 25 presentedanemergencymate-
+rial collecting model of a disaster with a fuzzy collecting time, capacity limitation, and time
+constraint on transferring, and a particle swarm optimization (PSO) algorithm was developed
+to solve the problem. Martins de Sá et al26 improved the service level of a multiple alloca-
+tion incomplete hub location problem by adding a service time requirement. The problem was
+solved by using the Benders decomposition algorithm. Khodemani-Yazdi et al27 presented a
+bi-objective hierarchical hub location problem to locate servicing centers, with the objective of
+minimizing the total cost and maximum route length. A hybrid SA was proposed to solve the
+problem.
+In most studies of hub location problems, the parameters are assumed to be certain values
+underusualconditions.Forexample,traveltimeisdirectlyproportionaltodistance;however,in
+practice, it might vary under different conditions such as environment, traffic, and road condi-
+tions.Manyworkshavebeenproposedtoestimatetraveltimeandotherparametersconsidering
+theoperationalenvironment.Yangetal 28 consideredthe p-hubcenterproblemwithanuncertain
+traveltimecharacterizedbynormalfuzzyvectorsforthedeliveryofperishableortime-sensitive
+systems.Theobjectivewastominimizethemaximumtraveltimebetweenanyorigin-destination
+pair. A hybrid algorithm, incorporating a genetic algorithm (GA) and local search (LS), called
+GALS,wasdevelopedtosolvetheproblem,anditwastestedonsimulatedproblems.Theresults
+showed that GALS performed better than the standard GA in terms of solution and runtime.
+Sadeghi et al
+29 proposed a stochastic approach for a reliablep-hub covering location problem,
+in which the objectives were to minimize the total transportation cost and to obtain the maxi-
+mumflowscarriedbythenetwork,whenitslinkcapacitiesdependedonstochasticconditions,
+suchasdailytrafficanddisaster.Thedifferentialevolution(DE)algorithmwasdevelopedtosolve
+theproblem.GaoandQin 30 modeledthe p-hubcenterproblemandconsideredtraveltimeasan
+uncertainvariablebasedonexpertsubjectivebeliefinthecaseofalackofdata.Alumuretal 31con-
+sideredservicetimeandcongestionatthehub.Theservicetimereferstothetraveltimebetween
+the node and hub and serving time at the hub, where the serving time depends on the conges-
+tionlevelatthehub.Mohammadietal 32 investigatedsingle-allocation p-hublocationproblems
+andtheeffectofuncertaintiesondeliveries.Ahybridalgorithm,composedofaGAandVNS,was
+proposedtosolvetheproblem.
+Inourproblem,weconsiderparametersaffectedbyfloodwaterlevelssuchastransportation
+cost,fixedcost,andtraveltimebetweennodesandhubs.Inthecaseofdisastersituationsespe-
+cially,victimsmaynotreceivereliefpackagesintime,whichhasaneffectontheirlives.These
+factorsareconsideredintheproposedmodel.
+
+
+--- PAGE 5 ---
+SANGSAWANGandCHANTA
+ 5
+2.2 Solution methods for the hub location problem
+Thehublocationproblemisknownasan NP-hardproblem,whichmeansitisdifficulttosolve
+or can be solved in polynomial time. Therefore, these types of problems require efficient solu-
+tion methods. Here, we address related works of single hub location problems by highlighting
+the methodology that has been developed for solving them. One well-recognized hub location
+problemistheuncapacitatedsingleallocation p-hubmedianproblem(USA pHMP),inwhichthe
+objective is to minimize the total transportation cost, while the costs of establishing hubs are
+ignored. The problem was first proposed as a quadratic integer formulation by O’Kelly.33 Sev-
+eralheuristicapproaches,suchasaTSbyKlincewincz 34 andSkorin-KapovandSkorin-Kapov 35;
+SA by Ernst and Krishnamoorthy36; path-relinking (PR) by Pérez et al37; GA by Kratica et al38;
+andgeneralVNSbyIli ´cetal, 39 havebeendevelopedtosolvetheUSApHMP.Recently,forsolv-
+ingtheUSAHLP,Mari ´cetal 40 proposedamemeticalgorithm(MA),inwhichtwoefficientlocal
+searcheswereusedtoimproveboththelocationandallocationpartsoftheproblem.Inaddition,
+Abyazi-SaniandGhanbari 41 proposedanefficientTS,inwhichtheTScomputesthechangesin
+theobjectivefunction’svalueineachmove.
+The single allocation hub location problem with fixed costs was formulated by O’Kelly.42
+Campbell43 developedalinearintegerformulationforsolvingthecapacitatedlocationproblem.
+Ernst and Krishnamoorthy44 presented a mixed integer linear programming method for solv-
+ing capacitated single allocation hub location problems. The SA and random descent heuristic
+were also proposed. For small-sized problems, the random descent heuristic was comparable.
+However, the SA was comparable for large-sized problems. Ernst’s algorithms can solve prob-
+lems with sizes up to 50 nodes. Yaman and Carello45 considered the cost of using an edge as
+a stepwise function and had a capacity constraint on both the incoming and outgoing flows at
+hubs.Theyproposedaheuristicmethodthatdividedtheproblemintosubproblems:locationand
+assignment,inwhichthelocationsubproblemwassolvedbyTS,andthentheassignmentsub-
+problemwassolvedbyagreedyalgorithm.Stanimirovi ´c46 andKraticaetal 47 proposedaGAfor
+solving the CSAHLP, in which a caching technique was applied to improve the computational
+time.TheirGAsshowedagoodperformanceonbothsmallandlargeproblems.Randall
+48 com-
+pared four types of the ant colony optimization (ACO) with SA for solving the CSAHLP, and
+theirresultsshowedthatACOsperformedsignificantlybetterthanSAintermsoftheobjective
+values for small-sizedproblems.Hoffetal 49 consideredthe CSAHLPwith modular linkcapac-
+ities, in which the capacity of the edges between hubs was increased in a modular way. They
+applied a memory structure to the well-known TS, in which PR was applied as a post-process,
+andtheexperimentsshowedthatthememorystructureperformedwell.Yangetal 50 developed
+anMAtosolvetheCSAHLPwithroutingproblem,inwhichcollectionanddeliverytourswere
+considered.
+Therearesignificantdifferencesbetweenpreviousstudiesandourwork.Table1providesa
+summaryofpreviousworks,includingthemodelobjective,constraintconsideration,andsolu-
+tion method. Note that we listed related HLP models, which are the USApHMP and CSAHLP.
+Theproposedmodelconsidersanimportantissueofflooding,theheightofthewaterlevel.This
+has an effect on other parameters such as travel time, cost, and type of vehicles; therefore, the
+modelcancapturetherealcharacteristicsofthelogisticsduringaflooddisaster.Asourgoalis
+to solve real-world problems, we have to consider a large-scale problem and a large number of
+variables, which make the problem more complex and difficult to solve. Therefore, we need to
+construct an efficient solution method. Based on the previous works reviewed, we developed a
+hybridalgorithm,VNS-TS,whichcombinedtwosolutionmethodsthatshowedhighperformance
+
+
+--- PAGE 6 ---
+6
+ SANGSAWANGandCHANTA
+TABLE 1 Summaryofpreviousworksonhublocationproblems(USA pHMPandCSAHLP)
+Objective Consideration
+Authors Year
+Min
+travel cost
+Min
+establish
+cost
+Hub
+capacity
+Path
+length
+Travel
+time
+variation
+Height
+of flood
+Solution
+method
+Klincewincz
+34 1992 ✓ TS
+Skorin-Kapovetal 35 1994 ✓ TS
+Abyazi-Sani
+andGhanbari41
+2016 ✓ TS
+Ernst
+andKrishnamoorthy36
+1996 ✓ SA
+Pérezetal37 2007 ✓ PR
+Kraticaetal 38 2007 ✓ GA
+Ili´cetal 39 2010 ✓ VNS
+Mari´cetal 40 2013 ✓ MA
+Ernst
+andKrishnamoorthy44
+1999 ✓✓ ✓ SA
+YamanandCarello 45 2005 ✓ ✓ ✓ TS,Greedy
+Algorithm
+Stanimirovi´c46 2007 ✓✓ ✓ GAwithcaching
+technique
+Kraticaetal 47 2011 ✓ ✓ ✓ GAwithcaching
+technique
+Randall48 2008 ✓✓ ✓ ACO,SA
+Hoffetal 49 2017 ✓ ✓ ✓ TS,PR
+Yang et al50 2019 ✓✓ ✓ MA
+YamanandElloumi 23 2012 ✓ ✓ ExactMethod
+Sadeghietal 29 2015 ✓✓ DE
+Alumuretal 31 2018 ✓ ✓ ✓ ✓ ✓ ExactMethod
+Ourwork 2020 ✓✓ ✓ ✓ ✓ ✓ VNS,VNS-TS
+onthistypeofproblem.TSisintegratedtoenhancetheVNS,byincreasingitsabilitytofindthe
+globaloptimal.
+3 THE PROPOSED OPTIMIZATION MODEL
+TheproposedmodelisbasedontheCSAHLPthatwasdevelopedbyErnstandKrishnamoorthy 44
+withformulationsof n3 + n2 variables.Infloodsituations,vitalsuppliesaredistributedthrough
+all villages in the affected area. To deliver the relief materials, we need to assign centers in the
+hubnetworktoperformastranshipmentcenters.Inthepurposedmodel,totalcostsareassoci-
+atedwithtransportationandestablishinghubs.Thepurposeofthenetworkmodelistoestablish
+
+
+--- PAGE 7 ---
+SANGSAWANGandCHANTA
+ 7
+thesortingcentersandtoallocateeachreliefcentertoitshub.Weconsiderparametersthataffect
+transportation time and networks during a flood disaster. Different flood levels, which affect
+the cost function and traveling time, are considered as well as the vehicle types. Moreover, in
+life-savinginstances,wehavetobeconcernedaboutthetravelingtimeinarcsandthetotaltrav-
+elingtimeinanetwork.Ifthesuppliesareperishable,theywillneedtobedeliveredassoonas
+possibleornotlaterthanaspecifiedtime,becausevictimsmaynotbeabletotravelfardistances
+ifthefloodwaterishigh.Thismodelcanbeusedtoanalyzedifferentscenariosdependingonthe
+flood situation. The model consists of deterministic variables, and flood level prediction is not
+withinthescopeofthisresearch.Thedetailsoftheproposedmodelaredescribedasfollows.
+3.1 Model assumptions
+•Thenumberofnodesispredefinedandfixed
+•Thenumberofhubsisnotknown
+•Eachnon-hubnodeisassignedtoexactlyonehub
+•Eachhubhasalimitedcapacity
+•Allhubsarefullyconnected
+•Allnodesandarcsareabovethewaterlevelandoperableduringafloodperiod.
+•Transportationcostandtimearedependentondistance,height,waterlevel,andtypeofvehicle
+•Commoditiesarereadytobetransportedateachnode
+3.2 Model formulation
+Indexes
+i, j=setofnodes; i={1,2,…, I}, j={1,2,…, J}.
+k, l=setofhubs; k={1,2,…, K}, l={1,2,…, L}.
+m=setofwaterlevels; m={1,2,…, M}
+t =setoftransportationtypes; t ={1,2,…, T}
+Parameters
+C(m,t)ij =transportationcostfromnode itonode jatfloodlevel musingvehicletype t
+= f(dij, hij, m, t)= a(m,t)(dij)+ b(m,t)(hij); aand bareconstant.
+dij =distancefromnode itonode j.
+hij =estimatedheightontheroutefromnode itonode j.
+=max{heightatnode i,heightatnode j}
+Fk =fixedcostofestablishinghub k
+Wij =amountofflowfromnode itonode j
+Oi =totalamountoffloworiginatingatnode i,where Oi =
+J∑
+j=1
+Wij
+Dj =totalamountofflowtonode j,where Dj =
+I∑
+i=1
+Wij
+𝜒=discountfactorforcollection(non-hubtohub)
+𝛿=discountfactorfordistribution(hubtonon-hub)
+𝛼=discountfactorfortranshipmentbetweenhublinks(hubtohub)
+
+
+--- PAGE 8 ---
+8
+ SANGSAWANGandCHANTA
+t(m,t)ij =travelingtimefromnode itonode jatfloodlevel musingvehicletype t
+= f(dij, hij, m, t)= u(m,t)(dij)+ v(m,t)(hij); uand vareconstant.
+𝛤k =maximumcapacityofhub k
+To =maximumtravelingtimeallowedforflowsfromtheorigintravelingtotheassigned
+hub
+Td = maximum traveling time allowed for flows from the assigned hub traveling to the
+destination
+Tn =maximumtravelingtimeallowedforflowstravelinginthenetwork
+Decision variables
+Xik =1ifnode iisallocatedtoahublocatedatnode k,
+=0otherwise.
+Xkk =1ifnode kisahub,
+=0otherwise.
+Y i
+kl =totalamountofflowofcommodity ithatisroutedbetweenhubs kand l
+Minimize
+I∑
+i=1
+k
+k∑
+k=1
+C(m,t)
+ik Xik(XOi +𝛿Di)+
+I∑
+i=1
+K∑
+k=1
+L∑
+l=1
+𝛼C(m,t)
+kl Y i
+kl +
+K∑
+k=1
+FkXkk (1)
+Subjectto
+k∑
+k=1
+Xik =1 ∀i (2)
+Xik ≤ Xkk ∀i, k (3)
+L∑
+l=1
+Y i
+kl −
+L∑
+l=1
+Y i
+kl = OiXik −
+j∑
+j=1
+WijXjk ∀i, k (4)
+I∑
+i=1
+(Oi + Di)Xik ≤ ΓkXkk ∀k (5)
+I∑
+i=1
+t(m,t)
+ik Xik ≤ To ∀k (6)
+J∑
+J=1
+t(m,t)
+ik Xjk ≤ Td ∀k (7)
+I∑
+i=1
+K∑
+k=1
+t(m,t)
+ik Xik +
+I∑
+i=1
+K∑
+k=1
+L∑
+l=1
+t(m,t)
+kl Y i
+kl ≤ Tn (8)
+Y i
+kl ≥0 ∀i, k, l (9)
+Xik ∈{0,1}∀ i, k (10)
+To minimize the total transportation cost, objective (1) minimizes two types of costs: the
+variable costC(m,t)ik and fixed costFk. The variable cost consists of three components, which
+are the collection cost represented by𝜒, the distribution cost represented by𝛿, and the trans-
+fer cost between hub arcs represented by𝛼. The fixed cost is the cost of establishing hubs.
+Note that the collection, distribution, and transfer costs are dependent on the flood level
+and vehicle type. Constraint (2) ensures that each node is allocated to exactly one location.
+
+
+--- PAGE 9 ---
+SANGSAWANGandCHANTA
+ 9
+Constraint(3)assignstheflowtoahubafterthehubislocated.Constraint(4)istheflowbalance
+equationforcommodity iatnode k.Constraint(5)restrictstheamountofarrivingflowfroma
+nodetoacapacitatedhub.Constraints(6)and(7)limitthetraveltimefromeachnodetothehubs,
+whichdependsonthefloodlevel.Constraint(8)limitsthetotaltravelingtimeoftheflowsinthe
+network.Constraints(9)and(10)arethenon-negativeandbinaryrequirements,respectively.
+4 VNS-TS FOR SOLVING THE CSHALP
+Many heuristics have been proposed for hub location problems such as the GA, TS, SA, PR,
+GRASP,andVNS.Accordingtotheliterature,VNS-basedheuristicsoutperformotheralgorithms
+in terms of solution quality in solving hub location problems such as thep-hub median (Ili´c
+et al39), capacitated single-allocation hub location (Mari´c51), p-hub maximal covering problem
+(Jankovicetal 52), p-hubcenterproblem(Brimbergetal 53),andcapacitatedsingleassignmenthub
+location problem (Miki´ce ta l54). Therefore, the VNS is selected to solve the proposed problem.
+ToenhancetheefficiencyoftheVNS,weintegratetheTStoimprovethesolutionquality.TheTS
+strategypreventsthevisitationoftheallocation(node,hub)previouslygenerated.
+Inthisstudy,theVNSisdevelopedforsolvingthecapacitatedsingle-allocationhublocation
+problem.TheVNS,acombinatorialoptimization,wasintroducedbyHansenandMladenovi ´c.55
+TheVNSisbasedonasystematicchangetoavoidbeingtrappedinlocaloptima.Intheproposed
+algorithm, the VNS metaheuristic contains three main steps. In the first step, the initialization
+definesasetofneighborhoodstructures Nk (k =1, …, kmax)andinitialsolution.Inthesecond
+step, shaking randomly generates solutions from thekth neighborhoods to diversify the search
+andescapelocal optimabyusingdifferentneighborhoodstructures.Inthethirdstep,thelocal
+searchprocedureimprovessolutionstofindthelocaloptimum.
+TheTSisametaheuristicalgorithmproposedbyGlover 56 forsolvingmathematicaloptimiza-
+tions.ThemainconceptoftheTSisbuildingamemorystructureintoalocalsearchtoprevent
+previoussolutionsfrombeingrevisitedforalimitedperiodoftime.Atabulistrecordsthenum-
+berofsolutionsthathavebeenevaluatedtoavoidrevisitingasolution.Ifanimprovedsolutionis
+found,amoveisperformedregardlessofthetabulist;otherwise,movingtothenewsolutionwill
+onlyoccurwhenthenewsolutionisnotinthetabulist.Anon-improvedsolutionisalsoaccepted
+toescapethelocaloptima.Thedetailsarepresentedinthefollowingsections.
+4.1 Solution representation
+In our VNS-TS algorithm, we use an array to represent a solution network. The length of the
+arrayisequaltothenumberofnodes,andthevaluesinthearrayindicatehubs.Thepositionin
+thearrayindicatesthenode,whichisallocatedtoahub.Forinstance,therearesevennodesin
+Figure 1, and the hubs are 4 and 6. Nodes 1, 2, and 7 are assigned to hub 4. Nodes 3 and 5 are
+connectedtohub6.
+4.2 Initial solution
+To generate an initial solution, the algorithm performs three main steps. In the first step, we
+initialize a hub set. The amounts of traffic at each node (Oi + Dj) are calculated and sorted in
+
+
+--- PAGE 10 ---
+10
+ SANGSAWANGandCHANTA
+FIGURE 1 Solutionrepresentation[Color
+figurecanbeviewedatwileyonlinelibrary.com]
+decreasingorder.Next,werandomlypredefineanumberofhubs, p,andchoosetheinitial phubs
+fromthenon-hubnodeswiththehighesttotalflow.Inthesecondstep,wegenerateaninitialhub
+network by allocating each node to its nearest hub. In the final step, the capacity restriction is
+checkedtoverifytheamountofarrivingflowfromthenodetoacapacitatedhub.Ifaninfeasible
+solutionisfound,therepairfunctioniscalledtotransformitintoafeasiblesolution.
+4.3 Neighborhood structures
+In the proposed VNS algorithm, the neighborhood structure can be changed in three ways: (i)
+intra-clustermove,(ii)inter-clustermove,and(iii)allocation.Intheintra-clustermove,ahubis
+randomlyselectedandreplacedwithanodeinthesamecluster.Fortheinter-clustermove,the
+hubisreplacedwithanodefromadifferentcluster.Finally,fortheallocationoperator,anodeis
+randomlyremovedfromthecurrentclusterandallocatedtoanotherhub.
+4.4 Algorithm procedure
+We describe the VNS procedure in Algorithm 1 (Figure 2). The algorithm operates by select-
+ing a set of neighborhood structuresNk,w h e r ek = 1, ...,kmax. Next, shaking is performed to
+generateanetworksolution x′fromthe kthneighborhood.Aftertheinitialhubsetisassigned,
+each node is allocated to the nearest hub to construct the initial hub location network. The
+algorithm has two major parameters: (a)Tmax represents the maximum time allowed on the
+search; and (b)kmax represents the number of neighborhoods used in shaking. In this case,
+kmax =3,and Tmax =300secondsor100iterations.
+Next,wecheckthefeasibility,whichconsistsofthecapacityanddistanceconstraints.Forthe
+capacityrestriction,wehave toensurethatthehubhasasufficientcapacityfortrafficflows.If
+thecapacitatedconstraintinahubisviolated,afewspokesintheclusterwillberandomlymoved
+to another cluster. The distance restriction contains three components: the originated distance
+between the non-hub node to hub, transferred distance between hubs, and destined distance
+betweenthehubandnon-hubnode.Ifadistanceviolationisdetected,thedistancednodewillbe
+randomlymovedtoanotherhub.Iftheviolationremains,thepenaltyfunctioniscalledtodiscard
+thesolution.
+Toenhancetheefficiencyofthealgorithm,wecombinetheVNS-TSalgorithms.Toprevent
+cycling,therecentlyincumbenthubsetobtainedfromthealgorithmisrecordedinthetabulist.
+
+
+--- PAGE 11 ---
+SANGSAWANGandCHANTA
+ 11
+FIGURE 2 VNSfortheCSHALPprocedure
+FIGURE 3 Neighborhoodchangingprocedure
+Topreventthesamemovementinatabutenurelength,atabulistisobtainedbyrecordingthe
+bestallocationpair(node,hub).Throughapreliminaryexamination,tabutenurelengthsof4-9
+are examined.The bestsolution quality isobtained from a tabu tenure length of 7. In the local
+search,weemployneighborhoodchangingfunctionsasdescribedinAlgorithm2.Todiversifythe
+solutions,weusethreeneighborhoodstructures,whichareanintra-clustermove,inter-cluster
+move,andallocation.Then,wecalculatethetotaltransportationandfixedcostsofthenetwork
+(TF)toadjustnumberofhubs( p).Ifthetotaltransportationcostandthefixedcostratioishigher
+than K,weincrease pby1.Inthesameway, pwillbedecreasedby1ifthetotaltransportationcost
+andthefixedcostratioislessthan K.Theneighborhoodchangingalgorithmdetailsareshown
+inAlgorithm2(Figure3).
+
+
+--- PAGE 12 ---
+12
+ SANGSAWANGandCHANTA
+To measure the solution quality and control the computational time, the gap is defined as
+the percentageabove the optimal solution when optimal solution is known, or the best known
+solutionwhentheoptimalsolutionisnotknownasinEquation(11).Notethathereweconsider
+theminimizationproblem,andalowersolutionispreferred.
+%Gap =
+(
+Incumbent
+BestKnown (orOptimalSol ) −1
+)
+∗100 (11)
+4.5 Stopping criteria
+When the optimal solutions are known, the program will be terminated if the search finds an
+incumbentwithinthesettingvalue,whichissetat%gap =0.5.Thenumberofobjectivefunction
+evaluations is used as a stopping criterion if the gap is outside the setting value. If this is the
+case, we allow up to 100 iterations. These values were chosen to allow the running times to be
+reasonable.
+5 COMPUTATIONAL EXPERIMENTS
+Inthissection,wetesttheperformanceofthehybridVNS-TSalgorithmthroughacomparison
+betweentheVNSalgorithmandtheoptimizationprogramlanguage(OPL).Theproposedhybrid
+algorithm is first tested on solving the CSAHLP using an open standard dataset. Note that the
+CSAHLPistheproposedmodelwithoutthedistancerestrictedconstraintsandwithonedimen-
+sionofcostandcapacity.TheAPdatasetisasetofbenchmarkdatathatwasintroducedbyErnst
+andKrishnamoorthy.
+36 Thedataselectedforthisstudyconsistof16subproblemswithcombina-
+tionsoffourdifferentproblemsizes(10,20,40,and50nodes)andfourdifferenttypesofassigned
+fixed cost (X) and capacity (Y), represented by XY, where X, Y∈{T, L}; T= Tight, L= Loose,
+and T indicates that the problem is harder to solve than is L (LL, LT, TL, TT). Both algorithms
+arecodedinCProgrammingusingtheMersenneTwisterRandomnumbergenerator.Allcom-
+putationalexperimentsareperformedonanIntelCore2.4GHzwith2GBRAMcomputer.The
+results are shown in Table 2. We evaluate the solution quality based on the solving time (CPU
+time)insecondsandthegapbetweenacurrentsolutionandtheoptimalsolution(%gap).Note
+thatinthiscase,weusethestandarddataset;therefore,theoptimalsolutionsareknowninall
+subproblems. Both algorithms (VNS and VNS-TS) found the solution within a few seconds: an
+average of 4.93seconds for the VNS and an average of 11.60seconds for the VNS-TS; however,
+the OPL took longer to find the solution, an average of 837.77seconds. If we look at the solu-
+tion quality, the VNS-TS performs better than VNS and OPL with a 0% gap in all subproblems,
+whiletheVNSfoundoptimalsolutionsin11outof16subproblems(68.75%),andtheOPLfound
+optimalsolutionsin15outof16subproblems(93.75%).NotethatweterminatedtheOPLafter
+3.5hours.
+6 CASE STUDY OF SEVERE FLOODING IN THAILAND
+Our case study is from the Nonthaburi Province, which is located in the central region of
+Thailand. The province covers an area of 622km2 with a population of 1.2 million. The
+administrative area consists of six districts, which are Muang, Bang-kruai, Bang-yai,
+
+
+--- PAGE 13 ---
+SANGSAWANGandCHANTA
+ 13
+TABLE 2 ComputationalresultswiththeAPdataset
+OPL VNS VNS-TS
+Problem Optimal cost % Gap
+CPU
+time (s) % Gap
+CPU
+time (s) % Gap
+CPU
+time (s)
+10LL 224250.05 0.00 8.86 0.00 0.029 0.00 0.05
+10LT 250992.26 0.00 6.56 0.00 0.03 0.00 0.08
+10TL 263399.94 0.00 17.15 0.00 0.03 0.00 0.50
+10TT 263399.94 0.00 7.35 0.00 0.03 0.00 0.49
+20LL 234690.96 0.00 6.08 0.00 0.40 0.00 0.46
+20LT 253517.40 0.00 7.01 0.00 0.50 0.00 0.39
+20TL 271128.18 0.00 5.58 0.00 0.63 0.00 0.72
+20TT 296035.40 0.00 8.63 0.82 0.31 0.00 12.37
+40LL 241955.71 0.00 24.60 0.00 3.87 0.00 19.80
+40LT 272218.32 0.00 31.92 0.00 5.63 0.00 12.21
+40TL 298919.01 0.00 19.46 0.00 5.09 0.00 15.23
+40TT 354874.10 0.00 112.85 0.45 6.34 0.00 18.76
+50LL 238520.59 0.00 35.02 0.00 9.03 0.00 19.59
+50LT 272897.49 0.00 223.70 0.69 18.55 0.00 22.05
+50TL 319015.77 0.00 145.72 0.36 9.28 0.00 28.96
+50TT 417440.99 0.000046 12743.89a 0.94 19.07 0.00 34.06
+Average 0.0000028 837.77 0.20 4.93 0.00 11.60
+aCPUtimethatwefoundthebestknownforOPL.
+Bang-buatong,Sai-noi,andPak-kret.Nonthaburiisoneofthecriticalregionsaffectedbysevere
+floodinginThailandin2011.Withoutexperienceandimproperpreparedness,severalpeoplein
+the affected area suffered from a lack of water, food, and survival supplies. Establishing relief
+centersatappropriatelocationshelpsustomoreefficientlyorganizethedeliveryofsuppliesto
+victims.Byconsideringthegeographicalfactors,68existinglocations(nodes)areselectedtobe
+candidatesforhubs,
+57 assumingthatdemandisgeneratedatthecenterofeachnode.Themap
+ofNonthaburiProvinceandthelocationsofthehubareshowninFigure4.
+Weconducttheexperimentsbyclassifyingthefloodwaterintotwolevels:lowat0.5-1.0mand
+highat1.0-1.5m.Notethatatdifferentwaterlevels,weneeddifferenttypesofvehiclesfortrans-
+portation.Thetransportationcostandtimearedependentonthewaterlevel,typeofvehicle,and
+heightofthearea.Highwaterlevelscausehighertransportationcostsandtimes.Thehubcapac-
+itiesarealsoconsideredtobelooseortight.Thediscountfactorsfortranshipmentsbetweenhub
+links(alpha)arevaried:0.4,0.6,and0.8.Thediscountfactorsforcollectionanddistributionare
+fixedat3and2,respectively,basedonErnstandKrishnamoorthy.
+44 Then,wesolvetheproblem
+basedonthreescenarios:(1)withoutaboundonthetraveltime,(2)withaboundontraveltimeat
+40minutes,and(3)withaboundontraveltimeat20minutes,foratotalof36cases.Weassumed
+thatvehiclestravelataspeedof1km/min.
+Wefoundanappropriatenumberofhubs,theirlocations,andtheroutesfromdemandnodes
+tohubsbysolvingtheproposedmodel,withthedatasetofourcasestudyastheinputtothemodel.
+
+
+--- PAGE 14 ---
+14
+ SANGSAWANGandCHANTA
+FIGURE 4 Mapof
+candidatehubsin
+NonthaburiProvince[Color
+figurecanbeviewedat
+wileyonlinelibrary.com]
+Theproblemwassolvedbyoptimizationsoftwareandtwometaheuristicalgorithms:theVNSand
+VNS-TS.NotethattheprobleminScenario1consistedof9384constraintsand319056variables:
+4624binaryvariablesand314432othervariables.TheproblemsinScenarios2and3consisted
+of 14008 constraints and 319056 variables: 4624 binary variables and 314432 other variables.
+ThecomputationalresultsareshowninTables3–8.Wereportthebestknownandhubsetsfor
+Scenarios 1, 2, and 3 in Tables 3, 5, and 7. The solution quality (%gap) and running time (s) of
+Scenarios1,2,and3arereportedinTables4,6,and8.Thehubsetofthefirstscenarioshowsthat
+withnoboundonthearc,afewernumberofhubsareopenedtominimizethetotaltransportation
+cost.Thisresultmaynotbepractical,becausepeoplehavetotravellongdistances.Inthesecond
+and third scenarios, larger numbers of hubs are opened, especially when capacity is tight, and
+peopledonothavetotravellongdistancesduringadisaster.Basedontheseexperiments,setting
+the bound at 20minutes is preferable to the victims. However, there will be trade-offs between
+theserviceandtheincreasingtransportationcost.
+TheOPLrequiredmorethananhourinsomecasestofindtheoptimalsolution.Theaverage
+runningtimesofthethreescenarioswere22.40,19.70,and6.71minutes,respectively.Meanwhile,
+theaveragerunningtimesoftheVNSandVNS-TSwereapproximately1minute.Inthefirstsce-
+nario,withoutconditionsonthetraveltime,theVNS-TSfoundthebestknownsolution(with0%
+gap)inanaverageof49.78seconds,whiletheVNSdidthebestata0-0.8%gapwithanaverage
+of25.18seconds.Inthesecondscenario,withthetraveltimelimitedto40minutes,theVNS-TS
+foundthebestknownsolution(with0%gap)inanaverageof113.10seconds,whiletheVNSdid
+thebestatthe0-2%gapwithanaverageof63.23seconds.Inthethirdscenario,withalimiton
+
+
+--- PAGE 15 ---
+SANGSAWANGandCHANTA
+ 15
+TABLE 3 BestknownandhubsetforScenario1withoutalimitonthetraveltime
+OPL
+Flood level Alpha Hub capacity Best known CPUtime (min) Hub set
+Low 0.4 Loose 568948.92 4.26 {143036}
+Tight 757983.92 12.13 {1424303662}
+0.6 Loose 582837.68 0.50 {143036}
+Tight 772007.01 8.35 {143036}
+0.8 Loose 596713.21 12.35 {143036}
+Tight 786030.25 15.41 {1424303662}
+High 0.4 Loose 1180803.90 21.49 {143663}
+Tight 1439282.19 14.16 {414243663}
+0.6 Loose 1218034.83 74.23 {143663}
+Tight 1485830.66 15.15 {414243663}
+0.8 Loose 1255265.75 60.20 {143663}
+Tight 1532258.21 30.51 {414243663}
+Average 22.40
+TABLE 4 GapandsolvingtimeforScenario1withoutalimitonthetraveltime
+VNS VNS-TS
+Flood level Alpha Hub capacity Best known %Gap
+CPU
+time (s) %Gap
+CPU
+time (s)
+Low 0.4 Loose 568948.92 0.00 17.43 0.00 32.09
+Tight 757983.92 0.00 23.90 0.00 42.89
+0.6 Loose 582837.68 0.00 19.96 0.00 47.99
+Tight 772007.01 0.81 28.07 0.00 56.30
+0.8 Loose 596713.21 0.00 18.00 0.00 42.92
+Tight 786030.25 0.00 29.39 0.00 61.31
+High 0.4 Loose 1180803.90 0.00 30.92 0.00 57.47
+Tight 1439282.19 0.00 28.79 0.00 49.04
+0.6 Loose 1218034.83 0.00 23.99 0.00 39.67
+Tight 1485830.66 0.00 28.84 0.00 67.42
+0.8 Loose 1255265.75 0.00 23.93 0.00 50.39
+Tight 1532258.21 0.00 28.89 0.00 49.88
+Average 0.07 25.18 0.00 49.78
+
+
+--- PAGE 16 ---
+16
+ SANGSAWANGandCHANTA
+TABLE 5 BestknownandhubsetforScenario2withalimitontraveltime(40minutes)
+OPL
+Flood level Alpha Hub capacity Best known CPUtime (m) Hub set
+Low 0.4 Loose 582837.68 10.43 {143036}
+Tight 772007.00 12.05 {1424303662}
+0.6 Loose 568948.92 11.10 {143036}
+Tight 757983.76 9.51 {1424303662}
+0.8 Loose 596713.21 11.48 {143036}
+Tight 786030.25 12.29 {1424303662}
+High 0.4 Loose 1184709.65 48.21 {143663}
+Tight 1184709.65 9.16 {414243663}
+0.6 Loose 1221953.71 45.32 {143663}
+Tight 1485814.93 16.18 {414243663}
+0.8 Loose 1259145.38 26.12 {143663}
+Tight 1532258.21 24.55 {414243663}
+Average 19.70
+TABLE 6 GapandsolvingtimeforScenario2withalimitonthetraveltime(40minutes)
+VNS VNS-TS
+Flood level Alpha Hub capacity Best known %Gap
+CPU
+time (s) %Gap
+CPU
+time (s)
+Low 0.4 Loose 1184709.65 0.00 57.17 0.00 92.35
+Tight 1184709.65 0.00 90.75 0.00 200.49
+0.6 Loose 1221953.71 0.00 44.53 0.00 84.61
+Tight 1485814.93 0.00 78.67 0.00 116.29
+0.8 Loose 1259145.38 0.00 48.94 0.00 72.65
+Tight 1532258.21 0.80 68.27 0.00 91.57
+High 0.4 Loose 1184709.65 0.00 56.68 0.00 102.68
+Tight 1184709.65 1.32 57.72 0.00 97.75
+0.6 Loose 1221953.71 0.17 50.25 0.00 87.30
+Tight 1485814.93 0.78 84.88 0.00 148.32
+0.8 Loose 1259145.38 0.21 52.81 0.00 139.88
+Tight 1532258.21 2.28 68.08 0.00 123.35
+Average 0.46 63.23 0.00 113.10
+
+
+--- PAGE 17 ---
+SANGSAWANGandCHANTA
+ 17
+TABLE 7 BestknownandhubsetforScenario3withalimitonthetraveltime(20minutes)
+OPL
+Flood
+level Alpha
+Hub
+capacity
+Best
+known CPUtime (m) Hub set
+Low 0.4 Loose 568948.92 5.39 {143036}
+Tight 757983.76 14.39 {1424303662}
+0.6 Loose 582837.68 8.35 {143036}
+Tight 772007.01 19.45 {1424303662}
+0.8 Loose 596713.21 14.45 {143036}
+Tight 786030.25 9.17 {1424303662}
+High 0.4 Loose 3238775.57 1.04 {131416202234373842
+4445475363}
+Tight 3587448.61 1.35 {361416202122343738
+42444547536365}
+0.6 Loose 3284836.91 1.08 {131416202234373842
+4445475363}
+Tight 3635536.63 2.10 {361416202122343738
+42444547536365}
+0.8 Loose 3330898.25 1.35 {131416202234373842
+4445475363}
+Tight 3683586.38 2.38 {361416202122343738
+42444547536365}
+Average 6.41
+traveltimeof20minutes,theVNS-TSfoundthebestknownsolution(with0%gap)inanaverage
+of103.05seconds,whiletheVNSdidthebestata0-0.9%gapwithanaverageof59.83seconds.For
+solvingrealproblems,wefocusmoreonthequalityofthesolutions,althoughthesolvingtimes
+ofbothalgorithmsaredifferent.Therefore,inthiscasetheVNS-TSispreferredovertheVNS.
+To compare the performances of the VNS and VNS-TS, we performed a hypothesis test on
+the difference between these two algorithms, using the %gap and runtime for all the scenarios
+inTables4,6,and8.Atasignificancelevelof0.05,thereisasignificantdifferencebetweenthe
+VNSgappercentageandVNS-TSgappercentage,withthe P-valueequalto.005714(theaverage
+%gap of VNS=0.24, the average %gap of VNS-TS=0.00). There is also a significant difference
+betweentheVNSruntimeandVNS-TSruntimewitha P-valueof.000003(theaverageVNSrun
+time=49.41seconds,theaverageVNS-TSruntime =88.65seconds).Basedontheseresults,the
+VNS-TS performed better than did the VNS in terms of solution quality; however, it requires a
+longersolvingtime.
+7 SENSITIVITY ANALYSIS
+In this section, we perform a sensitivity analysis on the involved parameters, which are the
+number of flows, discount factor, hub capacity,and bound length, to examine their impactson
+thetotaltransportationcost,numberofhubs,andhublocations.
+
+
+--- PAGE 18 ---
+18
+ SANGSAWANGandCHANTA
+TABLE 8 GapandsolvingtimeforScenario3withalimitonthetraveltime(20minutes)
+VNS VNS-TS
+Flood level Alpha Hub capacity Best known %Gap
+CPU
+time (s) %Gap
+CPU
+time (s)
+Low 0.4 Loose 568948.92 0.00 51.77 0.00 74.68
+Tight 757983.76 0.00 90.95 0.00 186.49
+0.6 Loose 582837.68 0.00 40.93 0.00 65.41
+Tight 772007.01 0.00 74.27 0.00 110.69
+0.8 Loose 596713.21 0.00 47.14 0.00 69.45
+Tight 786030.25 0.67 60.07 0.00 88.37
+High 0.4 Loose 3238775.57 0.00 49.48 0.00 83.48
+Tight 3587448.61 0.50 55.12 0.00 84.15
+0.6 Loose 3284836.91 0.00 49.45 0.00 81.70
+Tight 3635536.63 0.20 81.68 0.00 142.32
+0.8 Loose 3330898.25 0.00 53.01 0.00 124.68
+Tight 3683586.38 0.93 9.84 0.00 125.20
+Average 0.19 59.83 0.00 103.05
+Inthiscase,weconsideravariationinthecommoditiesorflowsinthenetwork.Inreality,itis
+difficulttoestimatethenumberofflowsduringadisaster.Weconsiderthecasethatisthehardest
+tomanage,whichiswhenthewaterlevelishighandthenumberofflowschanges.Wevarythe
+numberofflows( 𝜆)from0.8to2.0.Notethat 𝜆=1.0referstothenormalcaseaspresentedinthe
+previoussection, 𝜆=0.8referstothecaseinwhichthereare20%fewerflowsthanexpected,and
+𝜆=1.2referstothecaseinwhichthereare20%moreflowsthanexpected.Thediscountfactor
+alsovariesandisequalto0.4,0.6,and0.8,andthehubcapacityiseitherlooseortight.Theresults
+areshowninTable9.
+Figures5and6showthetotaltransportationcostwhenthecapacitiesarelarge(loose)and
+limited(tight).Thetotaltransportationcostincreaseswhenthenumberofflowsincreasesandis
+higherwithalimitedcapacity.Forthediscountfactors,thetotaltransportationcostincreasesas
+thetranshipmentdiscountfactorincreases.Theimpactisgreaterwithahighnumberofflows.
+Figures7and8showthenumberofhubswithlargeandlimitedcapacities.Thenumberof
+hubsandhubsetsdonotchangemuchwithalargecapacity,between15and20hubs.However,
+whenthecapacityislimited,wehavetoopenagreaternumberofhubs,between17and34hubs.
+Ifthehubsetchanges,theroutepatternofflowsalsochanges.
+Next, we vary the transhipment discount factor from 0.1 to 3 to examine the impact on the
+totaltransportationcost,whichiscomposedofvariableandfixedcosts.Thecollectionanddistri-
+butiondiscountfactorsaresetat3and2,respectively.Thenumberofflowsissetatthenormal
+case(𝜆=1.0),andtheboundlengthissetat20minutes.Figure9showsthedifferencesbetween
+thetotaltransportationcostsforlooseandtightcapacitieswhenvaryingthediscountfactors.In
+Figures10and11,webreakdownthetotalcostintovariableandfixedcostsforboththelooseand
+tightcapacitycases.Thetotaltransportationcostishigherwhenthecapacityistight.However,
+the fixed cost is higher than the variable cost for all cases. In particular, the fixed cost remains
+thesameforallcases,whilethevariablecostincreasesasthediscountfactorincreases.Notethat
+
+
+--- PAGE 19 ---
+SANGSAWANGandCHANTA
+ 19
+TABLE 9 Comparisonofthetotaltransportationcostandhubsetsfordifferentnumbersofflows
+Number
+of flows Alpha Hub capacity Total cost Hub set
+0.8 0.4 Loose 3139898.12 {1314162022343738424445475363}
+Tight 3381017.90 {36141620212234373842444547536263}
+0.6 Loose 3176747.19 {1314162022343738424445475363}
+Tight 3418518.40 {36141620212234373842444547536263}
+0.8 Loose 3213596.27 {1314162022343738424445475363}
+Tight 3455864.49 {36141620212234373842444547536263}
+1 0.4 Loose 3238775.57 {1314162022343738424445475363}
+Tight 3587448.61 {36141620212234373842444547536365}
+0.6 Loose 3284836.91 {1314162022343738424445475363}
+Tight 3635536.63 {36141620212234373842444547536365}
+0.8 Loose 3330898.25 {1314162022343738424445475363}
+Tight 3683586.38 {36141620212234373842444547536365}
+1.2 0.4 Loose 4298358.11 {36141620212234373842444547536365}
+Tight 5119754.78 {36814172021222534363738424445475153
+62636566}
+0.6 Loose 4414684.58 {36141620212234373842444547536365}
+Tight 5239254.96 {36814172021222534363738424445475153
+62636566}
+0.8 Loose 4530989.10 {36141620212234373842444547536365}
+Tight 5358755.14 {36814172021222534363738424445475153
+62636566}
+1.4 0.4 Loose 4607926.69 {3614162021223437384244454753626365}
+Tight 5723267.86 {36814172021222425273034363738394244
+45475153626365}
+0.6 Loose 4744397.56 {3614162021223437384244454753626365}
+Tight 5864205.40 {36814172021222425273034363738394244
+45475153626365}
+0.8 Loose 4880729.51 {3614162021223437384244454753626365}
+Tight 6004739.75 {36814172021222425273034363738394244
+45475153626365}
+(Continues)
+
+
+--- PAGE 20 ---
+20
+ SANGSAWANGandCHANTA
+TABLE 9 (Continued)
+Number
+of flows Alpha Hub capacity Total cost Hub set
+1.6 0.4 Loose 4918594.80 {361416202122253437384244454748536365}
+Tight 6699864.37 {35611172021222427303436373839424445
+4653545862636465}
+0.6 Loose 5077452.44 {361416202122253437384244454748536365}
+Tight 6864923.88 {35611172021222427303436373839424445
+4653545862636465}
+0.8 Loose 5235822.61 {361416202122253437384244454748536365}
+Tight 7029812.87 {35611172021222427303436373839424445
+464850535862636465}
+1.8 0.4 Loose 5185436.91 {361416202122253437384244454753626365}
+Tight 7389045.53 {23611161720212324262730343536373840
+42444546484951535458626365}
+0.6 Loose 5362580.86 {361416202122253437384244454753626365}
+Tight 7579695.13 {23611161720212324262730343536373840
+42444546484951535458626365}
+0.8 Loose 5539431.08 {361416202122253437384244454753626365}
+Tight 7770344.72 {23611161720212324262730343536373840
+42444546484951535458626365}
+2.0 0.4 Loose 5536671.35 {361417202122253437384244454751536263
+65}
+Tight 7978625.13 {356814161720212223242728303435363839
+4042444546484953545861626365}
+0.6 Loose 5735101.59 {361417202122253437384244454751536263
+65}
+Tight 8189783.46 {356814161720212223242728303435363839
+4042444546484953545861626365}
+0.8 Loose 5933305.69 {361417202122253437384244454751536263
+65}
+Tight 8400941.78 {356814161720212223242728303435363839
+4042444546484953545861626365}
+solutionswiththesamefixedcosthavethesamehubset.Therefore,basedontheseresults,the
+transhipmentdiscountfactoronlyimpactsthevariablecost.
+Toseetheimpactofthehubcapacity,wevariedthelevelsofhubcapacitytobe0.25,0.5,1,2,
+and5.Notethatacapacitylevelof1isthecaseofloosecapacity,andthecapacitylevelof2istwice
+thecapacityoftheloosecase.Thenumberofflowswassetatnormal( 𝜆=1.0),theboundlength
+wassetat20minutes,andthediscountfactorvariedatvaluesequalto0.4,0.6,and0.8.Figure12
+showsthatthetotaltransportationcostdecreasesasthehubcapacityincreases,whenthecapacity
+levelis0.25-1.However,increasingthecapacityleveltomorethan1doesnotimprovethetotal
