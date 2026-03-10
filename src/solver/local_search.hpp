@@ -10,9 +10,8 @@
 //   non-domination check, Pareto archive, etc.).
 //
 // ACTIVATION:
-//   These operators are NOT wired into the main loop yet.  They will be
-//   integrated in a later phase (PB-NSMA local search, or standalone
-//   refinement pass).
+//   These operators are wired into PB-NSMA through local_search_engine.hpp.
+//   PB-NSGA keeps them inactive unless --algo nsma is selected.
 //
 // OPERATOR CATALOG:
 //   LS1. Hub Toggle           — flip one planned hub open/close
