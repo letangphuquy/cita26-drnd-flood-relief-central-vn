@@ -1,26 +1,21 @@
 """
-data_generate_saa_oos.py — SAA & OOS Scenario Generator
-========================================================
-STATUS: Standalone data-generation utility — NOT part of the main pipeline.
+data_generate_saa_oos.py - SAA and OOS scenario generator
+=========================================================
+Standalone utility for Experiment-2 methodology.
 
-Generates two supplementary evaluation datasets for CV-Large:
+This script now follows a combinatorial SAA design:
+    - In-sample SAA set: 50 scenarios by default, generated from a profile bank
+        (mild/severe/extreme variants with different epicenter counts, intensity
+        ranges, circuity, and disruption aggressiveness).
+    - Out-of-sample (OOS) set: independently sampled stress scenarios used only
+        for post-optimization validation.
 
-  1. SAA set (100 scenarios, seed 2026)
-     Scenarios follow the same mild/severe/extreme distribution as the
-     main CV-Large instance (60% mild, 30% severe, 10% extreme) but
-     sampled independently.  Output: data/cv/cv_large_saa.json
-
-  2. OOS set (1 novel extreme double-typhoon scenario)
-     Represents a simultaneous dual-epicentre event not present in the
-     training scenarios.  Output: data/cv/cv_large_oos.json
-
-These files are consumed by the C++ solver's --eval-saa / --eval-oos
-modes, whose results are then summarised by exp2_analyze_saa_oos.py.
-
-Usage (from project root):
-  python src/scripts/data_generate_saa_oos.py
+Usage:
+    python src/scripts/data_generate_saa_oos.py
+    python src/scripts/data_generate_saa_oos.py --saa-scenarios 100 --oos-scenarios 10
 """
 
+import argparse
 import math
 import json
 import random
@@ -33,87 +28,40 @@ from data_generate_cv import (
 )
 
 SEED = 2026
-random.seed(SEED)
 
-def generate_saa_scenarios(coords, aux_risk, r_intervals, demand_idx, hub_idx, origin_idx, base_pop, num_scenarios=100):
-    """Generate num_scenarios random SAA instances."""
+
+def _profile_bank():
+    # (name, n_epi, I_lo, I_hi, sev_mult, beta, phi, risk_noise)
+    return [
+        ("mild_a", 1, 0.28, 0.50, 0.95, 0.20, 0.55, 0.020),
+        ("mild_b", 1, 0.35, 0.62, 1.05, 0.28, 0.58, 0.025),
+        ("mild_c", 2, 0.30, 0.58, 1.10, 0.32, 0.60, 0.025),
+        ("severe_a", 2, 0.55, 0.82, 1.65, 0.50, 0.68, 0.030),
+        ("severe_b", 2, 0.62, 0.88, 1.85, 0.58, 0.71, 0.030),
+        ("severe_c", 3, 0.58, 0.86, 1.95, 0.62, 0.73, 0.035),
+        ("extreme_a", 3, 0.76, 0.98, 2.55, 0.82, 0.82, 0.035),
+        ("extreme_b", 3, 0.82, 1.02, 2.80, 0.88, 0.85, 0.040),
+        ("extreme_c", 4, 0.84, 1.04, 3.00, 0.92, 0.87, 0.040),
+        ("extreme_d", 4, 0.90, 1.08, 3.20, 0.95, 0.90, 0.045),
+    ]
+
+
+def _scenario_from_profile(
+    profile,
+    s_idx,
+    coords,
+    aux_risk,
+    r_intervals,
+    demand_idx,
+    hub_idx,
+    origin_idx,
+    base_pop,
+    epi_sigma,
+):
     n = len(coords)
-    EPI_SIGMA = 85.0
+    p_name, n_epi, I_lo, I_hi, sev_mult, beta, phi, risk_noise = profile
     epi_weights = [aux_risk[i] for i in demand_idx]
-    
-    scenarios = []
-    
-    # We will sample combinations of mild/severe/extreme parameters to create a rich SAA distribution
-    for s_idx in range(num_scenarios):
-        # Stochastically choose the type of scenario
-        rand_val = random.random()
-        if rand_val < 0.60:
-            type_name, n_epi, I_lo, I_hi, sev_mult, beta, phi = "mild", 1, 0.30, 0.60, 1.0, 0.25, 0.57
-        elif rand_val < 0.90:
-            type_name, n_epi, I_lo, I_hi, sev_mult, beta, phi = "severe", 2, 0.55, 0.85, 1.8, 0.55, 0.70
-        else:
-            type_name, n_epi, I_lo, I_hi, sev_mult, beta, phi = "extreme", 3, 0.75, 1.00, 2.8, 0.88, 0.85
 
-        name = f"saa_{s_idx:03d}_{type_name}"
-        prob = 1.0 / num_scenarios
-
-        chosen_local = _weighted_sample(demand_idx, epi_weights, n_epi)
-        epicenters = [
-            (coords[demand_idx[ci]][0], coords[demand_idx[ci]][1], random.uniform(I_lo, I_hi))
-            for ci in chosen_local
-        ]
-
-        raw_exp = []
-        for u in range(n):
-            ex = sum(inten * gauss(haversine(coords[u][0], coords[u][1], elat, elon), EPI_SIGMA) for elat, elon, inten in epicenters)
-            raw_exp.append(min(1.0, ex))
-
-        risk = []
-        for u in range(n):
-            r_min, r_max = r_intervals[u]
-            r_us = max(0.01, min(0.99, r_min + (r_max - r_min) * raw_exp[u] + random.gauss(0, 0.025)))
-            risk.append(round(r_us, 4))
-
-        a = [[[1]*n for _ in range(n)] for _ in range(NUM_MODES)]
-        for u in range(n):
-            for v in range(n):
-                if u == v:
-                    for m in range(NUM_MODES): a[m][u][v] = 0
-                    continue
-                if random.random() < min(0.97, beta * (risk[u] + risk[v]) / 2.0):
-                    a[0][u][v] = a[0][v][u] = 0
-
-        demand = {}
-        total_demand_pers = 0.0
-        for i in demand_idx:
-            d_val = max(5.0, base_pop[i] * (0.05 + 0.85 * risk[i]) * sev_mult + random.gauss(0, 0.08 * base_pop[i] * (0.05 + 0.85 * risk[i]) * sev_mult))
-            demand[str(i)] = round(d_val, 2)
-            total_demand_pers += d_val
-
-        total_supply_kg = GAMMA * total_demand_pers * random.uniform(1.8, 2.5)
-        supply = {str(j): round(max(5000.0, total_supply_kg / len(origin_idx) * random.uniform(0.7, 1.3)), 2) for j in origin_idx}
-
-        hub_reactive_cost = {str(k): round(random.uniform(30000, 80000) * (1.0 + risk[k]), 2) for k in hub_idx}
-        hub_process_time  = {str(k): round(random.uniform(0.4, 1.5) * (1.0 + 0.5 * risk[k]), 4) for k in hub_idx}
-
-        scenarios.append({
-            "name": name, "probability": prob, "phi_circuity": phi,
-            "epicenters": [{"lat": round(e[0],4), "lon": round(e[1],4), "intensity": round(e[2],4)} for e in epicenters],
-            "risk": risk, "hub_risk": {str(k): risk[k] for k in hub_idx},
-            "accessibility": a, "demand": demand, "supply": supply,
-            "hub_reactive_cost": hub_reactive_cost, "hub_process_time": hub_process_time,
-        })
-    return scenarios
-
-def generate_oos_scenario(coords, aux_risk, r_intervals, demand_idx, hub_idx, origin_idx, base_pop):
-    """Generate 1 novel extreme double-typhoon scenario to test out-of-sample robustness."""
-    n = len(coords)
-    EPI_SIGMA = 100.0 # larger radius for double typhoon
-    
-    # Double typhoon definition (force 4 epicenters to mimic two storms hitting simultaneously)
-    type_name, n_epi, I_lo, I_hi, sev_mult, beta, phi = "double_typhoon", 4, 0.90, 1.05, 3.5, 0.95, 0.90
-    
-    epi_weights = [aux_risk[i] for i in demand_idx]
     chosen_local = _weighted_sample(demand_idx, epi_weights, n_epi)
     epicenters = [
         (coords[demand_idx[ci]][0], coords[demand_idx[ci]][1], random.uniform(I_lo, I_hi))
@@ -122,20 +70,24 @@ def generate_oos_scenario(coords, aux_risk, r_intervals, demand_idx, hub_idx, or
 
     raw_exp = []
     for u in range(n):
-        ex = sum(inten * gauss(haversine(coords[u][0], coords[u][1], elat, elon), EPI_SIGMA) for elat, elon, inten in epicenters)
+        ex = sum(
+            inten * gauss(haversine(coords[u][0], coords[u][1], elat, elon), epi_sigma)
+            for elat, elon, inten in epicenters
+        )
         raw_exp.append(min(1.0, ex))
 
     risk = []
     for u in range(n):
         r_min, r_max = r_intervals[u]
-        r_us = max(0.01, min(0.99, r_min + (r_max - r_min) * raw_exp[u] + random.gauss(0, 0.05)))
+        r_us = max(0.01, min(0.99, r_min + (r_max - r_min) * raw_exp[u] + random.gauss(0, risk_noise)))
         risk.append(round(r_us, 4))
 
-    a = [[[1]*n for _ in range(n)] for _ in range(NUM_MODES)]
+    a = [[[1] * n for _ in range(n)] for _ in range(NUM_MODES)]
     for u in range(n):
         for v in range(n):
             if u == v:
-                for m in range(NUM_MODES): a[m][u][v] = 0
+                for m in range(NUM_MODES):
+                    a[m][u][v] = 0
                 continue
             if random.random() < min(0.99, beta * (risk[u] + risk[v]) / 2.0):
                 a[0][u][v] = a[0][v][u] = 0
@@ -143,23 +95,116 @@ def generate_oos_scenario(coords, aux_risk, r_intervals, demand_idx, hub_idx, or
     demand = {}
     total_demand_pers = 0.0
     for i in demand_idx:
-        d_val = max(5.0, base_pop[i] * (0.05 + 0.85 * risk[i]) * sev_mult + random.gauss(0, 0.1 * base_pop[i] * (0.05 + 0.85 * risk[i]) * sev_mult))
+        base = base_pop[i] * (0.05 + 0.85 * risk[i]) * sev_mult
+        d_val = max(5.0, base + random.gauss(0, 0.08 * base))
         demand[str(i)] = round(d_val, 2)
         total_demand_pers += d_val
 
-    total_supply_kg = GAMMA * total_demand_pers * random.uniform(1.8, 2.5)
-    supply = {str(j): round(max(5000.0, total_supply_kg / len(origin_idx) * random.uniform(0.7, 1.3)), 2) for j in origin_idx}
+    total_supply_kg = GAMMA * total_demand_pers * random.uniform(1.8, 2.6)
+    supply = {
+        str(j): round(max(5000.0, total_supply_kg / len(origin_idx) * random.uniform(0.7, 1.3)), 2)
+        for j in origin_idx
+    }
 
-    hub_reactive_cost = {str(k): round(random.uniform(40000, 100000) * (1.0 + risk[k]), 2) for k in hub_idx}
-    hub_process_time  = {str(k): round(random.uniform(0.5, 2.0) * (1.0 + 0.5 * risk[k]), 4) for k in hub_idx}
+    hub_reactive_cost = {
+        str(k): round(random.uniform(30000, 90000) * (1.0 + risk[k]), 2)
+        for k in hub_idx
+    }
+    hub_process_time = {
+        str(k): round(random.uniform(0.4, 1.8) * (1.0 + 0.5 * risk[k]), 4)
+        for k in hub_idx
+    }
 
-    return [{
-        "name": "oos_double_typhoon", "probability": 1.0, "phi_circuity": phi,
-        "epicenters": [{"lat": round(e[0],4), "lon": round(e[1],4), "intensity": round(e[2],4)} for e in epicenters],
-        "risk": risk, "hub_risk": {str(k): risk[k] for k in hub_idx},
-        "accessibility": a, "demand": demand, "supply": supply,
-        "hub_reactive_cost": hub_reactive_cost, "hub_process_time": hub_process_time,
-    }]
+    return {
+        "name": f"saa_{s_idx:03d}_{p_name}",
+        "probability": None,
+        "phi_circuity": phi,
+        "epicenters": [{"lat": round(e[0], 4), "lon": round(e[1], 4), "intensity": round(e[2], 4)} for e in epicenters],
+        "risk": risk,
+        "hub_risk": {str(k): risk[k] for k in hub_idx},
+        "accessibility": a,
+        "demand": demand,
+        "supply": supply,
+        "hub_reactive_cost": hub_reactive_cost,
+        "hub_process_time": hub_process_time,
+    }
+
+def generate_saa_scenarios(
+    coords,
+    aux_risk,
+    r_intervals,
+    demand_idx,
+    hub_idx,
+    origin_idx,
+    base_pop,
+    num_scenarios=50,
+):
+    """Generate a combinatorial SAA set with balanced profile coverage."""
+    profiles = _profile_bank()
+    scenarios = []
+
+    # Round-robin profile assignment enforces diversity and balanced coverage.
+    for s_idx in range(num_scenarios):
+        profile = profiles[s_idx % len(profiles)]
+        sc = _scenario_from_profile(
+            profile,
+            s_idx,
+            coords,
+            aux_risk,
+            r_intervals,
+            demand_idx,
+            hub_idx,
+            origin_idx,
+            base_pop,
+            epi_sigma=85.0,
+        )
+        scenarios.append(sc)
+
+    prob = 1.0 / max(1, num_scenarios)
+    for sc in scenarios:
+        sc["probability"] = prob
+    return scenarios
+
+def generate_oos_scenarios(
+    coords,
+    aux_risk,
+    r_intervals,
+    demand_idx,
+    hub_idx,
+    origin_idx,
+    base_pop,
+    num_scenarios=10,
+):
+    """Generate an independent OOS set (few, adversarially hard scenarios)."""
+    # Tail-focused adversarial bank, independent from SAA composition.
+    oos_profiles = [
+        ("oos_extreme_a", 4, 0.92, 1.10, 3.40, 0.95, 0.90, 0.050),
+        ("oos_extreme_b", 4, 0.95, 1.12, 3.70, 0.97, 0.92, 0.055),
+        ("oos_extreme_c", 5, 0.96, 1.15, 4.00, 0.98, 0.94, 0.060),
+        ("oos_double_typhoon", 5, 0.98, 1.18, 4.20, 0.99, 0.95, 0.065),
+    ]
+    scenarios = []
+    for s_idx in range(num_scenarios):
+        profile = oos_profiles[s_idx % len(oos_profiles)]
+        sc = _scenario_from_profile(
+            profile,
+            s_idx,
+            coords,
+            aux_risk,
+            r_intervals,
+            demand_idx,
+            hub_idx,
+            origin_idx,
+            base_pop,
+            epi_sigma=100.0,
+        )
+        sc["name"] = f"oos_{s_idx:04d}_{profile[0]}"
+        scenarios.append(sc)
+
+    prob = 1.0 / max(1, num_scenarios)
+    for sc in scenarios:
+        sc["probability"] = prob
+    return scenarios
 
 def build_instance_variant(variant="saa", num_scenarios=100):
     n_I, n_H, n_J = 100, 20, 12 # Always use CV-Large size
@@ -200,13 +245,12 @@ def build_instance_variant(variant="saa", num_scenarios=100):
     # Branch behavior based on variant
     if variant == "saa":
         print(f"Generating SAA ensemble with {num_scenarios} scenarios...")
-        # change seed so the SAA scenarios are differently drawn but base params are same
-        random.seed(9999)
+        random.seed(SEED + 101)
         scenarios = generate_saa_scenarios(coords, aux_risk, r_intervals, demand_idx, hub_idx, origin_idx, base_pop, num_scenarios)
     elif variant == "oos":
-        print("Generating OOS Double Typhoon scenario...")
-        random.seed(7777)
-        scenarios = generate_oos_scenario(coords, aux_risk, r_intervals, demand_idx, hub_idx, origin_idx, base_pop)
+        print(f"Generating OOS ensemble with {num_scenarios} scenarios...")
+        random.seed(SEED + 202)
+        scenarios = generate_oos_scenarios(coords, aux_risk, r_intervals, demand_idx, hub_idx, origin_idx, base_pop, num_scenarios)
 
     # Note: Hub capacities should strictly match the original CV-Large to remain a valid testing ground. 
     # To do that, we briefly generate the 3 training scenarios using seed 2026 just to set the max capacity, 
@@ -236,7 +280,10 @@ def build_instance_variant(variant="saa", num_scenarios=100):
         "meta": {
             "name": f"CentralVietnam_LARGE_{variant.upper()}",
             "description": f"MO-IHLNDP flood relief - {variant.upper()} Evaluation Set",
-            "seed": SEED, "size": "large", "variant": variant
+            "seed": SEED,
+            "size": "large",
+            "variant": variant,
+            "method": "combinatorial_saa_oos",
         },
         "dimensions": {
             "num_I": n_I, "num_H": n_H, "num_J": n_J,
@@ -261,18 +308,39 @@ def build_instance_variant(variant="saa", num_scenarios=100):
     }
 
 def main():
-    out_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../data_prep")
+    parser = argparse.ArgumentParser(description="Generate combinatorial SAA/OOS datasets for CV-Large")
+    parser.add_argument("--saa-scenarios", type=int, default=100, help="Number of in-sample SAA scenarios")
+    parser.add_argument("--oos-scenarios", type=int, default=10, help="Number of OOS scenarios")
+    parser.add_argument("--out-dir", default=None, help="Output directory (default: data/prep)")
+    args = parser.parse_args()
+
+    repo_root = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../.."))
+    out_dir = args.out_dir or os.path.join(repo_root, "data", "prep")
     os.makedirs(out_dir, exist_ok=True)
 
-    saa_inst = build_instance_variant("saa", 100)
-    with open(os.path.join(out_dir, "cv_large_saa100.json"), "w", encoding="utf-8") as f:
-        json.dump(saa_inst, f, indent=2, ensure_ascii=False)
-    print("Saved SAA 100 instance.")
+    saa_n = max(1, int(args.saa_scenarios))
+    oos_n = max(1, int(args.oos_scenarios))
 
-    oos_inst = build_instance_variant("oos")
-    with open(os.path.join(out_dir, "cv_large_oos.json"), "w", encoding="utf-8") as f:
+    saa_inst = build_instance_variant("saa", saa_n)
+    saa_path = os.path.join(out_dir, f"cv_large_saa{saa_n}.json")
+    with open(saa_path, "w", encoding="utf-8") as f:
+        json.dump(saa_inst, f, indent=2, ensure_ascii=False)
+    print(f"Saved SAA instance: {saa_path}")
+
+    oos_inst = build_instance_variant("oos", oos_n)
+    oos_path = os.path.join(out_dir, f"cv_large_oos{oos_n}.json")
+    with open(oos_path, "w", encoding="utf-8") as f:
         json.dump(oos_inst, f, indent=2, ensure_ascii=False)
-    print("Saved OOS Double Typhoon instance.")
+    print(f"Saved OOS instance: {oos_path}")
+
+    # Backward-compatible aliases used by older evaluation commands.
+    saa50_inst = saa_inst if saa_n == 50 else build_instance_variant("saa", 50)
+    oos10_inst = oos_inst if oos_n == 10 else build_instance_variant("oos", 10)
+    with open(os.path.join(out_dir, "cv_large_saa50.json"), "w", encoding="utf-8") as f:
+        json.dump(saa50_inst, f, indent=2, ensure_ascii=False)
+    with open(os.path.join(out_dir, "cv_large_oos.json"), "w", encoding="utf-8") as f:
+        json.dump(oos10_inst, f, indent=2, ensure_ascii=False)
+    print("Saved compatibility aliases: cv_large_saa50.json, cv_large_oos.json (10 hard scenarios)")
 
 if __name__ == "__main__":
     main()

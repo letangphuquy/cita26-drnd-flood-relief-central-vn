@@ -1,55 +1,72 @@
-"""
-exp2_analyze_saa_oos.py — Standalone SAA & OOS Diagnostic Tool
-===============================================================
-STATUS: Standalone utility — NOT part of the main experiment pipeline.
+"""exp2_analyze_saa_oos.py - SAA/OOS diagnostic summary."""
 
-Reads pre-computed evaluation files produced by the C++ solver's SAA and
-OOS eval modes and prints a brief statistical summary:
-
-  • SAA (Sample Average Approximation): reads
-      results/exp2/CV_large_seed0_saa_eval.json
-    Reports mean Z1/Z2 objective drift and mean CV across the 100 SAA scenarios.
-
-  • OOS (Out-Of-Sample, double-typhoon stress test): reads
-      results/exp2/CV_large_seed0_oos_eval.json
-    Reports mean CV and count of solutions that remain feasible under the
-    novel extreme scenario.
-
-Usage (from project root):
-  python src/scripts/exp2_analyze_saa_oos.py
-"""
-
+import argparse
 import json
 
-def analyze():
-    print("--- SAA EVALUATION (Seed 0) ---")
-    with open("../results/exp2/CV_large_seed0_saa_eval.json", "r") as f:
-        saa_data = json.load(f)["evaluations"]
-        
-    z1_diffs = []
-    z2_diffs = []
-    cvs = []
-    for sol in saa_data:
-        z1_diffs.append((sol["new_Z1"] - sol["orig_Z1"]) / max(1, sol["orig_Z1"]) * 100)
-        z2_diffs.append((sol["new_Z2"] - sol["orig_Z2"]) / max(1, sol["orig_Z2"]) * 100)
-        cvs.append(sol["new_CV"])
-        
-    print(f"Mean Z1 difference : {sum(z1_diffs)/len(z1_diffs):.2f}%")
-    print(f"Mean Z2 difference : {sum(z2_diffs)/len(z2_diffs):.2f}%")
-    print(f"Mean CV in SAA     : {sum(cvs)/len(cvs):.2f}")
 
-    print("\n--- OOS DOUBLE TYPHOON EVALUATION (Seed 0) ---")
-    with open("../results/exp2/CV_large_seed0_oos_eval.json", "r") as f:
-        oos_data = json.load(f)["evaluations"]
-        
-    cvs_oos = []
-    for sol in oos_data:
-        cvs_oos.append(sol["new_CV"])
-    
-    print(f"Mean CV in OOS     : {sum(cvs_oos)/len(cvs_oos):.2f}")
-    
-    valid_oos = sum(1 for c in cvs_oos if c == 0)
-    print(f"Valid OOS solutions: {valid_oos} / {len(oos_data)}")
+def _load_evals(path):
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f).get("evaluations", [])
+
+
+def _mean(xs):
+    return sum(xs) / len(xs) if xs else 0.0
+
+
+def analyze(saa_path, oos_path, out_json=None):
+    saa_data = _load_evals(saa_path)
+    oos_data = _load_evals(oos_path)
+
+    z1_diffs = [
+        (sol["new_Z1"] - sol["orig_Z1"]) / max(1.0, sol["orig_Z1"]) * 100.0
+        for sol in saa_data
+    ]
+    z2_diffs = [
+        (sol["new_Z2"] - sol["orig_Z2"]) / max(1.0, sol["orig_Z2"]) * 100.0
+        for sol in saa_data
+    ]
+    cv_saa = [sol["new_CV"] for sol in saa_data]
+    cv_oos = [sol["new_CV"] for sol in oos_data]
+
+    summary = {
+        "saa": {
+            "file": saa_path,
+            "n_evaluations": len(saa_data),
+            "mean_z1_diff_pct": _mean(z1_diffs),
+            "mean_z2_diff_pct": _mean(z2_diffs),
+            "mean_cv": _mean(cv_saa),
+            "feasible_count": sum(1 for c in cv_saa if c <= 1e-9),
+        },
+        "oos": {
+            "file": oos_path,
+            "n_evaluations": len(oos_data),
+            "mean_cv": _mean(cv_oos),
+            "feasible_count": sum(1 for c in cv_oos if c <= 1e-9),
+        },
+    }
+
+    print("--- SAA EVALUATION ---")
+    print(f"File               : {saa_path}")
+    print(f"Mean Z1 difference : {summary['saa']['mean_z1_diff_pct']:.2f}%")
+    print(f"Mean Z2 difference : {summary['saa']['mean_z2_diff_pct']:.2f}%")
+    print(f"Mean CV in SAA     : {summary['saa']['mean_cv']:.4f}")
+    print(f"Feasible solutions : {summary['saa']['feasible_count']} / {summary['saa']['n_evaluations']}")
+
+    print("\n--- OOS EVALUATION ---")
+    print(f"File               : {oos_path}")
+    print(f"Mean CV in OOS     : {summary['oos']['mean_cv']:.4f}")
+    print(f"Feasible solutions : {summary['oos']['feasible_count']} / {summary['oos']['n_evaluations']}")
+
+    if out_json:
+        with open(out_json, "w", encoding="utf-8") as f:
+            json.dump(summary, f, indent=2)
+        print(f"\n[Saved] {out_json}")
+
 
 if __name__ == "__main__":
-    analyze()
+    parser = argparse.ArgumentParser(description="Analyze SAA/OOS evaluation outputs")
+    parser.add_argument("--saa-eval", required=True, help="Path to *_saa_eval.json")
+    parser.add_argument("--oos-eval", required=True, help="Path to *_oos_eval.json")
+    parser.add_argument("--out", default=None, help="Optional path to write summary JSON")
+    args = parser.parse_args()
+    analyze(args.saa_eval, args.oos_eval, args.out)
