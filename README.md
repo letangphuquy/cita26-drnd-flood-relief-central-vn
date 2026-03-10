@@ -39,7 +39,7 @@ Benchmarks algorithms on a smaller instance to validate Pareto optimality, Hyper
 
 ### Experiment 2: Case Study & Managerial Insights (CV-Large)
 Extended evaluation on a large-scale instance with 20 independent seeds.
-- **Outputs**: Stability analysis, scenario sensitivity (heatmap), and high-fidelity network maps.
+- **Outputs**: PB-NSGA vs VNS-TS Pareto trade-off front, stability analysis, scenario sensitivity (heatmap), and high-fidelity network maps.
 - **Logic**: Calls `run_exp2_case_study.sh` / `.bat`.
 
 ## 4. Execution Commands
@@ -98,6 +98,23 @@ Key outputs written to `data/prep/`:
 - `cv_large_saa100.json` (in-sample SAA training set)
 - `cv_large_oos10.json` (hard OOS evaluation set)
 - `cv_large_saa50.json` and `cv_large_oos.json` (compatibility aliases for older scripts)
+
+3. Generate the Exp2 Pareto trade-off comparison (PB-NSGA vs VNS-TS) manually:
+
+**Mac / Linux:**
+```bash
+python src/scripts/exp2_pareto_tradeoff_pbnsga_vs_vnsts.py --results-exp2 results/exp2 --out-dir results/exp2
+```
+
+**Windows:**
+```powershell
+python src\scripts\exp2_pareto_tradeoff_pbnsga_vs_vnsts.py --results-exp2 results\exp2 --out-dir results\exp2
+```
+
+Trade-off outputs:
+- `results/exp2/exp2_tradeoff_pareto.csv`
+- `results/exp2/exp2_tradeoff_summary.json`
+- `results/exp2/exp2_pareto_pbnsga_vs_vnsts.pdf`
 
 ## 5. Manual Running and Analysis
 
