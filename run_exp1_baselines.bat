@@ -51,6 +51,11 @@ echo [Step 3] Running MILP Adaptive Weighted Sum (AWS)...
 echo           This may take some time depending on complexity.
 "%PYTHON%" "%SOLVER_DIR%\milp_aws_baseline.py" --instance "%DATA_CV%" --out "%RES1%\cv_small_milp_aws.json" --time_limit 600
 
+REM ── Step 3b: Run MILP Epsilon-Constraint Baseline ────────────────────────
+echo.
+echo [Step 3b] Running MILP Epsilon-Constraint Baseline...
+"%PYTHON%" "%SOLVER_DIR%\milp_epsilon.py" --instance "%DATA_CV%" --out "%RES1%\cv_small_milp_eps.json" --time_limit 600 --epsilon_steps 20
+
 REM ── Step 4: Run PB-NSGA (Ours) ─────────────────────────────────────────────
 echo.
 echo [Step 4] Running PB-NSGA (Ours) on CV-Small...
@@ -72,13 +77,13 @@ IF "%AEGA_ON%"=="1" (
 REM ── Step 5: Final Comparison Table ────────────────────────────────────────
 echo.
 echo [Step 5] Generating Comparison Metrics (HV, IGD+)...
-"%PYTHON%" "%PROJECT%src\scripts\exp1_evaluate_cv_small.py" --results-exp1 "%RES1%" --ours "%RES1%\cv_small_pb_nsga.json" --greedy "%RES1%\cv_small_greedy.json" --milp "%RES1%\cv_small_milp_aws.json"
+"%PYTHON%" "%PROJECT%src\scripts\exp1_evaluate_cv_small.py" --results-exp1 "%RES1%" --ours "%RES1%\cv_small_pb_nsga.json" --greedy "%RES1%\cv_small_greedy.json" --milp-aws "%RES1%\cv_small_milp_aws.json" --milp-eps "%RES1%\cv_small_milp_eps.json"
 
 REM ── Step 6: Audit Solver Outputs (optional) ───────────────────────────────
 IF "%AUDIT_ON%"=="1" (
     echo.
     echo [Step 6] Auditing output correctness/completeness...
-    "%PYTHON%" "%PROJECT%src\scripts\audit_solution_outputs.py" --instance "%DATA_CV%" --solutions "%RES1%\cv_small_pb_nsga.json" "%RES1%\cv_small_greedy.json" "%RES1%\cv_small_milp_aws.json"
+    "%PYTHON%" "%PROJECT%src\scripts\audit_solution_outputs.py" --instance "%DATA_CV%" --solutions "%RES1%\cv_small_pb_nsga.json" "%RES1%\cv_small_greedy.json" "%RES1%\cv_small_milp_aws.json" "%RES1%\cv_small_milp_eps.json"
 )
 
 echo.

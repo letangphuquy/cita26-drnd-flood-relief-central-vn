@@ -112,14 +112,13 @@ Detailed command-line arguments for the solvers and reproduction scripts.
 | `--tourney` | Int | `2` | Tournament selection size. |
 | `--out` | Path | `stdout` | Destination path for the result JSON. |
 
-### 6.2. MILP Adaptive Weighted Sum (`src/solver/milp_aws_baseline.py`)
+### 6.2. MILP Epsilon-Constraint Baseline (`src/solver/milp_epsilon.py`)
 | Argument | Type | Default | Description |
 | :------- | :--- | :------ | :---------- |
 | `--instance` | Path | (Required) | Path to the `.json` instance. |
 | `--out` | Path | (Required) | Destination path for result JSON. |
 | `--time_limit`| Int | `300` | Max seconds allowed PER objective solve. |
-| `--n_initial` | Int | `5` | Initial divisions for the weight sweep. |
-| `--delta_j` | Float | `0.1` | Target normalized segment length for AWS. |
+| `--epsilon_steps` | Int | `20` | Number of epsilon intervals used to sweep the Z1 bound. |
 
 ### 6.3. Branch-and-Bound / Greedy Baselines
 | Solver | Key Argument | Default | Effect |

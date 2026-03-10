@@ -25,7 +25,7 @@
 |---|---|
 | **File pattern** | `data/benchmark/<name>_seed<N>_drnd.json`, `data/cv/*.json`, `data/hlp/*.json` |
 | **Source (producer)** | `src/scripts/process_benchmark.py` (benchmark datasets) · `generate_synthetic.py` (synthetic) |
-| **Consumers** | `src/solver/solver.exe` (PB-NSGA/PB-NSMA) · `src/solver/bb_solver.exe` · `src/solver/milp_baseline.py` · `src/solver/export_flow.exe` · `src/solver/evaluate_oos.exe` |
+| **Consumers** | `src/solver/solver.exe` (PB-NSGA/PB-NSMA) · `src/solver/bb_solver.exe` · `src/solver/milp_epsilon.py` · `src/solver/export_flow.exe` · `src/solver/evaluate_oos.exe` |
 | **Reproducibility** | Re-generate with `python src/scripts/process_benchmark.py --seed <N>`. Deterministic for fixed `--seed`. |
 | **Debug hints** | Check `dimensions` counts match actual array lengths. `accessibility[m]` must be a `num_nodes × num_nodes` 2-D array. `theta` is `[num_H][num_I][num_S]`. |
 
@@ -135,7 +135,7 @@
 | Item | Detail |
 |---|---|
 | **File pattern** | `results/exp1/<name>_seed<N>.json`, `results/exp2/CV_*_seed<N>.json`, `results/exp1/CV_small_*.json` |
-| **Producers** | `src/solver/solver.exe` (PB-NSGA · PB-NSMA) · `src/solver/bb_solver.exe` · `src/solver/milp_baseline.py` · `src/solver/milp_aws_baseline.py` |
+| **Producers** | `src/solver/solver.exe` (PB-NSGA · PB-NSMA) · `src/solver/bb_solver.exe` · `src/solver/milp_epsilon.py` · `src/solver/milp_aws_baseline.py` |
 | **Consumers** | `src/scripts/analyze_exp1.py` · `src/scripts/analyze_exp2.py` · `src/solver/export_flow.exe` · `src/solver/evaluate_oos.exe` · `src/scripts/map_solution*.py` |
 | **Reproducibility** | `./run_experiments.sh` or `run_experiments.bat`. Seed controlled by `--seed`. |
 | **Debug hints** | If `pareto_front` is empty, check that the instance has ≥1 feasible hub configuration. `CV=0` is required for a solution to be classified as feasible. Filter by `CV==0` before computing HV/IGD+. |
@@ -332,7 +332,7 @@
  └──┬──────────────┬────────────┬────────┘
     │              │            │
     ▼              ▼            ▼
-solver.exe    bb_solver.exe  milp_baseline.py
+solver.exe    bb_solver.exe  milp_epsilon.py
 (PB-NSGA/     (exhaustive    (SCIP weighted-sum)
  PB-NSMA)      enum/BB)
     │              │            │
