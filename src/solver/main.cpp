@@ -71,16 +71,24 @@ struct Args {
 };
 
 Args parse_args(int argc, char *argv[]) {
-  if (argc < 2) {
+  auto print_usage = []() {
     cerr << "Usage: solver <instance.json> [--pop N] [--gen N] [--seed N] "
             "[--out output.json] [--algo nsma|nsga2] [--ls N] "
-          "[--pc f] [--pm-high f] [--pm-low f] "
-          "[--sbx-eta-rw f] [--pm-eta-rw f] "
-          "[--stag N] [--tourney N] "
+            "[--pc f] [--pm-high f] [--pm-low f] "
+            "[--sbx-eta-rw f] [--pm-eta-rw f] "
+            "[--stag N] [--tourney N] "
             "[--hyper-pulse] [--no-stag-boost] [--no-hyper-pulse] [--no-hamming] "
             "[--no-x-niche] [--no-immigrants] [--aega-pop] [--aega-min N] "
             "[--aega-max N] [--aega-step N]\n";
+  };
+
+  if (argc < 2) {
+    print_usage();
     exit(1);
+  }
+  if (string(argv[1]) == "--help" || string(argv[1]) == "-h") {
+    print_usage();
+    exit(0);
   }
   Args a;
   a.instance_path = argv[1];
@@ -135,6 +143,8 @@ Args parse_args(int argc, char *argv[]) {
       a.aega_max = std::stoi(argv[++i]);
     else if (flag == "--aega-step" && i + 1 < argc)
       a.aega_step = std::stoi(argv[++i]);
+    else
+      cerr << "[Warn] Unknown/ignored option: " << flag << "\n";
   }
   if (a.aega_min > a.aega_max)
     std::swap(a.aega_min, a.aega_max);
