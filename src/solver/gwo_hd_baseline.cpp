@@ -1,23 +1,20 @@
 // gwo_hd_baseline.cpp
 // -----------------------------------------------------------------------------
-// Customized Grey Wolf Optimizer baseline (near-faithful to Li et al., 2023)
+// Customized Grey Wolf Optimizer baseline (root-fixed representation)
 //
-// Reference: Applied Soft Computing 133 (2023) 109925
-// "Design of multimodal hub-and-spoke transportation network for emergency
-// relief under COVID-19 pandemic: A meta-heuristic approach"
+// Reference backbone:
+//   Li et al. (2023), Applied Soft Computing 133:109925.
+//   Uses alpha/beta/delta hierarchy + HD-based update toward leaders.
 //
-// Faithful components implemented:
-//   - Basic GWO hierarchy: alpha, beta, delta + omega wolves
-//   - Weighted normalized fitness over two objectives
-//   - HD-move update (Algorithm 2 style): random [0, HD(X,L)] moves toward L
-//   - Customized loop (Algorithm 3 style): for each omega wolf, generate r1/r2/r3
-//     against alpha/beta/delta and keep the best
-//
-// Adaptation for this project:
-//   - Wolf chromosome uses project Individual: (X, R, A, W)
-//   - Improvement stage focuses on discrete segments X and A
-//   - Pareto archive is collected across iterations and weight runs to compete
-//     against PB-NSGA in Exp1 evaluator.
+// Root fixes for this DRND setting:
+//   1) Two-layer representation:
+//      - infrastructure layer: X (open hubs)
+//      - mode/assignment layer: A (demand->hub assignment)
+//      R is reconstructed deterministically after each move.
+//   2) Multiobjective leader selection:
+//      alpha=min Z1, beta=min Z2, delta=knee solution on rank-1 set.
+//   3) Feasibility-aware update/selection via constrained dominance.
+//   4) Stagnation rescue: partial omega re-construction.
 // -----------------------------------------------------------------------------
 
 #include "decoder.hpp"
@@ -30,7 +27,6 @@
 #include <limits>
 #include <numeric>
 #include <random>
-#include <sstream>
 
 using Clock = std::chrono::high_resolution_clock;
 using Duration = std::chrono::duration<double>;
@@ -49,7 +45,6 @@ struct Wolf {
   double Z1 = 0.0;
   double Z2 = 0.0;
   double CV = 0.0;
-  double fitness = 1e100;
 };
 
 struct ParetoArchive {
@@ -85,6 +80,21 @@ struct ParetoArchive {
   }
 };
 
+static bool constrained_better(const Wolf &a, const Wolf &b) {
+  bool fa = (a.CV <= EPS), fb = (b.CV <= EPS);
+  if (fa != fb)
+    return fa;
+  if (!fa)
+    return a.CV < b.CV;
+
+  bool a_dom = (a.Z1 <= b.Z1 && a.Z2 <= b.Z2 && (a.Z1 < b.Z1 || a.Z2 < b.Z2));
+  bool b_dom = (b.Z1 <= a.Z1 && b.Z2 <= a.Z2 && (b.Z1 < a.Z1 || b.Z2 < a.Z2));
+  if (a_dom != b_dom)
+    return a_dom;
+
+  return (a.Z1 + 8.0 * a.Z2) < (b.Z1 + 8.0 * b.Z2);
+}
+
 static vector<int> open_hubs(const vector<int> &X) {
   vector<int> out;
   for (int k = 0; k < (int)X.size(); ++k)
@@ -96,7 +106,7 @@ static vector<int> open_hubs(const vector<int> &X) {
 static vector<double> expected_demand(const DRNDInstance &inst) {
   vector<double> e(inst.num_I, 0.0);
   for (int si = 0; si < inst.num_S; ++si) {
-    const double p = inst.scenarios[si].prob;
+    double p = inst.scenarios[si].prob;
     for (int ii = 0; ii < inst.num_I; ++ii) {
       int di = inst.demand_idx[ii];
       e[ii] += p * inst.scenarios[si].demand[di];
@@ -113,6 +123,7 @@ static void reconstruct_R(Individual &ind, const DRNDInstance &inst,
     if (ki >= 0 && ki < inst.num_H && ind.X[ki])
       load[ki] += inst.gamma * exp_dem[ii];
   }
+
   for (int ki = 0; ki < inst.num_H; ++ki) {
     if (!ind.X[ki]) {
       ind.R[ki] = 0.0;
@@ -126,39 +137,53 @@ static void reconstruct_R(Individual &ind, const DRNDInstance &inst,
   }
 }
 
-static void assign_to_nearest_open(Individual &ind, const DRNDInstance &inst) {
-  auto oh = open_hubs(ind.X);
-  if (oh.empty()) {
-    int k0 = 0;
-    ind.X[k0] = 1;
-    oh.push_back(k0);
+static int nearest_open_for_demand(const DRNDInstance &inst, int ii,
+                                   const vector<int> &open) {
+  int d = inst.demand_idx[ii];
+  int best = open[0];
+  double best_d2 = 1e100;
+  for (int ki : open) {
+    int h = inst.hub_idx[ki];
+    double dx = inst.lat[d] - inst.lat[h];
+    double dy = inst.lon[d] - inst.lon[h];
+    double d2 = dx * dx + dy * dy;
+    if (d2 < best_d2) {
+      best_d2 = d2;
+      best = ki;
+    }
+  }
+  return best;
+}
+
+static void repair_assignment(Individual &ind, const DRNDInstance &inst) {
+  auto open = open_hubs(ind.X);
+  if (open.empty()) {
+    ind.X[0] = 1;
+    open.push_back(0);
   }
   for (int ii = 0; ii < inst.num_I; ++ii) {
-    int cur = ind.A[ii];
-    if (cur >= 0 && cur < inst.num_H && ind.X[cur])
-      continue;
-
-    int d = inst.demand_idx[ii];
-    int best = oh[0];
-    double best_d2 = 1e100;
-    for (int ki : oh) {
-      int h = inst.hub_idx[ki];
-      double dx = inst.lat[d] - inst.lat[h];
-      double dy = inst.lon[d] - inst.lon[h];
-      double d2 = dx * dx + dy * dy;
-      if (d2 < best_d2) {
-        best_d2 = d2;
-        best = ki;
-      }
-    }
-    ind.A[ii] = best;
+    int ki = ind.A[ii];
+    if (ki < 0 || ki >= inst.num_H || !ind.X[ki])
+      ind.A[ii] = nearest_open_for_demand(inst, ii, open);
   }
 }
 
-static Individual random_feasibleish(const DRNDInstance &inst, std::mt19937 &rng,
-                                     const vector<double> &exp_dem) {
-  Individual ind(inst.num_H, inst.num_I);
+static Wolf evaluate(Individual ind, const DRNDInstance &inst,
+                     const vector<double> &exp_dem) {
+  repair_assignment(ind, inst);
+  reconstruct_R(ind, inst, exp_dem);
+  decode(ind, inst);
+  Wolf w;
+  w.ind = std::move(ind);
+  w.Z1 = w.ind.Z1;
+  w.Z2 = w.ind.Z2;
+  w.CV = w.ind.CV;
+  return w;
+}
 
+static Individual random_structure(const DRNDInstance &inst, std::mt19937 &rng,
+                                   const vector<double> &exp_dem) {
+  Individual ind(inst.num_H, inst.num_I);
   int max_open = std::max(1, inst.num_H * 3 / 5);
   int n_open = std::uniform_int_distribution<int>(1, max_open)(rng);
 
@@ -168,106 +193,257 @@ static Individual random_feasibleish(const DRNDInstance &inst, std::mt19937 &rng
   for (int i = 0; i < n_open; ++i)
     ind.X[hubs[i]] = 1;
 
-  auto oh = open_hubs(ind.X);
-  for (int ii = 0; ii < inst.num_I; ++ii)
-    ind.A[ii] = oh[std::uniform_int_distribution<int>(0, (int)oh.size() - 1)(rng)];
+  auto open = open_hubs(ind.X);
+  for (int ii = 0; ii < inst.num_I; ++ii) {
+    if (std::uniform_real_distribution<double>(0.0, 1.0)(rng) < 0.75) {
+      ind.A[ii] = nearest_open_for_demand(inst, ii, open);
+    } else {
+      ind.A[ii] = open[std::uniform_int_distribution<int>(0, (int)open.size() - 1)(rng)];
+    }
+  }
 
+  ind.W = {0.7, 0.7, 0.6, 0.6, 0.5, 0.5};
   reconstruct_R(ind, inst, exp_dem);
-
-  for (auto &w : ind.W)
-    w = std::uniform_real_distribution<double>(0.0, 1.0)(rng);
-
   return ind;
 }
 
-static void evaluate(Wolf &w, const DRNDInstance &inst) {
-  decode(w.ind, inst);
-  w.Z1 = w.ind.Z1;
-  w.Z2 = w.ind.Z2;
-  w.CV = w.ind.CV;
+static vector<int> diff_positions(const vector<int> &a, const vector<int> &b) {
+  vector<int> diff;
+  for (int i = 0; i < (int)a.size(); ++i)
+    if (a[i] != b[i])
+      diff.push_back(i);
+  return diff;
 }
 
-static void update_fitness(vector<Wolf> &pop, double w1, double w2) {
-  double min_z1 = 1e100, min_z2 = 1e100;
-  for (const auto &w : pop) {
-    if (w.CV <= EPS) {
-      min_z1 = std::min(min_z1, w.Z1);
-      min_z2 = std::min(min_z2, w.Z2);
+static double sqdist_demand_hub(const DRNDInstance &inst, int ii, int ki) {
+  int d = inst.demand_idx[ii];
+  int h = inst.hub_idx[ki];
+  double dx = inst.lat[d] - inst.lat[h];
+  double dy = inst.lon[d] - inst.lon[h];
+  return dx * dx + dy * dy;
+}
+
+// Problem-specific operator:
+// Relieve overloaded hubs by reassigning large expected-demand customers to
+// alternative open hubs with lower overload pressure and shorter distance.
+static void drnd_capacity_reassign(Individual &ind, const DRNDInstance &inst,
+                                   const vector<double> &exp_dem,
+                                   std::mt19937 &rng) {
+  repair_assignment(ind, inst);
+  auto open = open_hubs(ind.X);
+  if (open.empty()) {
+    ind.X[0] = 1;
+    open.push_back(0);
+  }
+
+  vector<double> load(inst.num_H, 0.0);
+  for (int ii = 0; ii < inst.num_I; ++ii) {
+    int ki = ind.A[ii];
+    if (ki >= 0 && ki < inst.num_H && ind.X[ki])
+      load[ki] += inst.gamma * exp_dem[ii];
+  }
+
+  auto overload_ratio = [&](int ki) {
+    double cap = std::max(inst.kappa[ki], EPS);
+    return load[ki] / cap;
+  };
+
+  int over_hub = -1;
+  double worst = 1.0;
+  for (int ki : open) {
+    double r = overload_ratio(ki);
+    if (r > worst + 1e-9) {
+      worst = r;
+      over_hub = ki;
     }
   }
-  if (min_z1 >= 1e99 || min_z2 >= 1e99) {
-    for (auto &w : pop)
-      w.fitness = 1e100 + w.CV;
+  if (over_hub < 0)
     return;
-  }
 
-  min_z1 = std::max(min_z1, 1e-9);
-  min_z2 = std::max(min_z2, 1e-9);
+  vector<int> assigned;
+  assigned.reserve(inst.num_I);
+  for (int ii = 0; ii < inst.num_I; ++ii)
+    if (ind.A[ii] == over_hub)
+      assigned.push_back(ii);
 
-  for (auto &w : pop) {
-    if (w.CV > EPS) {
-      w.fitness = 1e100 + w.CV;
-    } else {
-      w.fitness = w1 * (w.Z1 / min_z1) + w2 * (w.Z2 / min_z2);
-    }
-  }
-}
-
-static inline bool better(const Wolf &a, const Wolf &b) {
-  return a.fitness < b.fitness;
-}
-
-static int hamming_distance(const vector<int> &x, const vector<int> &l) {
-  int d = 0;
-  int n = (int)x.size();
-  for (int i = 0; i < n; ++i)
-    d += (x[i] != l[i]);
-  return d;
-}
-
-static void hd_move_in_place(vector<int> &x, const vector<int> &l, std::mt19937 &rng) {
-  int hd = hamming_distance(x, l);
-  if (hd <= 0)
+  if (assigned.empty())
     return;
 
-  int move = std::uniform_int_distribution<int>(0, hd)(rng);
-  while (move-- > 0) {
-    vector<int> diff;
-    diff.reserve(x.size());
-    for (int i = 0; i < (int)x.size(); ++i) {
-      if (x[i] != l[i])
-        diff.push_back(i);
+  std::shuffle(assigned.begin(), assigned.end(), rng);
+  std::sort(assigned.begin(), assigned.end(), [&](int a, int b) {
+    return exp_dem[a] > exp_dem[b];
+  });
+
+  // If overload is severe, open one relief hub selected by proximity to
+  // high-demand customers currently attached to the overloaded hub.
+  if (overload_ratio(over_hub) > 1.03) {
+    vector<int> closed;
+    closed.reserve(inst.num_H);
+    for (int ki = 0; ki < inst.num_H; ++ki)
+      if (!ind.X[ki])
+        closed.push_back(ki);
+
+    if (!closed.empty()) {
+      int top_cnt = std::max(1, std::min((int)assigned.size(), 8));
+      int best_k = closed[0];
+      double best_score = 1e100;
+      for (int kc : closed) {
+        double geo = 0.0;
+        for (int t = 0; t < top_cnt; ++t) {
+          int ii = assigned[t];
+          geo += exp_dem[ii] * sqdist_demand_hub(inst, ii, kc);
+        }
+        double cost_penalty = 1e-4 * inst.F_hub[kc];
+        double score = geo + cost_penalty;
+        if (score < best_score) {
+          best_score = score;
+          best_k = kc;
+        }
+      }
+      ind.X[best_k] = 1;
+      open.push_back(best_k);
+      load[best_k] = 0.0;
     }
-    if (diff.empty())
-      break;
-    int idx = diff[std::uniform_int_distribution<int>(0, (int)diff.size() - 1)(rng)];
-    x[idx] = l[idx];
+  }
+
+  int max_moves = std::max(1, (int)assigned.size() / 2);
+  int moved = 0;
+
+  for (int ii : assigned) {
+    int best_k = over_hub;
+    double best_score = 1e100;
+
+    for (int kj : open) {
+      if (kj == over_hub)
+        continue;
+
+      double dem = inst.gamma * exp_dem[ii];
+      double cap_j = std::max(inst.kappa[kj], EPS);
+      double cap_o = std::max(inst.kappa[over_hub], EPS);
+
+      double r_j_new = (load[kj] + dem) / cap_j;
+      double r_o_new = (load[over_hub] - dem) / cap_o;
+      double dist_new = sqdist_demand_hub(inst, ii, kj);
+
+      // Prioritize capacity relief first, then transport distance.
+      double score = 50.0 * std::max(0.0, r_j_new - 1.0) +
+                     20.0 * std::max(0.0, r_o_new - 1.0) + dist_new;
+
+      if (score < best_score) {
+        best_score = score;
+        best_k = kj;
+      }
+    }
+
+    if (best_k != over_hub) {
+      double dem = inst.gamma * exp_dem[ii];
+      load[over_hub] -= dem;
+      load[best_k] += dem;
+      ind.A[ii] = best_k;
+      ++moved;
+      if (moved >= max_moves)
+        break;
+      if (overload_ratio(over_hub) <= 1.0 + 1e-6)
+        break;
+    }
+  }
+
+  reconstruct_R(ind, inst, exp_dem);
+}
+
+static void guided_hd_move(vector<int> &x, const vector<int> &leader,
+                           std::mt19937 &rng, double frac) {
+  auto diff = diff_positions(x, leader);
+  if (diff.empty())
+    return;
+  int hd = (int)diff.size();
+  int max_move = std::max(1, (int)std::round(frac * hd));
+  int move = std::uniform_int_distribution<int>(1, max_move)(rng);
+
+  while (move-- > 0 && !diff.empty()) {
+    int pos = std::uniform_int_distribution<int>(0, (int)diff.size() - 1)(rng);
+    int idx = diff[pos];
+    x[idx] = leader[idx];
+    diff[pos] = diff.back();
+    diff.pop_back();
   }
 }
 
-static Wolf best_of_three(const Wolf &r1, const Wolf &r2, const Wolf &r3) {
-  const Wolf *best = &r1;
-  if (better(r2, *best))
-    best = &r2;
-  if (better(r3, *best))
-    best = &r3;
-  return *best;
+static vector<int> rank1_indices(const vector<Wolf> &pop) {
+  vector<int> out;
+  for (int i = 0; i < (int)pop.size(); ++i) {
+    if (pop[i].CV > EPS)
+      continue;
+    bool dom = false;
+    for (int j = 0; j < (int)pop.size(); ++j) {
+      if (i == j || pop[j].CV > EPS)
+        continue;
+      bool j_dom_i = (pop[j].Z1 <= pop[i].Z1 && pop[j].Z2 <= pop[i].Z2 &&
+                      (pop[j].Z1 < pop[i].Z1 || pop[j].Z2 < pop[i].Z2));
+      if (j_dom_i) {
+        dom = true;
+        break;
+      }
+    }
+    if (!dom)
+      out.push_back(i);
+  }
+  return out;
+}
+
+static int select_delta_knee(const vector<Wolf> &pop, const vector<int> &r1,
+                             int alpha_idx, int beta_idx) {
+  if (r1.empty())
+    return alpha_idx;
+
+  double z1min = 1e100, z1max = -1e100, z2min = 1e100, z2max = -1e100;
+  for (int idx : r1) {
+    z1min = std::min(z1min, pop[idx].Z1);
+    z1max = std::max(z1max, pop[idx].Z1);
+    z2min = std::min(z2min, pop[idx].Z2);
+    z2max = std::max(z2max, pop[idx].Z2);
+  }
+
+  double r1z = std::max(1e-9, z1max - z1min);
+  double r2z = std::max(1e-9, z2max - z2min);
+
+  int best = r1[0];
+  double best_score = 1e100;
+  for (int idx : r1) {
+    if (idx == alpha_idx || idx == beta_idx)
+      continue;
+    double n1 = (pop[idx].Z1 - z1min) / r1z;
+    double n2 = (pop[idx].Z2 - z2min) / r2z;
+    double score = std::abs(n1 - n2);
+    if (score < best_score) {
+      best_score = score;
+      best = idx;
+    }
+  }
+  return best;
 }
 
 int main(int argc, char *argv[]) {
   if (argc < 2) {
     cerr << "Usage: gwo_hd_baseline <instance.json> [--out path] [--seed N] "
-            "[--wolves N] [--iter N] [--time-limit s] [--weights csv]\n";
+            "[--wolves N] [--iter N] [--time-limit s]\n";
     return 1;
   }
 
   string instance_path = argv[1];
   string out_path;
   int seed = 42;
-  int wolves_n = 10;      // paper uses 10 wolves in customized GWO
-  int max_iter = 180;
-  double time_limit = 90.0;
-  string weights_csv = "0.6,0.5,0.7,0.4,0.8";
+  int wolves_n = 30;
+  int max_iter = 560;
+  double time_limit = 140.0;
+  double fracA_start = 0.45;
+  double fracA_end = 0.06;
+  double fracX_start = 0.35;
+  double fracX_end = 0.04;
+  double accept_worse_prob = 0.03;
+  int stagnation_limit = 20;
+  double keep_ratio = 0.45;
+  double ps_op_prob = 0.35;
 
   for (int i = 2; i < argc; ++i) {
     string f = argv[i];
@@ -276,14 +452,33 @@ int main(int argc, char *argv[]) {
     else if (f == "--seed" && i + 1 < argc)
       seed = std::stoi(argv[++i]);
     else if (f == "--wolves" && i + 1 < argc)
-      wolves_n = std::max(4, std::stoi(argv[++i]));
+      wolves_n = std::max(6, std::stoi(argv[++i]));
     else if (f == "--iter" && i + 1 < argc)
       max_iter = std::max(1, std::stoi(argv[++i]));
     else if (f == "--time-limit" && i + 1 < argc)
       time_limit = std::max(1.0, std::stod(argv[++i]));
-    else if (f == "--weights" && i + 1 < argc)
-      weights_csv = argv[++i];
+    else if (f == "--fracA-start" && i + 1 < argc)
+      fracA_start = std::clamp(std::stod(argv[++i]), 0.0, 1.0);
+    else if (f == "--fracA-end" && i + 1 < argc)
+      fracA_end = std::clamp(std::stod(argv[++i]), 0.0, 1.0);
+    else if (f == "--fracX-start" && i + 1 < argc)
+      fracX_start = std::clamp(std::stod(argv[++i]), 0.0, 1.0);
+    else if (f == "--fracX-end" && i + 1 < argc)
+      fracX_end = std::clamp(std::stod(argv[++i]), 0.0, 1.0);
+    else if (f == "--accept-worse" && i + 1 < argc)
+      accept_worse_prob = std::clamp(std::stod(argv[++i]), 0.0, 0.5);
+    else if (f == "--stagnation-limit" && i + 1 < argc)
+      stagnation_limit = std::max(5, std::stoi(argv[++i]));
+    else if (f == "--keep-ratio" && i + 1 < argc)
+      keep_ratio = std::clamp(std::stod(argv[++i]), 0.20, 0.95);
+    else if (f == "--ps-op-prob" && i + 1 < argc)
+      ps_op_prob = std::clamp(std::stod(argv[++i]), 0.0, 1.0);
   }
+
+  if (fracA_start < fracA_end)
+    std::swap(fracA_start, fracA_end);
+  if (fracX_start < fracX_end)
+    std::swap(fracX_start, fracX_end);
 
   DRNDInstance inst;
   try {
@@ -293,130 +488,117 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  vector<double> weights;
-  {
-    std::stringstream ss(weights_csv);
-    string tok;
-    while (std::getline(ss, tok, ',')) {
-      if (tok.empty())
-        continue;
-      double w = std::stod(tok);
-      if (w > 0.0 && w < 1.0)
-        weights.push_back(w);
-    }
-    if (weights.empty())
-      weights = {0.6};
-  }
-
   std::mt19937 rng(seed);
-  const auto exp_dem = expected_demand(inst);
+  auto exp_dem = expected_demand(inst);
 
   ParetoArchive archive;
   long long eval_count = 0;
 
+  vector<Wolf> pop;
+  pop.reserve(wolves_n);
+  for (int i = 0; i < wolves_n; ++i) {
+    Wolf w = evaluate(random_structure(inst, rng, exp_dem), inst, exp_dem);
+    pop.push_back(w);
+    archive.add(w);
+    ++eval_count;
+  }
+
   auto t0 = Clock::now();
   std::clock_t c0 = std::clock();
 
-  for (double w1 : weights) {
-    double w2 = 1.0 - w1;
+  int best_r1 = (int)rank1_indices(pop).size();
+  int stagnation = 0;
 
-    // Construction stage: keep a common base amount-like structure and vary
-    // mode-like discrete choices across wolves.
-    Individual base = random_feasibleish(inst, rng, exp_dem);
+  for (int iter = 0; iter < max_iter; ++iter) {
+    if (Duration(Clock::now() - t0).count() > time_limit)
+      break;
 
-    vector<Wolf> pop;
-    pop.reserve(wolves_n);
-    for (int i = 0; i < wolves_n; ++i) {
-      Wolf w;
-      w.ind = base;
+    vector<int> r1 = rank1_indices(pop);
+    int alpha_idx = -1, beta_idx = -1;
 
-      // Vary discrete mode-like part (A) among wolves.
-      auto oh = open_hubs(w.ind.X);
-      for (int ii = 0; ii < inst.num_I; ++ii)
-        w.ind.A[ii] = oh[std::uniform_int_distribution<int>(0, (int)oh.size() - 1)(rng)];
-
-      // Mild diversity in open-hub mask for stronger exploration.
-      if (i > 0 && std::uniform_real_distribution<double>(0.0, 1.0)(rng) < 0.4) {
-        int k = std::uniform_int_distribution<int>(0, inst.num_H - 1)(rng);
-        w.ind.X[k] ^= 1;
-        if (std::accumulate(w.ind.X.begin(), w.ind.X.end(), 0) == 0)
-          w.ind.X[k] = 1;
-      }
-
-      assign_to_nearest_open(w.ind, inst);
-      reconstruct_R(w.ind, inst, exp_dem);
-      evaluate(w, inst);
-      ++eval_count;
-      archive.add(w);
-      pop.push_back(std::move(w));
+    if (!r1.empty()) {
+      alpha_idx = *std::min_element(r1.begin(), r1.end(), [&](int a, int b) {
+        return pop[a].Z1 < pop[b].Z1;
+      });
+      beta_idx = *std::min_element(r1.begin(), r1.end(), [&](int a, int b) {
+        return pop[a].Z2 < pop[b].Z2;
+      });
+    } else {
+      alpha_idx = beta_idx = (int)(std::min_element(pop.begin(), pop.end(),
+            [](const Wolf &a, const Wolf &b) { return a.CV < b.CV; }) - pop.begin());
     }
 
-    update_fitness(pop, w1, w2);
+    int delta_idx = select_delta_knee(pop, r1, alpha_idx, beta_idx);
 
-    int iter = 0;
-    while (iter < max_iter) {
-      if (Duration(Clock::now() - t0).count() > time_limit)
-        break;
+    const Wolf &alpha = pop[alpha_idx];
+    const Wolf &beta = pop[beta_idx];
+    const Wolf &delta = pop[delta_idx];
 
-      std::sort(pop.begin(), pop.end(), [](const Wolf &a, const Wolf &b) {
-        return a.fitness < b.fitness;
-      });
+    for (int wi = 0; wi < (int)pop.size(); ++wi) {
+      if (wi == alpha_idx || wi == beta_idx || wi == delta_idx)
+        continue;
 
-      Wolf alpha = pop[0], beta = pop[1], delta = pop[2];
+      const Wolf &cur = pop[wi];
+      vector<Wolf> cand(3);
+      const Wolf *leaders[3] = {&alpha, &beta, &delta};
 
-      for (int wi = 3; wi < (int)pop.size(); ++wi) {
-        Wolf cur = pop[wi];
+      double progress = (double)iter / std::max(1, max_iter - 1);
+      double fracA = std::max(fracA_end, fracA_start - (fracA_start - fracA_end) * progress);
+      double fracX = std::max(fracX_end, fracX_start - (fracX_start - fracX_end) * progress);
 
-        // Algorithm 3 lines 16-20 style for X segment.
-        Wolf r1x = cur, r2x = cur, r3x = cur;
-        hd_move_in_place(r1x.ind.X, alpha.ind.X, rng);
-        hd_move_in_place(r2x.ind.X, beta.ind.X, rng);
-        hd_move_in_place(r3x.ind.X, delta.ind.X, rng);
-        for (Wolf *rw : {&r1x, &r2x, &r3x}) {
-          if (std::accumulate(rw->ind.X.begin(), rw->ind.X.end(), 0) == 0)
-            rw->ind.X[std::uniform_int_distribution<int>(0, inst.num_H - 1)(rng)] = 1;
-          assign_to_nearest_open(rw->ind, inst);
-          reconstruct_R(rw->ind, inst, exp_dem);
-          evaluate(*rw, inst);
-          ++eval_count;
-        }
+      for (int ci = 0; ci < 3; ++ci) {
+        Individual ind = cur.ind;
+        guided_hd_move(ind.A, leaders[ci]->ind.A, rng, fracA);
+        guided_hd_move(ind.X, leaders[ci]->ind.X, rng, fracX);
 
-        // Manual fitness for temporary triplet, using current min-normalization.
-        double min_z1 = std::min({r1x.Z1, r2x.Z1, r3x.Z1});
-        double min_z2 = std::min({r1x.Z2, r2x.Z2, r3x.Z2});
-        min_z1 = std::max(min_z1, 1e-9);
-        min_z2 = std::max(min_z2, 1e-9);
-        for (Wolf *rw : {&r1x, &r2x, &r3x})
-          rw->fitness = (rw->CV > EPS) ? (1e100 + rw->CV)
-                                       : (w1 * (rw->Z1 / min_z1) + w2 * (rw->Z2 / min_z2));
-        Wolf best_x = best_of_three(r1x, r2x, r3x);
+        if (std::uniform_real_distribution<double>(0.0, 1.0)(rng) < ps_op_prob)
+          drnd_capacity_reassign(ind, inst, exp_dem, rng);
 
-        // Algorithm 3 lines 21 style for A segment.
-        Wolf r1a = best_x, r2a = best_x, r3a = best_x;
-        hd_move_in_place(r1a.ind.A, alpha.ind.A, rng);
-        hd_move_in_place(r2a.ind.A, beta.ind.A, rng);
-        hd_move_in_place(r3a.ind.A, delta.ind.A, rng);
-        for (Wolf *rw : {&r1a, &r2a, &r3a}) {
-          assign_to_nearest_open(rw->ind, inst);
-          reconstruct_R(rw->ind, inst, exp_dem);
-          evaluate(*rw, inst);
-          ++eval_count;
-          archive.add(*rw);
-        }
+        if (std::accumulate(ind.X.begin(), ind.X.end(), 0) == 0)
+          ind.X[std::uniform_int_distribution<int>(0, inst.num_H - 1)(rng)] = 1;
 
-        min_z1 = std::min({r1a.Z1, r2a.Z1, r3a.Z1});
-        min_z2 = std::min({r1a.Z2, r2a.Z2, r3a.Z2});
-        min_z1 = std::max(min_z1, 1e-9);
-        min_z2 = std::max(min_z2, 1e-9);
-        for (Wolf *rw : {&r1a, &r2a, &r3a})
-          rw->fitness = (rw->CV > EPS) ? (1e100 + rw->CV)
-                                       : (w1 * (rw->Z1 / min_z1) + w2 * (rw->Z2 / min_z2));
-
-        pop[wi] = best_of_three(r1a, r2a, r3a);
+        cand[ci] = evaluate(std::move(ind), inst, exp_dem);
+        archive.add(cand[ci]);
+        ++eval_count;
       }
 
-      update_fitness(pop, w1, w2);
-      ++iter;
+      Wolf best = cand[0];
+      if (constrained_better(cand[1], best))
+        best = cand[1];
+      if (constrained_better(cand[2], best))
+        best = cand[2];
+
+      if (constrained_better(best, cur)) {
+        pop[wi] = best;
+      } else if (std::uniform_real_distribution<double>(0.0, 1.0)(rng) < accept_worse_prob) {
+        pop[wi] = best;
+      }
+    }
+
+    int now_r1 = (int)rank1_indices(pop).size();
+    if (now_r1 > best_r1) {
+      best_r1 = now_r1;
+      stagnation = 0;
+    } else {
+      ++stagnation;
+    }
+
+    if (stagnation >= stagnation_limit) {
+      vector<int> idx(pop.size());
+      std::iota(idx.begin(), idx.end(), 0);
+      std::sort(idx.begin(), idx.end(), [&](int a, int b) {
+        return constrained_better(pop[a], pop[b]);
+      });
+
+      int keep = std::max(3, (int)std::round(pop.size() * keep_ratio));
+      for (int t = keep; t < (int)idx.size(); ++t) {
+        int i = idx[t];
+        Wolf w = evaluate(random_structure(inst, rng, exp_dem), inst, exp_dem);
+        pop[i] = w;
+        archive.add(w);
+        ++eval_count;
+      }
+      stagnation = 0;
     }
   }
 
@@ -433,7 +615,7 @@ int main(int argc, char *argv[]) {
   double cpu_s = 1.0 * (std::clock() - c0) / CLOCKS_PER_SEC;
 
   json j;
-  j["meta"]["solver"] = "GWO-HD-Baseline";
+  j["meta"]["solver"] = "GWO-HD-Baseline-v2";
   j["meta"]["reference"] =
       "Li et al. (2023) Applied Soft Computing 133:109925 (customized GWO + HD move)";
   j["meta"]["elapsed_s"] = elapsed;
@@ -441,23 +623,31 @@ int main(int argc, char *argv[]) {
   j["meta"]["seed"] = seed;
   j["meta"]["wolves"] = wolves_n;
   j["meta"]["iter"] = max_iter;
-  j["meta"]["weights"] = weights;
+  j["meta"]["fracA_start"] = fracA_start;
+  j["meta"]["fracA_end"] = fracA_end;
+  j["meta"]["fracX_start"] = fracX_start;
+  j["meta"]["fracX_end"] = fracX_end;
+  j["meta"]["accept_worse_prob"] = accept_worse_prob;
+  j["meta"]["stagnation_limit"] = stagnation_limit;
+  j["meta"]["keep_ratio"] = keep_ratio;
+  j["meta"]["ps_op_prob"] = ps_op_prob;
   j["meta"]["evaluations"] = eval_count;
   j["meta"]["pareto_size"] = (int)front.size();
 
   json jfront = json::array();
   for (const auto &s : front) {
-    json x;
-    x["Z1"] = s.Z1;
-    x["Z2"] = s.Z2;
-    x["CV"] = 0.0;
-    x["rank"] = 1;
-    x["X"] = s.X;
-    x["R"] = s.R;
-    x["A"] = s.A;
-    x["W"] = s.W;
-    jfront.push_back(std::move(x));
+    json js;
+    js["Z1"] = s.Z1;
+    js["Z2"] = s.Z2;
+    js["CV"] = 0.0;
+    js["rank"] = 1;
+    js["X"] = s.X;
+    js["R"] = s.R;
+    js["A"] = s.A;
+    js["W"] = s.W;
+    jfront.push_back(std::move(js));
   }
+
   j["pareto_front"] = jfront;
   j["all_feasible"] = jfront;
 
@@ -473,7 +663,7 @@ int main(int argc, char *argv[]) {
     cerr << "[Output] " << out_path << "\n";
   }
 
-  cerr << "[GWO-HD] Pareto size=" << front.size() << ", evals=" << eval_count
+  cerr << "[GWO-HD-v2] Pareto size=" << front.size() << ", evals=" << eval_count
        << ", elapsed=" << elapsed << " s\n";
   return 0;
 }

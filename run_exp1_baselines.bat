@@ -120,7 +120,7 @@ IF %ERRORLEVEL% EQU 0 (
 )
 CALL :ShouldRun "%RES1%\cv_small_gwo_hd.json" "%SOLVER_DIR%\gwo_hd_baseline.exe" "%DATA_CV%"
 IF %ERRORLEVEL% EQU 0 (
-    "%SOLVER_DIR%\gwo_hd_baseline.exe" "%DATA_CV%" --out "%RES1%\cv_small_gwo_hd.json" --seed 42 --wolves 20 --iter 400 --time-limit 120 --weights 0.6,0.7,0.8,0.9,0.5,0.4
+    "%SOLVER_DIR%\gwo_hd_baseline.exe" "%DATA_CV%" --out "%RES1%\cv_small_gwo_hd.json" --seed 42 --wolves 30 --iter 560 --time-limit 140 --fracA-start 0.45 --fracA-end 0.06 --fracX-start 0.35 --fracX-end 0.04 --accept-worse 0.03 --stagnation-limit 20 --keep-ratio 0.45 --ps-op-prob 0.35
 ) ELSE (
     echo [Skip] GWO-HD run unchanged.
 )
