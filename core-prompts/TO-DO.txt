@@ -5,7 +5,7 @@
  as we can see in the solution `paper/figures/cv_large_map_detailed_v3.png`
 - [x] The inventory filling should not be present in reactive hubs.
 
-- [ ] The inventory filling variables is overfitted to a single configuration. 
+- [~] The inventory filling variables is overfitted to a single configuration. 
 Our next problem: You can see the R decision variables look the same for all three solution. It looks like our algorithm overfitted. Do RCA then suggest fixes.
 
 - Apply the SAA methodology. Using combinatorial techniques to generate a diverse dataset consisting of 50 scenarios. You can read guide on SAA and OOS here:
@@ -78,9 +78,7 @@ Compare the In-Sample objective $\hat{Z}_1^N$ with the OOS objective $Z_1^{OOS}$
 
 ----------------------
 
-- [x] Reduce redundant writings in Experiment 1
-
-- [~] Update the MILP solver so that it apply the correct linearization formula. Debug it carefully, then re-run. Use weighted sum method instead of epsilon-constraint
+- [x] Update the MILP solver so that it apply the correct linearization formula. Debug it carefully, then re-run. Use weighted sum method instead of epsilon-constraint
 - [x] We have defined the milp_baseline.py solver. It produces result and runs quite fast. However:
     - it lacks time tracking
     - it is outperformed by the proposed algorithm.
@@ -107,7 +105,7 @@ Our algorithm overfitted.
 - [ ] Please think of standard ways to tune hyper-parameters for the proposed algorithm accordingly.
 - [~] Suggest some other mechanism to maintain persistent selection pressure rather than just stagnation book-keeping? For example, favor crossover between highly different parents. Or, add aging as an criteria (too old solution get mutated or replaced?). Or do we have better seeding strategy, that is, we inject |X| solutions that cover all different hubs to open?
 - [ ] Take a look at the AEGA `Adaptive_population_-App_Soft_Comp_2011` to see if we can adopt the idea easily to our algorithm without large re-design.
-- [ ] First design some local refinement operator heuristics. They should all be defined in a separated .hpp:
+- [~] First design some local refinement operator heuristics. They should all be defined in a separated .hpp:
   + Trimming inventory post-all-scenario evaluation
   + Re-route lateral flow, adding or deducting flow as an mechanism to diversify flow configuration
   + Open or close 1 hub (planned or reactive), then adjust the decisions.

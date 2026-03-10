@@ -15,6 +15,10 @@ DATA_CV="$PROJECT/data/cv/cv_small_drnd.json"
 RES1="$PROJECT/results/exp1"
 SOLVER_DIR="$PROJECT/src/solver"
 
+# Toggle temporary AEGA population adaptation in PB-NSGA step.
+# 1 = on, 0 = off
+AEGA_ON=1
+
 # Python venv
 PYTHON="$PROJECT/.venv/bin/python3"
 if [ ! -f "$PYTHON" ]; then
@@ -59,10 +63,24 @@ if [ ! -f "$SOLVER_DIR/solver" ]; then
     bash "$PROJECT/compile.sh"
 fi
 
+AEGA_ARGS=()
+if [ "$AEGA_ON" -eq 1 ]; then
+    AEGA_ARGS=(--aega-pop --aega-min 120 --aega-max 320 --aega-step 30)
+    echo "          AEGA: ON  (min=120, max=320, step=30)"
+else
+    echo "          AEGA: OFF"
+fi
+
 "$SOLVER_DIR/solver" "$DATA_CV" \
     --pop 200 \
     --gen 300 \
     --seed 0 \
+    --pc 0.98 \
+    --pm-high 0.40 \
+    --pm-low 0.10 \
+    --sbx-eta-rw 1.5 \
+    --pm-eta-rw 8 \
+    "${AEGA_ARGS[@]}" \
     --out "$RES1/cv_small_pb_nsga.json"
 
 # ── Step 5: Final Comparison Table ────────────────────────────────────────

@@ -229,7 +229,6 @@ void decode(Individual &ind, const DRNDInstance &inst,
 
       int best_ki = -1;
       double best_hub_score = -1e18;
-      double best_travel_time = inst.big_M;
       int chosen_m = -1;
 
       // ── Pass 1: first K candidates in anchor-proximity order ──────────
@@ -282,7 +281,6 @@ void decode(Individual &ind, const DRNDInstance &inst,
         if (score > best_hub_score) {
           best_hub_score = score;
           best_ki = ki;
-          best_travel_time = best_t;
           chosen_m = b_m;
         }
       }
@@ -317,7 +315,6 @@ void decode(Individual &ind, const DRNDInstance &inst,
           if (!reachable)
             continue;
           best_ki = ki;
-          best_travel_time = best_t;
           chosen_m = b_m;
           break;
         }
@@ -358,7 +355,6 @@ void decode(Individual &ind, const DRNDInstance &inst,
             Z1_s += sc.hub_reactive_cost[ki];
             best_ki = ki;
             chosen_m = b_m;
-            best_travel_time = best_t;
             break;
           }
       }
@@ -494,11 +490,15 @@ void decode(Individual &ind, const DRNDInstance &inst,
           int sk = inst.hub_idx[ski], dk = inst.hub_idx[dki];
           bool reachable = false;
           for (int m = 0; m < num_M; m++) {
-            if (sc.acc(m, sk, dk)) { reachable = true; break; }
+            if (sc.acc(m, sk, dk)) {
+              reachable = true;
+              break;
+            }
           }
-          if (!reachable) continue;
+          if (!reachable)
+            continue;
 
-          double score = net_inv[ski] - net_inv[dki]; // Prioritize large surplus and deficit
+          double score = net_inv[ski] - net_inv[dki];
           if (score > best_pair_score) {
             best_pair_score = score;
             src_ki = ski;
