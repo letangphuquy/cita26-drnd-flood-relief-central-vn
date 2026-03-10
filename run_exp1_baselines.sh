@@ -19,6 +19,10 @@ SOLVER_DIR="$PROJECT/src/solver"
 # 1 = on, 0 = off
 AEGA_ON=1
 
+# Toggle post-run solution audit (structure + consistency checks).
+# 1 = on, 0 = off
+AUDIT_ON=1
+
 # Python venv
 PYTHON="$PROJECT/.venv/bin/python3"
 if [ ! -f "$PYTHON" ]; then
@@ -91,6 +95,18 @@ echo "[Step 5] Generating Comparison Metrics (HV, IGD+)..."
     --ours "$RES1/cv_small_pb_nsga.json" \
     --greedy "$RES1/cv_small_greedy.json" \
     --milp "$RES1/cv_small_milp_aws.json"
+
+# ── Step 6: Audit Solver Outputs (optional) ───────────────────────────────
+if [ "$AUDIT_ON" -eq 1 ]; then
+    echo ""
+    echo "[Step 6] Auditing output correctness/completeness..."
+    "$PYTHON" "$PROJECT/src/scripts/audit_solution_outputs.py" \
+        --instance "$DATA_CV" \
+        --solutions \
+        "$RES1/cv_small_pb_nsga.json" \
+        "$RES1/cv_small_greedy.json" \
+        "$RES1/cv_small_milp_aws.json"
+fi
 
 echo ""
 echo "Experiment 1 (Baselines) Completed."
