@@ -1,6 +1,9 @@
 @echo off
 REM run_exp1_baselines.bat
 REM ============================================================
+
+REM Optional flags:
+REM   --skip-unchanged   Skip compile/run steps whose outputs are newer than inputs
 REM Experiment 1: Baseline Comparison on Central Vietnam (CV-Small)
 REM ------------------------------------------------------------
 REM Benchmarks PB-NSGA against:
@@ -14,6 +17,13 @@ SET "PROJECT=%~dp0"
 SET "DATA_CV=%PROJECT%data\cv\cv_small_drnd.json"
 SET "RES1=%PROJECT%results\exp1"
 SET "SOLVER_DIR=%PROJECT%src\solver"
+
+SET "SKIP_UNCHANGED=0"
+FOR %%A IN (%*) DO (
+    IF /I "%%~A"=="--skip-unchanged" SET "SKIP_UNCHANGED=1"
+    IF /I "%%~A"=="--help" GOTO :show_help
+    IF /I "%%~A"=="-h" GOTO :show_help
+)
 
 REM Toggle temporary AEGA population adaptation in PB-NSGA step.
 REM 1 = on, 0 = off
@@ -34,47 +44,107 @@ IF NOT EXIST "%RES1%" mkdir "%RES1%"
 REM ── Step 1: Recompile greedy_baseline ──────────────────────────────────────
 echo.
 echo [Step 1] Compiling greedy_baseline.cpp (stochastic multi-restart)...
-g++ -O3 -std=c++17 "%SOLVER_DIR%\greedy_baseline.cpp" -o "%SOLVER_DIR%\greedy_baseline.exe"
-IF %ERRORLEVEL% NEQ 0 (
-    echo [Error] Compilation failed.
-    exit /b 1
+CALL :ShouldRun "%SOLVER_DIR%\greedy_baseline.exe" "%SOLVER_DIR%\greedy_baseline.cpp"
+IF %ERRORLEVEL% EQU 0 (
+    g++ -O3 -std=c++17 "%SOLVER_DIR%\greedy_baseline.cpp" -o "%SOLVER_DIR%\greedy_baseline.exe"
+    IF %ERRORLEVEL% NEQ 0 (
+        echo [Error] Compilation failed.
+        exit /b 1
+    )
+) ELSE (
+    echo [Skip] greedy_baseline compile unchanged.
 )
 
 REM ── Step 2: Run Greedy Heuristic (500 restarts) ───────────────────────────
 echo.
 echo [Step 2] Running Greedy Heuristic (500 restarts)...
-"%SOLVER_DIR%\greedy_baseline.exe" "%DATA_CV%" --restarts 500 --seed 42 --out "%RES1%\cv_small_greedy.json"
+CALL :ShouldRun "%RES1%\cv_small_greedy.json" "%SOLVER_DIR%\greedy_baseline.exe" "%DATA_CV%"
+IF %ERRORLEVEL% EQU 0 (
+    "%SOLVER_DIR%\greedy_baseline.exe" "%DATA_CV%" --restarts 500 --seed 42 --out "%RES1%\cv_small_greedy.json"
+) ELSE (
+    echo [Skip] Greedy run unchanged.
+)
 
 REM ── Step 2b: Recompile + Run BB-Exact baseline ───────────────────────────
 echo.
 echo [Step 2b] Compiling and running BB-Exact baseline...
-g++ -O3 -std=c++17 "%SOLVER_DIR%\bb_solver.cpp" -o "%SOLVER_DIR%\bb_solver.exe"
-IF %ERRORLEVEL% NEQ 0 (
-    echo [Error] BB compilation failed.
-    exit /b 1
+CALL :ShouldRun "%SOLVER_DIR%\bb_solver.exe" "%SOLVER_DIR%\bb_solver.cpp"
+IF %ERRORLEVEL% EQU 0 (
+    g++ -O3 -std=c++17 "%SOLVER_DIR%\bb_solver.cpp" -o "%SOLVER_DIR%\bb_solver.exe"
+    IF %ERRORLEVEL% NEQ 0 (
+        echo [Error] BB compilation failed.
+        exit /b 1
+    )
+) ELSE (
+    echo [Skip] BB compile unchanged.
 )
-"%SOLVER_DIR%\bb_solver.exe" "%DATA_CV%" --out "%RES1%\cv_small_bb.json" --mode enum --trials 300 --time-limit 180
+CALL :ShouldRun "%RES1%\cv_small_bb.json" "%SOLVER_DIR%\bb_solver.exe" "%DATA_CV%"
+IF %ERRORLEVEL% EQU 0 (
+    "%SOLVER_DIR%\bb_solver.exe" "%DATA_CV%" --out "%RES1%\cv_small_bb.json" --mode enum --trials 300 --time-limit 180
+) ELSE (
+    echo [Skip] BB run unchanged.
+)
 
 REM ── Step 2c: Recompile + Run VNS-TS baseline ───────────────────────────
 echo.
 echo [Step 2c] Compiling and running VNS-TS baseline...
-g++ -O3 -std=c++17 "%SOLVER_DIR%\vns_ts_baseline.cpp" -o "%SOLVER_DIR%\vns_ts_baseline.exe"
-IF %ERRORLEVEL% NEQ 0 (
-    echo [Error] VNS-TS compilation failed.
-    exit /b 1
+CALL :ShouldRun "%SOLVER_DIR%\vns_ts_baseline.exe" "%SOLVER_DIR%\vns_ts_baseline.cpp"
+IF %ERRORLEVEL% EQU 0 (
+    g++ -O3 -std=c++17 "%SOLVER_DIR%\vns_ts_baseline.cpp" -o "%SOLVER_DIR%\vns_ts_baseline.exe"
+    IF %ERRORLEVEL% NEQ 0 (
+        echo [Error] VNS-TS compilation failed.
+        exit /b 1
+    )
+) ELSE (
+    echo [Skip] VNS-TS compile unchanged.
 )
-"%SOLVER_DIR%\vns_ts_baseline.exe" "%DATA_CV%" --out "%RES1%\cv_small_vns_ts.json" --seed 42 --iter 120 --time-limit 60 --tabu-tenure 5 --kmax 3 --starts 8
+CALL :ShouldRun "%RES1%\cv_small_vns_ts.json" "%SOLVER_DIR%\vns_ts_baseline.exe" "%DATA_CV%"
+IF %ERRORLEVEL% EQU 0 (
+    "%SOLVER_DIR%\vns_ts_baseline.exe" "%DATA_CV%" --out "%RES1%\cv_small_vns_ts.json" --seed 42 --iter 120 --time-limit 60 --tabu-tenure 5 --kmax 3 --starts 8
+) ELSE (
+    echo [Skip] VNS-TS run unchanged.
+)
+
+REM ── Step 2d: Recompile + Run GWO-HD baseline ───────────────────────────
+echo.
+echo [Step 2d] Compiling and running GWO-HD baseline...
+CALL :ShouldRun "%SOLVER_DIR%\gwo_hd_baseline.exe" "%SOLVER_DIR%\gwo_hd_baseline.cpp"
+IF %ERRORLEVEL% EQU 0 (
+    g++ -O3 -std=c++17 "%SOLVER_DIR%\gwo_hd_baseline.cpp" -o "%SOLVER_DIR%\gwo_hd_baseline.exe"
+    IF %ERRORLEVEL% NEQ 0 (
+        echo [Error] GWO-HD compilation failed.
+        exit /b 1
+    )
+) ELSE (
+    echo [Skip] GWO-HD compile unchanged.
+)
+CALL :ShouldRun "%RES1%\cv_small_gwo_hd.json" "%SOLVER_DIR%\gwo_hd_baseline.exe" "%DATA_CV%"
+IF %ERRORLEVEL% EQU 0 (
+    "%SOLVER_DIR%\gwo_hd_baseline.exe" "%DATA_CV%" --out "%RES1%\cv_small_gwo_hd.json" --seed 42 --wolves 20 --iter 400 --time-limit 120 --weights 0.6,0.7,0.8,0.9,0.5,0.4
+) ELSE (
+    echo [Skip] GWO-HD run unchanged.
+)
 
 REM ── Step 3: Run MILP Adaptive Weighted Sum ────────────────────────────────
 echo.
 echo [Step 3] Running MILP Adaptive Weighted Sum (AWS)...
 echo           This may take some time depending on complexity.
-"%PYTHON%" "%SOLVER_DIR%\milp_aws_baseline.py" --instance "%DATA_CV%" --out "%RES1%\cv_small_milp_aws.json" --time_limit 600
+CALL :ShouldRun "%RES1%\cv_small_milp_aws.json" "%SOLVER_DIR%\milp_aws_baseline.py" "%DATA_CV%"
+IF %ERRORLEVEL% EQU 0 (
+    "%PYTHON%" "%SOLVER_DIR%\milp_aws_baseline.py" --instance "%DATA_CV%" --out "%RES1%\cv_small_milp_aws.json" --time_limit 600
+) ELSE (
+    echo [Skip] MILP AWS run unchanged.
+)
 
 REM ── Step 3b: Run MILP Epsilon-Constraint Baseline ────────────────────────
 echo.
 echo [Step 3b] Running MILP Epsilon-Constraint Baseline...
-"%PYTHON%" "%SOLVER_DIR%\milp_epsilon.py" --instance "%DATA_CV%" --out "%RES1%\cv_small_milp_eps.json" --time_limit 600 --epsilon_steps 20
+CALL :ShouldRun "%RES1%\cv_small_milp_eps.json" "%SOLVER_DIR%\milp_epsilon.py" "%DATA_CV%"
+IF %ERRORLEVEL% EQU 0 (
+    "%PYTHON%" "%SOLVER_DIR%\milp_epsilon.py" --instance "%DATA_CV%" --out "%RES1%\cv_small_milp_eps.json" --time_limit 600 --epsilon_steps 20
+) ELSE (
+    echo [Skip] MILP EPS run unchanged.
+)
 
 REM ── Step 4: Run PB-NSGA (Ours) ─────────────────────────────────────────────
 echo.
@@ -92,20 +162,48 @@ IF "%AEGA_ON%"=="1" (
     echo           AEGA: OFF
 )
 
-"%SOLVER_DIR%\solver.exe" "%DATA_CV%" --pop 200 --gen 300 --seed 0 --pc 0.98 --pm-high 0.40 --pm-low 0.10 --sbx-eta-rw 1.5 --pm-eta-rw 8 %AEGA_ARGS% --out "%RES1%\cv_small_pb_nsga.json"
+CALL :ShouldRun "%RES1%\cv_small_pb_nsga.json" "%SOLVER_DIR%\solver.exe" "%DATA_CV%" "%SOLVER_DIR%\main.cpp" "%SOLVER_DIR%\nsga2.hpp" "%SOLVER_DIR%\representation.hpp"
+IF %ERRORLEVEL% EQU 0 (
+    "%SOLVER_DIR%\solver.exe" "%DATA_CV%" --pop 200 --gen 300 --seed 0 --pc 0.98 --pm-high 0.40 --pm-low 0.10 --sbx-eta-rw 1.5 --pm-eta-rw 8 %AEGA_ARGS% --out "%RES1%\cv_small_pb_nsga.json"
+) ELSE (
+    echo [Skip] PB-NSGA run unchanged.
+)
 
 REM ── Step 5: Final Comparison Table ────────────────────────────────────────
 echo.
 echo [Step 5] Generating Comparison Metrics (HV, IGD+)...
-"%PYTHON%" "%PROJECT%src\scripts\exp1_evaluate_cv_small.py" --results-exp1 "%RES1%" --ours "%RES1%\cv_small_pb_nsga.json" --bb "%RES1%\cv_small_bb.json" --vns-ts "%RES1%\cv_small_vns_ts.json" --greedy "%RES1%\cv_small_greedy.json" --milp-aws "%RES1%\cv_small_milp_aws.json" --milp-eps "%RES1%\cv_small_milp_eps.json"
+CALL :ShouldRun "%RES1%\cv_small_metrics.csv" "%PROJECT%src\scripts\exp1_evaluate_cv_small.py" "%RES1%\cv_small_pb_nsga.json" "%RES1%\cv_small_bb.json" "%RES1%\cv_small_vns_ts.json" "%RES1%\cv_small_gwo_hd.json" "%RES1%\cv_small_greedy.json" "%RES1%\cv_small_milp_aws.json" "%RES1%\cv_small_milp_eps.json"
+IF %ERRORLEVEL% EQU 0 (
+    "%PYTHON%" "%PROJECT%src\scripts\exp1_evaluate_cv_small.py" --results-exp1 "%RES1%" --ours "%RES1%\cv_small_pb_nsga.json" --bb "%RES1%\cv_small_bb.json" --vns-ts "%RES1%\cv_small_vns_ts.json" --gwo-hd "%RES1%\cv_small_gwo_hd.json" --greedy "%RES1%\cv_small_greedy.json" --milp-aws "%RES1%\cv_small_milp_aws.json" --milp-eps "%RES1%\cv_small_milp_eps.json"
+) ELSE (
+    echo [Skip] Metrics evaluation unchanged.
+)
 
 REM ── Step 6: Audit Solver Outputs (optional) ───────────────────────────────
 IF "%AUDIT_ON%"=="1" (
     echo.
     echo [Step 6] Auditing output correctness/completeness...
-    "%PYTHON%" "%PROJECT%src\scripts\audit_solution_outputs.py" --instance "%DATA_CV%" --solutions "%RES1%\cv_small_pb_nsga.json" "%RES1%\cv_small_bb.json" "%RES1%\cv_small_vns_ts.json" "%RES1%\cv_small_greedy.json" "%RES1%\cv_small_milp_aws.json" "%RES1%\cv_small_milp_eps.json"
+    "%PYTHON%" "%PROJECT%src\scripts\audit_solution_outputs.py" --instance "%DATA_CV%" --solutions "%RES1%\cv_small_pb_nsga.json" "%RES1%\cv_small_bb.json" "%RES1%\cv_small_vns_ts.json" "%RES1%\cv_small_gwo_hd.json" "%RES1%\cv_small_greedy.json" "%RES1%\cv_small_milp_aws.json" "%RES1%\cv_small_milp_eps.json"
 )
 
 echo.
 echo Experiment 1 (Baselines) Completed.
 echo Results saved to: %RES1%\cv_small_metrics.csv
+exit /b 0
+
+:show_help
+echo Usage: run_exp1_baselines.bat [--skip-unchanged]
+exit /b 0
+
+:ShouldRun
+if "%SKIP_UNCHANGED%" NEQ "1" exit /b 0
+if not exist "%~1" exit /b 0
+set "OUT=%~f1"
+shift
+:ShouldRunLoop
+if "%~1"=="" exit /b 1
+if not exist "%~1" exit /b 0
+powershell -NoProfile -Command "if ((Get-Item '%~f1').LastWriteTimeUtc -gt (Get-Item '%OUT%').LastWriteTimeUtc) { exit 0 } else { exit 1 }"
+if %ERRORLEVEL% EQU 0 exit /b 0
+shift
+goto :ShouldRunLoop
