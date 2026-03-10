@@ -9,6 +9,8 @@ Loads results from all available algorithms for the CV-Small instance:
       produced by greedy_baseline.exe  --restarts 500 --seed 42
   • MILP Adaptive Weighted Sum  (results/exp1/cv_small_milp_aws.json)
       produced by milp_aws_baseline.py  --time_limit 600
+  • MILP Epsilon-Constraint     (results/exp1/cv_small_milp_eps.json)
+      produced by milp_epsilon.py  --time_limit 600 --epsilon_steps 20
   • PB-NSGA (Ours)           (results/exp1/cv_small_pb_nsga.json)
       produced by solver.exe  --pop 200 --gen 300 --seed 0
 
@@ -25,7 +27,8 @@ Usage (canonical, from project root with .venv active):
       --results-exp1 results/exp1 \
       --ours   results/exp1/cv_small_pb_nsga.json \
       --greedy results/exp1/cv_small_greedy.json \
-      --milp   results/exp1/cv_small_milp_aws.json
+      --milp-aws results/exp1/cv_small_milp_aws.json \
+      --milp-eps results/exp1/cv_small_milp_eps.json
 
 Outputs:
   results/exp1/cv_small_metrics.csv  — per-algorithm HV / IGD+ table
@@ -186,7 +189,9 @@ def main():
     parser.add_argument("--results-exp2", default=None, help="Path to results/exp2/")
     parser.add_argument("--bb",      default=None, help="Explicit path to BB result JSON")
     parser.add_argument("--greedy",  default=None, help="Explicit path to Greedy result JSON")
-    parser.add_argument("--milp",    default=None, help="Explicit path to MILP result JSON")
+    parser.add_argument("--milp", default=None, help="Legacy alias for --milp-aws")
+    parser.add_argument("--milp-aws", default=None, help="Explicit path to MILP AWS result JSON")
+    parser.add_argument("--milp-eps", default=None, help="Explicit path to MILP EPS result JSON")
     parser.add_argument("--ours",    default=None, help="Explicit path to PB-NSGA (ours) result JSON or glob pattern")
     args = parser.parse_args()
 
@@ -200,7 +205,8 @@ def main():
         bb_path = os.path.join(exp2_dir, "CV_small_bb.json")
 
     greedy_path = args.greedy or os.path.join(exp1_dir, "cv_small_greedy.json")
-    milp_path   = args.milp   or os.path.join(exp1_dir, "cv_small_milp.json")
+    milp_aws_path = args.milp_aws or args.milp or os.path.join(exp1_dir, "cv_small_milp_aws.json")
+    milp_eps_path = args.milp_eps or os.path.join(exp1_dir, "cv_small_milp_eps.json")
 
     if args.ours:
         if "*" in args.ours:
@@ -219,9 +225,8 @@ def main():
         bb_path = os.path.join(exp2_dir, "CV_small_bb.json")
 
     greedy_path = os.path.join(exp1_dir, "cv_small_greedy.json")
-    milp_path   = args.milp   or os.path.join(exp1_dir, "cv_small_milp_aws.json")
-    if not os.path.exists(milp_path):
-        milp_path = os.path.join(exp1_dir, "cv_small_milp.json") # legacy fallback
+    if not os.path.exists(milp_aws_path):
+        milp_aws_path = os.path.join(exp1_dir, "cv_small_milp.json") # legacy fallback
 
     # PB-NSGA seeds (already handled by CLI args or default logic above)
 
@@ -233,7 +238,8 @@ def main():
 
     bb_pts,     bb_meta     = safe_load(bb_path)
     greedy_pts, greedy_meta = safe_load(greedy_path)
-    milp_pts,   milp_meta   = safe_load(milp_path)
+    milp_aws_pts, milp_aws_meta = safe_load(milp_aws_path)
+    milp_eps_pts, milp_eps_meta = safe_load(milp_eps_path)
     
     # Correctly resolve MILP and other algorithm runtimes
     def get_time(meta):
@@ -241,7 +247,8 @@ def main():
         cpu = meta.get("total_cpu_s", meta.get("cpu_time_s", float("nan")))
         return wall, cpu
 
-    milp_wall, milp_cpu_val = get_time(milp_meta)
+    milp_aws_wall, milp_aws_cpu_val = get_time(milp_aws_meta)
+    milp_eps_wall, milp_eps_cpu_val = get_time(milp_eps_meta)
     bb_wall,   bb_cpu_val   = get_time(bb_meta)
     greedy_wall, greedy_cpu_val = get_time(greedy_meta)
 
@@ -257,7 +264,8 @@ def main():
 
     print(f"\n[Data] BB solutions      : {len(bb_pts)}")
     print(f"[Data] Greedy solutions  : {len(greedy_pts)}")
-    print(f"[Data] MILP AWS solutions: {len(milp_pts)}")
+    print(f"[Data] MILP AWS solutions: {len(milp_aws_pts)}")
+    print(f"[Data] MILP EPS solutions: {len(milp_eps_pts)}")
     print(f"[Data] PB-NSGA seeds     : {len(pbnsga_runs)} "
           f"(total pts: {sum(len(r) for r in pbnsga_runs)})")
 
@@ -267,7 +275,9 @@ def main():
     ) + (
         [greedy_pts] if greedy_pts else []
     ) + (
-        [milp_pts] if milp_pts else []
+        [milp_aws_pts] if milp_aws_pts else []
+    ) + (
+        [milp_eps_pts] if milp_eps_pts else []
     ) + pbnsga_runs
 
     if not any(run for run in all_runs):
@@ -329,8 +339,11 @@ def main():
     evaluate_single("Greedy",   [greedy_pts])
     results["Greedy"]["wall"], results["Greedy"]["cpu"] = greedy_wall, greedy_cpu_val
     
-    evaluate_single("MILP AWS", [milp_pts] if milp_pts else [[]])
-    results["MILP AWS"]["wall"],   results["MILP AWS"]["cpu"]   = milp_wall, milp_cpu_val
+    evaluate_single("MILP AWS", [milp_aws_pts] if milp_aws_pts else [[]])
+    results["MILP AWS"]["wall"], results["MILP AWS"]["cpu"] = milp_aws_wall, milp_aws_cpu_val
+
+    evaluate_single("MILP EPS", [milp_eps_pts] if milp_eps_pts else [[]])
+    results["MILP EPS"]["wall"], results["MILP EPS"]["cpu"] = milp_eps_wall, milp_eps_cpu_val
     
     evaluate_single("BB-Exact", [bb_pts])
     results["BB-Exact"]["wall"], results["BB-Exact"]["cpu"] = bb_wall, bb_cpu_val
@@ -362,7 +375,7 @@ def main():
             return f"{igd_m:.3f} ± {igd_s:.3f}"
         return f"{igd_m:.3f}"
 
-    for name in ["Greedy", "MILP AWS", "BB-Exact", "PB-NSGA"]:
+    for name in ["Greedy", "MILP AWS", "MILP EPS", "BB-Exact", "PB-NSGA"]:
         r = results[name]
         w_str = f"{r['wall']:.1f}" if not np.isnan(r["wall"]) else "—"
         c_str = f"{r['cpu']:.1f}" if not np.isnan(r["cpu"]) else "—"
@@ -376,21 +389,31 @@ def main():
 
     # ── LaTeX table row ─────────────────────────────────────────────────────
     g = results["Greedy"]
-    m = results["MILP AWS"]
+    m_aws = results["MILP AWS"]
+    m_eps = results["MILP EPS"]
     b = results["BB-Exact"]
     p = results["PB-NSGA"]
 
     greedy_hv_str  = f"${g['hv_mean']:.3f}$"
     greedy_igd_str = f"${g['igd_mean']:.3f}$" if np.isfinite(g["igd_mean"]) else "$-$"
 
-    if milp_pts:
-        milp_hv_str  = f"${m['hv_mean']:.3f}$"
-        milp_igd_str = f"${m['igd_mean']:.3f}$" if np.isfinite(m["igd_mean"]) else "$-$"
-        milp_t_str   = f"${m['wall']:.1f}^*$"
+    if milp_aws_pts:
+        milp_aws_hv_str  = f"${m_aws['hv_mean']:.3f}$"
+        milp_aws_igd_str = f"${m_aws['igd_mean']:.3f}$" if np.isfinite(m_aws["igd_mean"]) else "$-$"
+        milp_aws_t_str   = f"${m_aws['wall']:.1f}^*$"
     else:
-        milp_hv_str  = "$-$"
-        milp_igd_str = "$-$"
-        milp_t_str   = "$1800.0^*$"
+        milp_aws_hv_str  = "$-$"
+        milp_aws_igd_str = "$-$"
+        milp_aws_t_str   = "$1800.0^*$"
+
+    if milp_eps_pts:
+        milp_eps_hv_str  = f"${m_eps['hv_mean']:.3f}$"
+        milp_eps_igd_str = f"${m_eps['igd_mean']:.3f}$" if np.isfinite(m_eps["igd_mean"]) else "$-$"
+        milp_eps_t_str   = f"${m_eps['wall']:.1f}^*$"
+    else:
+        milp_eps_hv_str  = "$-$"
+        milp_eps_igd_str = "$-$"
+        milp_eps_t_str   = "$1800.0^*$"
 
     bb_hv_str  = f"${b['hv_mean']:.3f}$"
     bb_igd_str = f"${b['igd_mean']:.3f}$" if np.isfinite(b["igd_mean"]) else "$-$"
@@ -403,15 +426,18 @@ def main():
                   else f"${p['igd_mean']:.3f}$")
     pb_t_str   = f"${p['wall']:.1f}$"
 
+    latex_eol = r" \\\\" 
     print("\n--- LaTeX table rows (paste into main.tex) ---")
     print(r"Greedy Heuristic                &"
-          f" {greedy_hv_str} & {greedy_igd_str} & $\\mathbf{{<0.1}}$ \\\\")
+          f" {greedy_hv_str} & {greedy_igd_str} & $\\mathbf{{<0.1}}$" + latex_eol)
     print(r"MILP (Adaptive Weighted Sum)    &"
-          f" {milp_hv_str} & {milp_igd_str} & {milp_t_str} \\\\")
+          f" {milp_aws_hv_str} & {milp_aws_igd_str} & {milp_aws_t_str}" + latex_eol)
+    print(r"MILP (Epsilon Constraint)       &"
+          f" {milp_eps_hv_str} & {milp_eps_igd_str} & {milp_eps_t_str}" + latex_eol)
     print(r"Exact Enum (BB)                 &"
-          f" {bb_hv_str} & {bb_igd_str} & {bb_t_str} \\\\")
+          f" {bb_hv_str} & {bb_igd_str} & {bb_t_str}" + latex_eol)
     print(r"\textbf{PB-NSGA (Ours)}         &"
-          f" {pb_hv_str} & {pb_igd_str} & {pb_t_str} \\\\")
+          f" {pb_hv_str} & {pb_igd_str} & {pb_t_str}" + latex_eol)
 
     # ── Write CSV ────────────────────────────────────────────────────────────
     out_csv = os.path.join(exp1_dir, "cv_small_metrics.csv")
@@ -419,7 +445,7 @@ def main():
     with open(out_csv, "w", newline="") as fh:
         writer = csv.writer(fh)
         writer.writerow(fields)
-        for name in ["Greedy", "MILP AWS", "BB-Exact", "PB-NSGA"]:
+        for name in ["Greedy", "MILP AWS", "MILP EPS", "BB-Exact", "PB-NSGA"]:
             r = results[name]
             writer.writerow([
                 name, r["n_runs"],

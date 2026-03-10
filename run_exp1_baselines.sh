@@ -50,7 +50,7 @@ echo "[Step 2] Running Greedy Heuristic (500 restarts)..."
     --seed 42 \
     --out "$RES1/cv_small_greedy.json"
 
-# ── Step 3: Run MILP Adaptive Weighted Sum ────────────────────────────────
+# ── Step 3: Run MILP Adaptive Weighted Sum (unchanged) ───────────────────
 echo ""
 echo "[Step 3] Running MILP Adaptive Weighted Sum (AWS)..."
 echo "          This may take some time depending on complexity."
@@ -58,6 +58,15 @@ echo "          This may take some time depending on complexity."
     --instance "$DATA_CV" \
     --out "$RES1/cv_small_milp_aws.json" \
     --time_limit 600
+
+# ── Step 3b: Run MILP Epsilon-Constraint Baseline ────────────────────────
+echo ""
+echo "[Step 3b] Running MILP Epsilon-Constraint Baseline..."
+"$PYTHON" "$SOLVER_DIR/milp_epsilon.py" \
+    --instance "$DATA_CV" \
+    --out "$RES1/cv_small_milp_eps.json" \
+    --time_limit 600 \
+    --epsilon_steps 20
 
 # ── Step 4: Run PB-NSGA (Ours) ─────────────────────────────────────────────
 echo ""
@@ -94,7 +103,8 @@ echo "[Step 5] Generating Comparison Metrics (HV, IGD+)..."
     --results-exp1 "$RES1" \
     --ours "$RES1/cv_small_pb_nsga.json" \
     --greedy "$RES1/cv_small_greedy.json" \
-    --milp "$RES1/cv_small_milp_aws.json"
+    --milp-aws "$RES1/cv_small_milp_aws.json" \
+    --milp-eps "$RES1/cv_small_milp_eps.json"
 
 # ── Step 6: Audit Solver Outputs (optional) ───────────────────────────────
 if [ "$AUDIT_ON" -eq 1 ]; then
@@ -105,7 +115,8 @@ if [ "$AUDIT_ON" -eq 1 ]; then
         --solutions \
         "$RES1/cv_small_pb_nsga.json" \
         "$RES1/cv_small_greedy.json" \
-        "$RES1/cv_small_milp_aws.json"
+        "$RES1/cv_small_milp_aws.json" \
+        "$RES1/cv_small_milp_eps.json"
 fi
 
 echo ""

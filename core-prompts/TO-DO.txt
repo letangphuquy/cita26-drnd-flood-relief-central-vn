@@ -78,6 +78,11 @@ Compare the In-Sample objective $\hat{Z}_1^N$ with the OOS objective $Z_1^{OOS}$
 
 ----------------------
 
+GOAL: MAKE EXPERIMENT 1 RELIABLE
+- [x] Implement exact solvers.
+    - [~] Furthermore, tune them so they achieve best results (ideally, true Pareto front)
+- The baseline should be "smart" enough
+
 - [x] Update the MILP solver so that it apply the correct linearization formula. Debug it carefully, then re-run. Use weighted sum method instead of epsilon-constraint
 - [x] We have defined the milp_baseline.py solver. It produces result and runs quite fast. However:
     - it lacks time tracking
@@ -90,7 +95,6 @@ Compare the In-Sample objective $\hat{Z}_1^N$ with the OOS objective $Z_1^{OOS}$
 - [x] Apply the strategy adaptive weighted sum as in the paper "Adaptive weighted-sum method for bi-objective optimization s00158-004-0465-1"
 
 - [ ] Revamp and make the greedy heuristic smarter. Remember: Not giving it any metaheuristic capability (like GRASP, ACO or TS). Not give it access to the MCF decoder. The greedy should be close to manager's natural ad-hoc decision-making.
-- Improve the dataset by combinatorial generation technique. It should have 50 scenarios. Then rewrite the experimental methodology prose text in the paper.
 
 - [ ] Update the BnB solver. For first-stage decision variables, enumerate through 2^|H| configurations for X. Then, for each opened hub, backtrack through 20 levels of hub inventory fillings from 0% to 100%. 
 For second-stage decisions, under each scenario s, enumerate all configuration for z_{iks} and z_{jks} assignment variables. 
@@ -119,6 +123,12 @@ Our algorithm overfitted.
 - [ ] Clean-up the current algorithm solver implementations so that it follows best practices and clean code.
 
 Do RCA then suggest fixes.
+
+
+======================
+IMPROVE EXPERIMENTAL METHODOLOGY
+
+- Improve the dataset by combinatorial generation technique. It should have 50 scenarios. Then rewrite the experimental methodology prose text in the paper.
 
 - Extend experiments 2 by:
 0. Add Pareto front for trade-off analysis.
