@@ -2,7 +2,10 @@
 # run_exp2_case_study.sh
 # ============================================================
 # Experiment 2: Central Vietnam Case Study, SAA, and OOS Insights
-# ------------------------------------------------------------
+#
+# Optional flags:
+#   --analyze-only  Skip solver runs; only perform analysis on existing results/
+#
 # Runs PB-NSGA on the CV-Large instance across multiple seeds.
 # Generates:
 #   1. Statistical analysis of convergence (HV, IGD+)
@@ -21,6 +24,33 @@ OOS_DATA="$DATA_PREP/cv_large_oos10.json"
 RES2="$PROJECT/results/exp2"
 SOLVER_DIR="$PROJECT/src/solver"
 
+ANALYZE_ONLY=0
+for arg in "$@"; do
+    case "$arg" in
+        --analyze-only)
+            ANALYZE_ONLY=1
+            ;;
+        --help|-h)
+            echo "Usage: ./run_exp2_case_study.sh [--analyze-only]"
+            echo ""
+            echo "Flags:"
+            echo "  --analyze-only  Skip solver runs; only perform analysis on existing results/"
+            exit 0
+            ;;
+        *)
+            ;;
+    esac
+done
+
+if [ "$ANALYZE_ONLY" -eq 1 ]; then
+    echo ""
+    echo "[Exp2] Running analysis only on existing results..."
+    if [ ! -d "$RES2" ]; then
+        echo "[Error] results/exp2/ not found. Run full experiment first."
+        exit 1
+    fi
+fi
+
 # Python venv
 PYTHON="$PROJECT/.venv/bin/python3"
 if [ ! -f "$PYTHON" ]; then
@@ -29,6 +59,9 @@ fi
 
 mkdir -p "$RES2"
 mkdir -p "$DATA_PREP"
+
+# ── Skip solver/data stages if --analyze-only ─────────────────────────────
+if [ "$ANALYZE_ONLY" -eq 0 ]; then
 
 # ── Step 1: Run PB-NSGA (Ours) 20 Seeds ────────────────────────────────────
 echo ""
@@ -67,6 +100,8 @@ do
         --starts 10 \
         --out "$RES2/cv_large_vns_ts_seed${seed}.json"
 done
+
+fi  # End of: if [ "$ANALYZE_ONLY" -eq 0 ]; then
 
 # ── Step 3: Pareto trade-off (PB-NSGA vs VNS-TS) ─────────────────────────
 echo ""

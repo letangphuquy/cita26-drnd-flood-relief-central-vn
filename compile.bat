@@ -4,8 +4,8 @@ REM Requirements: g++ (MinGW or MSYS2), C++17 support
 REM Run from project root: .\compile.bat
 REM
 REM Algorithm version: V2
-REM   - W vector: 6 weights (was 3)
-REM   - Tiered hub selection with rotation-offset A segment
+REM   - W vector: 6 weights (was 3); W[5] = Pass-1 window depth
+REM   - Tiered hub selection with anchor-based hub ordering (A~anchor hub)
 REM   - Normalised + stochastic demand priority scores
 REM   - Hamming diversity tiebreaker in elitist selection
 

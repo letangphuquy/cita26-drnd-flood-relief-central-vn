@@ -44,7 +44,7 @@ struct Individual {
          // W[2]: residual capacity weight in hub selection score
          // W[3]: demand isolation weight (1/num_reachable) in priority score
          // W[4]: planned hub preference bonus in hub selection score
-         // W[5]: reactive eagerness threshold (0=aggressive, 1=conservative)
+         // W[5]: Pass-1 window depth fraction (0=reactive-first, 1=conservative)
 
   // ── Phenotype (computed by decoder) ──────────────────────────────────
   double Z1 = 0, Z2 = 0; // objective values (minimise both)

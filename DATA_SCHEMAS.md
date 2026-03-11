@@ -122,8 +122,8 @@
 ```
 
 ### Notes
-- `transport.cost` / `transport.time` rows may be serialized as **space-separated strings** (legacy PowerShell artifact) or as **nested float arrays** — the C++ loader (`decoder.hpp`) handles both styles.
-- `accessibility[m]` encodes whether a road/water/air link exists between any two nodes. Disruption is pre-applied per scenario.
+- `transport.cost` / `transport.time` are **always nested float arrays** `[num_M][num_nodes][num_nodes]`. Both cost and accessibility matrices are **symmetric** by design (undirected relief network).
+- `accessibility[m]` encodes whether a road/water/air link exists between any two nodes. Disruption is pre-applied per scenario. Symmetric: a disconnected link is bidirectionally disrupted.
 - All node-keyed dicts (`demand`, `supply`, `hub_risk`, etc.) use **string** keys matching the global node index.
 
 ---
