@@ -4,7 +4,10 @@ gui/app.py — Interactive Tkinter GUI for browsing CITA solver outputs.
 Layout
 ------
   ┌─────────────────────────────────────────────────────────────┐
-  │  Toolbar  (file/folder, algo filter, navigation, jump-to)   │
+  │  Row 1: Result path │ Browse File │ Browse Folder │ Load ▶  │
+  │         ─────────────────────────────── │ Save map          │
+  │  Row 2: De-dup │ Algo │ PF-only │ ◀ Prev idx Next ▶ │ Jump  │
+  │         (row 2 scrolls horizontally if window is narrow)    │
   ├────────────────────────────┬────────────────────────────────┤
   │        Map view            │     Pareto scatter view        │
   │   (SolutionMapRenderer)    │        (ParetoPlot)            │
@@ -42,7 +45,7 @@ sys.path.insert(0, str(_REPO_ROOT / "src"))
 from visualizer.solution_loader import (
     NodeInfo, Solution, SolverResult,
     load_instance, load_result, load_results_from_folder,
-    merged_pareto_front,
+    merged_pareto_front, deduplicate_solutions,
 )
 from visualizer.pareto_plot import ParetoPlot
 from visualizer.map_renderer import SolutionMapRenderer
@@ -81,6 +84,11 @@ class VisualizerApp:
         self.var_show_mode_col = tk.BooleanVar(value=True)
         self.var_show_feasible = tk.BooleanVar(value=True)
         self.var_pf_only       = tk.BooleanVar(value=False)
+
+        # De-duplication
+        self.var_dedup         = tk.BooleanVar(value=True)
+        self.dedup_mode        = tk.StringVar(value="objective")
+        self._last_dedup_removed: int = 0
 
         # ── Build UI ───────────────────────────────────────────────────────
         self._build_menu()
@@ -136,43 +144,152 @@ class VisualizerApp:
                            variable=self.var_pf_only,
                            command=self._apply_filter)
 
+    # ── internal helpers ─────────────────────────────────────────────────
+    @staticmethod
+    def _sep(parent):
+        """Compact vertical separator for toolbar rows."""
+        ttk.Separator(parent, orient=tk.VERTICAL).pack(
+            side=tk.LEFT, fill=tk.Y, padx=5, pady=3)
+
     def _build_toolbar(self):
-        bar = ttk.Frame(self.root)
-        bar.pack(side=tk.TOP, fill=tk.X, padx=6, pady=4)
+        """Two-row toolbar.  Row 2 sits inside a scrollable canvas."""
+        tb_outer = ttk.Frame(self.root)
+        tb_outer.pack(side=tk.TOP, fill=tk.X, padx=4, pady=(4, 0))
 
-        # ── File section ────────────────────────────────────────────────
-        ttk.Label(bar, text="Result:").pack(side=tk.LEFT, padx=(0, 4))
-        self.entry_file = ttk.Entry(bar, width=46)
-        self.entry_file.pack(side=tk.LEFT, padx=(0, 4))
-        ttk.Button(bar, text="Browse File",   command=self._browse_file).pack(side=tk.LEFT, padx=2)
-        ttk.Button(bar, text="Browse Folder", command=self._browse_folder).pack(side=tk.LEFT, padx=2)
-        ttk.Button(bar, text="Load ▶",        command=self._load_from_entry).pack(side=tk.LEFT, padx=(2, 10))
+        # ════════════════════════════════════════════════════════════════
+        # Row 1 — file / load / save  (always full-width, no scroll)
+        # ════════════════════════════════════════════════════════════════
+        row1 = ttk.Frame(tb_outer)
+        row1.pack(side=tk.TOP, fill=tk.X, pady=(0, 2))
 
-        ttk.Separator(bar, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=6)
+        ttk.Label(row1, text="Result:").pack(side=tk.LEFT, padx=(2, 3))
+        self.entry_file = ttk.Entry(row1)          # expands to fill space
+        self.entry_file.pack(side=tk.LEFT, padx=(0, 3), fill=tk.X, expand=True)
+        ttk.Button(row1, text="Browse File",
+                   command=self._browse_file).pack(side=tk.LEFT, padx=2)
+        ttk.Button(row1, text="Browse Folder",
+                   command=self._browse_folder).pack(side=tk.LEFT, padx=2)
+        ttk.Button(row1, text="Load ▶",
+                   command=self._load_from_entry).pack(side=tk.LEFT, padx=(2, 6))
+        self._sep(row1)
+        ttk.Button(row1, text="Load Instance…",
+                   command=self._browse_instance).pack(side=tk.LEFT, padx=2)
+        self._sep(row1)
+        ttk.Button(row1, text="💾 Save Map",
+                   command=self._save_map).pack(side=tk.LEFT, padx=2)
 
-        # ── Algorithm filter ────────────────────────────────────────────
-        ttk.Label(bar, text="Algo:").pack(side=tk.LEFT, padx=(0, 4))
-        self.combo_algo = ttk.Combobox(bar, textvariable=self.algo_filter,
-                                       width=18, state="readonly")
+        ttk.Separator(tb_outer, orient=tk.HORIZONTAL).pack(
+            side=tk.TOP, fill=tk.X, pady=2)
+
+        # ════════════════════════════════════════════════════════════════
+        # Row 2 — filters / nav  (horizontally scrollable canvas)
+        # ════════════════════════════════════════════════════════════════
+        row2_outer = ttk.Frame(tb_outer)
+        row2_outer.pack(side=tk.TOP, fill=tk.X, pady=(0, 3))
+
+        # Canvas acts as the horizontal scroll viewport
+        self._tb_canvas = tk.Canvas(
+            row2_outer, height=30, highlightthickness=0)
+        self._tb_canvas.pack(side=tk.TOP, fill=tk.X, expand=True)
+
+        # Horizontal scrollbar — only visible when needed
+        self._tb_hscroll = ttk.Scrollbar(
+            row2_outer, orient=tk.HORIZONTAL,
+            command=self._tb_canvas.xview)
+        self._tb_hscroll.pack(side=tk.TOP, fill=tk.X)
+        self._tb_canvas.configure(xscrollcommand=self._tb_scroll_set)
+
+        # Inner frame hosts all row-2 widgets
+        row2 = ttk.Frame(self._tb_canvas)
+        self._tb_win = self._tb_canvas.create_window(
+            (0, 0), window=row2, anchor="nw")
+
+        # Keep canvas scroll region in sync with inner frame size
+        def _on_row2_configure(event):   # noqa: E306
+            self._tb_canvas.configure(
+                scrollregion=self._tb_canvas.bbox("all"))
+            # Hide scrollbar when nothing to scroll
+            cw = self._tb_canvas.winfo_width()
+            fw = row2.winfo_reqwidth()
+            if fw <= cw:
+                self._tb_hscroll.pack_forget()
+            else:
+                self._tb_hscroll.pack(side=tk.TOP, fill=tk.X)
+
+        row2.bind("<Configure>", _on_row2_configure)
+        self._tb_canvas.bind(
+            "<Configure>",
+            lambda e: self._tb_canvas.itemconfig(
+                self._tb_win, width=max(e.width, row2.winfo_reqwidth())))
+
+        # ── De-duplication ──────────────────────────────────────────────
+        ttk.Checkbutton(row2, text="De-dup",
+                        variable=self.var_dedup,
+                        command=self._apply_filter).pack(side=tk.LEFT, padx=(4, 1))
+        self.combo_dedup = ttk.Combobox(
+            row2, textvariable=self.dedup_mode,
+            values=["objective", "decision", "exact"],
+            width=9, state="readonly")
+        self.combo_dedup.pack(side=tk.LEFT, padx=(0, 2))
+        self.combo_dedup.bind(
+            "<<ComboboxSelected>>", lambda _e: self._apply_filter())
+
+        self._sep(row2)
+
+        # ── Algo filter ─────────────────────────────────────────────────
+        ttk.Label(row2, text="Algo:").pack(side=tk.LEFT, padx=(2, 3))
+        self.combo_algo = ttk.Combobox(
+            row2, textvariable=self.algo_filter, width=18, state="readonly")
         self.combo_algo["values"] = ["All"]
-        self.combo_algo.pack(side=tk.LEFT, padx=(0, 4))
-        self.combo_algo.bind("<<ComboboxSelected>>", lambda _e: self._apply_filter())
+        self.combo_algo.pack(side=tk.LEFT, padx=(0, 2))
+        self.combo_algo.bind(
+            "<<ComboboxSelected>>", lambda _e: self._apply_filter())
 
-        ttk.Separator(bar, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=6)
+        self._sep(row2)
+
+        # ── PF-only toggle ───────────────────────────────────────────────
+        ttk.Checkbutton(row2, text="PF only",
+                        variable=self.var_pf_only,
+                        command=self._apply_filter).pack(side=tk.LEFT, padx=(2, 4))
+
+        self._sep(row2)
 
         # ── Navigation ──────────────────────────────────────────────────
-        ttk.Button(bar, text="◀ Prev", command=self._prev).pack(side=tk.LEFT, padx=2)
-        self.lbl_idx = ttk.Label(bar, text="—  /  —", width=12, anchor=tk.CENTER)
-        self.lbl_idx.pack(side=tk.LEFT, padx=4)
-        ttk.Button(bar, text="Next ▶", command=self._next).pack(side=tk.LEFT, padx=2)
+        ttk.Button(row2, text="◀", width=2,
+                   command=self._prev).pack(side=tk.LEFT, padx=2)
+        self.lbl_idx = ttk.Label(
+            row2, text="—  /  —", width=10, anchor=tk.CENTER)
+        self.lbl_idx.pack(side=tk.LEFT, padx=3)
+        ttk.Button(row2, text="▶", width=2,
+                   command=self._next).pack(side=tk.LEFT, padx=2)
 
-        ttk.Separator(bar, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=6)
+        self._sep(row2)
 
-        ttk.Label(bar, text="Jump:").pack(side=tk.LEFT, padx=(0, 3))
-        self.entry_jump = ttk.Entry(bar, width=6)
-        self.entry_jump.pack(side=tk.LEFT, padx=(0, 3))
+        # ── Jump ────────────────────────────────────────────────────────
+        ttk.Label(row2, text="Jump:").pack(side=tk.LEFT, padx=(2, 2))
+        self.entry_jump = ttk.Entry(row2, width=6)
+        self.entry_jump.pack(side=tk.LEFT, padx=(0, 2))
         self.entry_jump.bind("<Return>", lambda _e: self._jump())
-        ttk.Button(bar, text="Go", command=self._jump).pack(side=tk.LEFT, padx=2)
+        ttk.Button(row2, text="Go",
+                   command=self._jump).pack(side=tk.LEFT, padx=(0, 4))
+
+        self._sep(row2)
+
+        # ── Quick-jump ──────────────────────────────────────────────────
+        ttk.Button(row2, text="Best Z1",
+                   command=lambda: self._jump_best("Z1")).pack(side=tk.LEFT, padx=2)
+        ttk.Button(row2, text="Best Z2",
+                   command=lambda: self._jump_best("Z2")).pack(side=tk.LEFT, padx=2)
+        ttk.Button(row2, text="Compromise",
+                   command=self._jump_compromise).pack(side=tk.LEFT, padx=(2, 4))
+
+    def _tb_scroll_set(self, lo, hi):
+        """Only show the horizontal scrollbar when content overflows."""
+        if float(lo) <= 0.0 and float(hi) >= 1.0:
+            self._tb_hscroll.pack_forget()
+        else:
+            self._tb_hscroll.pack(side=tk.TOP, fill=tk.X)
+        self._tb_hscroll.set(lo, hi)
 
     def _build_main_area(self):
         paned = ttk.PanedWindow(self.root, orient=tk.HORIZONTAL)
@@ -217,22 +334,6 @@ class VisualizerApp:
         self._build_control_panel(ctrl_frame)
 
     def _build_control_panel(self, parent: ttk.Frame):
-        # ── Quick jump buttons ──────────────────────────────────────────
-        jump_frame = ttk.LabelFrame(parent, text="Jump to")
-        jump_frame.pack(fill=tk.X, padx=5, pady=4)
-
-        row1 = ttk.Frame(jump_frame)
-        row1.pack(fill=tk.X, padx=4, pady=2)
-        ttk.Button(row1, text="Best Z1", command=lambda: self._jump_best("Z1")).pack(
-            side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-        ttk.Button(row1, text="Best Z2", command=lambda: self._jump_best("Z2")).pack(
-            side=tk.LEFT, fill=tk.X, expand=True, padx=2)
-
-        row2 = ttk.Frame(jump_frame)
-        row2.pack(fill=tk.X, padx=4, pady=2)
-        ttk.Button(row2, text="Compromise (min-dist to utopia)",
-                   command=self._jump_compromise).pack(fill=tk.X, padx=2)
-
         # ── Layer toggles ───────────────────────────────────────────────
         layer_frame = ttk.LabelFrame(parent, text="Map layers")
         layer_frame.pack(fill=tk.X, padx=5, pady=4)
@@ -257,15 +358,6 @@ class VisualizerApp:
         self.txt_info.configure(yscrollcommand=scroll.set)
         scroll.pack(side=tk.RIGHT, fill=tk.Y)
         self.txt_info.pack(fill=tk.BOTH, expand=True, padx=3, pady=3)
-
-        # ── Save image ──────────────────────────────────────────────────
-        save_frame = ttk.LabelFrame(parent, text="Save map")
-        save_frame.pack(fill=tk.X, padx=5, pady=4)
-        self.entry_save = ttk.Entry(save_frame)
-        self.entry_save.insert(0, "solution_map.png")
-        self.entry_save.pack(fill=tk.X, padx=5, pady=2)
-        ttk.Button(save_frame, text="Save (Ctrl+S)",
-                   command=self._save_map).pack(fill=tk.X, padx=5, pady=2)
 
     def _build_status_bar(self):
         self.lbl_status = ttk.Label(self.root, text="Ready.", anchor=tk.W,
@@ -403,12 +495,25 @@ class VisualizerApp:
                 # All feasible, Pareto marked distinctly
                 sols.extend(r.all_feasible if r.all_feasible else r.pareto_front)
 
+        # ── De-duplicate ────────────────────────────────────────────────
+        n_removed = 0
+        if self.var_dedup.get() and sols:
+            sols, n_removed = deduplicate_solutions(
+                sols, mode=self.dedup_mode.get()
+            )
+        self._last_dedup_removed = n_removed
+
         self.display_solutions = sols
         self.current_idx = 0
         self._refresh_pareto()
         self._update_nav_label()
         if sols:
             self._show_solution(0)
+
+        if n_removed:
+            self._status(
+                f"{self._status_text()}  —  {n_removed} duplicate(s) removed"
+            )
 
     def _reset_filter(self):
         self.algo_filter.set("All")
@@ -471,12 +576,18 @@ class VisualizerApp:
 
     def _on_pareto_click(self, sol_idx: int):
         """Called when user clicks a scatter point on the Pareto plot."""
-        if 0 <= sol_idx < len(self.display_solutions):
-            self.current_idx = sol_idx
-            self._update_nav_label()
-            sol = self.display_solutions[sol_idx]
-            self._refresh_map_for(sol)
-            self._update_info_panel(sol, sol_idx)
+        sol = self.pareto_plot.get_solution(sol_idx)
+        if sol is None:
+            return
+
+        display_idx = self._find_display_index(sol)
+        if display_idx is None:
+            return
+
+        self.current_idx = display_idx
+        self._update_nav_label()
+        self._refresh_map_for(sol)
+        self._update_info_panel(sol, display_idx)
 
     # ════════════════════════════════════════════════════════════════════════
     # Rendering
@@ -490,7 +601,9 @@ class VisualizerApp:
         self._update_nav_label()
         self._refresh_map_for(sol)
         self._update_info_panel(sol, idx)
-        self.pareto_plot.select(idx)
+        plot_idx = self._find_plot_index(sol)
+        if plot_idx is not None:
+            self.pareto_plot.select(plot_idx)
         self.canvas_pareto.draw_idle()
 
     def _refresh_map_for(self, sol: Solution):
@@ -599,7 +712,7 @@ class VisualizerApp:
     # ════════════════════════════════════════════════════════════════════════
 
     def _save_map(self):
-        path = self.entry_save.get().strip() or "solution_map.png"
+        path = "solution_map.png"
         path = filedialog.asksaveasfilename(
             title="Save map image",
             defaultextension=".png",
@@ -618,10 +731,66 @@ class VisualizerApp:
     # Helpers
     # ════════════════════════════════════════════════════════════════════════
 
+    def _find_display_index(self, target: Solution) -> Optional[int]:
+        """Locate a solution index in display_solutions, preferring identity."""
+        for i, s in enumerate(self.display_solutions):
+            if s is target:
+                return i
+        for i, s in enumerate(self.display_solutions):
+            if s == target:
+                return i
+        return None
+
+    def _find_plot_index(self, target: Solution) -> Optional[int]:
+        """Locate a solution index in ParetoPlot's internal list.
+
+        Matching order:
+          1) same object identity
+          2) dataclass equality
+          3) same decision vector X
+          4) nearest objective point in (Z1, Z2)
+        """
+        for i in range(self.pareto_plot.count):
+            s = self.pareto_plot.get_solution(i)
+            if s is target:
+                return i
+        for i in range(self.pareto_plot.count):
+            s = self.pareto_plot.get_solution(i)
+            if s == target:
+                return i
+
+        # Decision-space fallback (useful when source/rank fields differ)
+        tx = tuple(target.X)
+        if tx:
+            for i in range(self.pareto_plot.count):
+                s = self.pareto_plot.get_solution(i)
+                if s is not None and tuple(s.X) == tx:
+                    return i
+
+        # Objective-space fallback: choose nearest plotted point
+        best_i: Optional[int] = None
+        best_d = float("inf")
+        for i in range(self.pareto_plot.count):
+            s = self.pareto_plot.get_solution(i)
+            if s is None:
+                continue
+            d = (s.Z1 - target.Z1) ** 2 + (s.Z2 - target.Z2) ** 2
+            if d < best_d:
+                best_d = d
+                best_i = i
+        if best_i is not None:
+            return best_i
+
+        return None
+
     def _update_nav_label(self):
         total = len(self.display_solutions)
         idx   = self.current_idx
         self.lbl_idx.config(text=f"{idx + 1:>4}  /  {total}" if total else "—  /  —")
+
+    def _status_text(self) -> str:
+        """Return the current status bar text (without the dedup suffix)."""
+        return self.lbl_status.cget("text").split("  —  ")[0]
 
     def _status(self, msg: str):
         self.lbl_status.config(text=msg)
