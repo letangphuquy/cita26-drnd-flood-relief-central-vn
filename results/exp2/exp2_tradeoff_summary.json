@@ -1,16 +1,16 @@
 {
   "pb_files": 20,
-  "vns_files": 1,
-  "pb_nd_points": 12,
-  "vns_nd_points": 18,
-  "combined_nd_points": 12,
+  "vns_files": 5,
+  "pb_nd_points": 6,
+  "vns_nd_points": 21,
+  "combined_nd_points": 6,
   "cv_small": {
     "pb_points": 9,
     "vns_points": 1,
     "true_milp_points": 4
   },
   "outputs": {
-    "csv": "results/exp2/exp2_tradeoff_pareto.csv",
-    "plot": "results/exp2/exp2_pareto_pbnsga_vs_vnsts.pdf"
+    "csv": "/Users/quyle/cita26-drnd-flood-relief-central-vn/results/exp2/exp2_tradeoff_pareto.csv",
+    "plot": "/Users/quyle/cita26-drnd-flood-relief-central-vn/results/exp2/exp2_pareto_pbnsga_vs_vnsts.pdf"
   }
 }

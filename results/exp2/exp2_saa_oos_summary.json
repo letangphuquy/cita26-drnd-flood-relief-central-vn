@@ -1,16 +1,16 @@
 {
   "saa": {
-    "file": "results/exp2/CV_large_seed0_saa_eval.json",
-    "n_evaluations": 10,
-    "mean_z1_diff_pct": 115.64624222923908,
-    "mean_z2_diff_pct": 972.715852760029,
+    "file": "/Users/quyle/cita26-drnd-flood-relief-central-vn/results/exp2/CV_large_seed0_saa_eval.json",
+    "n_evaluations": 6,
+    "mean_z1_diff_pct": 174.26245974383824,
+    "mean_z2_diff_pct": 911.707662991245,
     "mean_cv": 0.0,
-    "feasible_count": 10
+    "feasible_count": 6
   },
   "oos": {
-    "file": "results/exp2/CV_large_seed0_oos_eval.json",
-    "n_evaluations": 10,
+    "file": "/Users/quyle/cita26-drnd-flood-relief-central-vn/results/exp2/CV_large_seed0_oos_eval.json",
+    "n_evaluations": 6,
     "mean_cv": 0.0,
-    "feasible_count": 10
+    "feasible_count": 6
   }
 }
