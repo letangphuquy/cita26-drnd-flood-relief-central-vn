@@ -16,7 +16,9 @@
       "Bash(python:*)",
       "Bash(cat:*)",
       "Bash(\"solver/solver.exe\":*)",
-      "Bash(\".venv/Scripts/python.exe\":*)"
+      "Bash(\".venv/Scripts/python.exe\":*)",
+      "Bash(source .venv/bin/activate && ./src/solver/vns_ts_baseline data/cv/cv_small_drnd.json \\\\\n  --out results/exp1/cv_small_vns_ts.json \\\\\n  --seed 42 --iter 120 --time-limit 60 --tabu-tenure 7 --kmax 3 --starts 12 --enable-option3 2>&1)",
+      "WebSearch"
     ]
   }
 }

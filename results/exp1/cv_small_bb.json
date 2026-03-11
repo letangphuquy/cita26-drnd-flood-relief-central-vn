@@ -202,8 +202,8 @@
     }
   ],
   "meta": {
-    "cpu_time_s": 0.128057,
-    "elapsed_s": 0.132234708,
+    "cpu_time_s": 0.129137,
+    "elapsed_s": 0.129268959,
     "leaves_evaluated": 31,
     "mode": "enum",
     "nodes_visited": 62,
