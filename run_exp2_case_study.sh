@@ -9,8 +9,8 @@
 # Runs PB-NSGA on the CV-Large instance across multiple seeds.
 # Generates:
 #   1. Statistical analysis of convergence (HV, IGD+)
-#   2. VNS-TS baseline fronts for trade-off comparison
-#   3. PB-NSGA vs VNS-TS Pareto trade-off analysis
+#   2. VNS-TS and GWO-HD baseline fronts for trade-off comparison
+#   3. Pareto trade-off analysis across tracked algorithms
 #   4. Hub selection stability and sensitivity analysis
 #   5. High-fidelity maps of representative solutions
 #   6. End-to-end SAA/OOS robustness evaluation (seed-0 Pareto)
@@ -102,12 +102,38 @@ do
         --out "$RES2/cv_large_vns_ts_seed${seed}.json"
 done
 
+# ── Step 2b: Run GWO-HD baseline (literature comparator) ──────────────────
+echo ""
+echo "[Step 2b] Running GWO-HD baseline (5 seeds) on CV-Large..."
+if [ ! -f "$SOLVER_DIR/gwo_hd_baseline" ]; then
+    g++ -O3 -std=c++17 -I"$SOLVER_DIR" "$SOLVER_DIR/gwo_hd_baseline.cpp" -o "$SOLVER_DIR/gwo_hd_baseline"
+fi
+
+for seed in {0..4}
+do
+    echo "  [GWO Seed $seed] Running..."
+    "$SOLVER_DIR/gwo_hd_baseline" "$DATA_CV" \
+        --out "$RES2/cv_large_gwo_hd_seed${seed}.json" \
+        --seed "$seed" \
+        --wolves 30 \
+        --iter 560 \
+        --time-limit 180 \
+        --fracA-start 0.45 \
+        --fracA-end 0.06 \
+        --fracX-start 0.35 \
+        --fracX-end 0.04 \
+        --accept-worse 0.03 \
+        --stagnation-limit 20 \
+        --keep-ratio 0.45 \
+        --ps-op-prob 0.35
+done
+
 fi  # End of: if [ "$ANALYZE_ONLY" -eq 0 ]; then
 
-# ── Step 3: Pareto trade-off (PB-NSGA vs VNS-TS) ─────────────────────────
+# ── Step 3: Pareto trade-off ─────────────────────────────────────────────
 echo ""
-echo "[Step 3] Building PB-NSGA vs VNS-TS Pareto trade-off outputs..."
-"$PYTHON" "$PROJECT/src/scripts/exp2_pareto_tradeoff_pbnsga_vs_vnsts.py" \
+echo "[Step 3] Building Pareto trade-off outputs..."
+"$PYTHON" "$PROJECT/src/scripts/exp2_pareto_tradeoff.py" \
     --results-exp2 "$RES2" \
     --results-exp1 "$PROJECT/results/exp1" \
     --out-dir "$RES2"
@@ -115,8 +141,8 @@ echo "[Step 3] Building PB-NSGA vs VNS-TS Pareto trade-off outputs..."
 # ── Step 4: Statistical Analysis & Sensitivity ────────────────────────────
 echo ""
 echo "[Step 4] Analyzing Stability & Scenario Sensitivity..."
-# Args: <results_dir> <out_dir> <cv_data_dir>
-"$PYTHON" "$PROJECT/src/scripts/exp2_analyze_case_study.py" "$RES2" "$RES2" "$PROJECT/data/cv"
+# Args: <results_dir> <out_dir> <cv_data_dir> <paper_dir>
+"$PYTHON" "$PROJECT/src/scripts/exp2_analyze_case_study.py" "$RES2" "$RES2" "$PROJECT/data/cv" "$PROJECT/paper"
 
 # ── Step 5: High-Fidelity Mapping ─────────────────────────────────────────
 echo ""
@@ -160,5 +186,6 @@ echo ""
 echo "Experiment 2 (Case Study) Completed."
 echo "Results saved to: $RES2/"
 echo "Map saved to: figures/cv_large_map_detailed.pdf"
-echo "Trade-off outputs: $RES2/exp2_tradeoff_pareto.csv, $RES2/exp2_pareto_pbnsga_vs_vnsts.pdf"
+echo "Trade-off outputs: $RES2/exp2_tradeoff_pareto.csv, $RES2/exp2_pareto_tradeoff.pdf"
+echo "Tracked algorithms in Exp2: PB-NSGA, VNS-TS, GWO-HD"
 echo "SAA/OOS summary saved to: $RES2/exp2_saa_oos_summary.json"

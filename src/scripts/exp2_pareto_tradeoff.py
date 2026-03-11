@@ -1,14 +1,14 @@
 """
-exp2_pareto_tradeoff_pbnsga_vs_vnsts.py
+exp2_pareto_tradeoff.py
 ======================================
 Builds a two-panel Pareto trade-off comparison:
-    - Left: CV-Small (PB-NSGA, VNS-TS, GWO-HLD, and MILP-based true Pareto front)
-    - Right: CV-Large (PB-NSGA vs VNS-TS, with optional GWO-HLD if available)
+    - Left: CV-Small (PB-NSGA, VNS-TS, GWO-HD, and MILP-based true Pareto front)
+    - Right: CV-Large (PB-NSGA vs VNS-TS, with optional GWO-HD if available)
 
 Outputs:
     - exp2_tradeoff_pareto.csv
     - exp2_tradeoff_summary.json
-    - exp2_pareto_pbnsga_vs_vnsts.pdf (2-panel figure)
+    - exp2_pareto_tradeoff.pdf (2-panel figure)
 """
 
 import argparse
@@ -173,10 +173,10 @@ def plot_tradeoff_two_panel(small_panel, large_panel, out_pdf):
     if vns_s:
         ax_l.plot([p[0] for p in vns_s], [p[1] for p in vns_s], "-^", color="#ff7f0e", lw=1.7, ms=4, label="VNS-TS")
     if gwo_s:
-        ax_l.plot([p[0] for p in gwo_s], [p[1] for p in gwo_s], "-D", color="#9467bd", lw=1.7, ms=4, label="GWO-HLD")
+        ax_l.plot([p[0] for p in gwo_s], [p[1] for p in gwo_s], "-D", color="#9467bd", lw=1.7, ms=4, label="GWO-HD")
     if true_s:
         ax_l.plot([p[0] for p in true_s], [p[1] for p in true_s], "--s", color="#2ca02c", lw=1.7, ms=4, label="True Pareto (MILP)")
-    ax_l.set_title("(a) CV-Small: PB-NSGA vs VNS-TS vs GWO-HLD vs True Pareto")
+    ax_l.set_title("(a) CV-Small: PB-NSGA vs VNS-TS vs GWO-HD vs True Pareto")
     ax_l.set_xlabel("Z1 - Expected Logistics Cost")
     ax_l.set_ylabel("Z2 - Expected Maximum Deprivation")
     ax_l.grid(True, alpha=0.25)
@@ -192,7 +192,7 @@ def plot_tradeoff_two_panel(small_panel, large_panel, out_pdf):
     if vns_l:
         ax_r.plot([p[0] for p in vns_l], [p[1] for p in vns_l], "-^", color="#ff7f0e", lw=1.8, ms=4, label="VNS-TS")
     if gwo_l:
-        ax_r.plot([p[0] for p in gwo_l], [p[1] for p in gwo_l], "-D", color="#9467bd", lw=1.8, ms=4, label="GWO-HLD")
+        ax_r.plot([p[0] for p in gwo_l], [p[1] for p in gwo_l], "-D", color="#9467bd", lw=1.8, ms=4, label="GWO-HD")
     if nd_l:
         ax_r.scatter([p[0] for p in nd_l], [p[1] for p in nd_l],
                      s=32, facecolors="none", edgecolors="black", linewidths=1.0,
@@ -201,7 +201,7 @@ def plot_tradeoff_two_panel(small_panel, large_panel, out_pdf):
     _apply_power_scale(ax_r, pb_pts=pb_l, all_pts=all_large_pts, target_frac=0.25, n_ticks=7)
     title_large = "(b) CV-Large: PB-NSGA vs VNS-TS"
     if gwo_l:
-        title_large += " vs GWO-HLD"
+        title_large += " vs GWO-HD"
     ax_r.set_title(title_large)
     ax_r.set_xlabel(r"$Z_1$ - Expected Logistics Cost (power scale)")
     ax_r.set_ylabel(r"$Z_2$ - Max. Deprivation (power scale)")
@@ -216,14 +216,14 @@ def plot_tradeoff_two_panel(small_panel, large_panel, out_pdf):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Pareto trade-off comparison: PB-NSGA vs VNS-TS with optional GWO-HLD baseline")
+    ap = argparse.ArgumentParser(description="Pareto trade-off comparison: PB-NSGA vs VNS-TS with optional GWO-HD baseline")
     ap.add_argument("--results-exp2", default="results/exp2", help="Directory containing Exp2 result JSONs")
     ap.add_argument("--results-exp1", default="results/exp1", help="Directory containing Exp1 result JSONs")
     ap.add_argument("--out-dir", default="results/exp2", help="Directory for CSV/JSON summary outputs")
     ap.add_argument("--pb-glob", default=None, help="Optional glob override for PB-NSGA result files")
     ap.add_argument("--vns-glob", default=None, help="Optional glob override for VNS-TS result files")
-    ap.add_argument("--gwo-glob", default=None, help="Optional glob override for CV-large GWO-HLD result files")
-    ap.add_argument("--gwo-small", default=None, help="Optional override for CV-small GWO-HLD JSON path")
+    ap.add_argument("--gwo-glob", default=None, help="Optional glob override for CV-large GWO-HD result files")
+    ap.add_argument("--gwo-small", default=None, help="Optional override for CV-small GWO-HD JSON path")
     ap.add_argument("--allow-missing-vns", action="store_true", help="Allow running even if VNS files are missing")
     args = ap.parse_args()
 
@@ -283,7 +283,7 @@ def main():
     labeled = (
         [("PB-NSGA", z1, z2) for z1, z2 in pb_nd]
         + [("VNS-TS", z1, z2) for z1, z2 in vns_nd]
-        + [("GWO-HLD", z1, z2) for z1, z2 in gwo_nd]
+        + [("GWO-HD", z1, z2) for z1, z2 in gwo_nd]
     )
     union_nd = non_dominated([(z1, z2) for _, z1, z2 in labeled])
     union_keys = {(round(z1, 6), round(z2, 6)) for z1, z2 in union_nd}
@@ -309,7 +309,7 @@ def main():
         for z1, z2 in sorted(vns_small, key=lambda p: (p[0], p[1])):
             w.writerow(["CV-small", "VNS-TS", f"{z1:.6f}", f"{z2:.6f}", ""])
         for z1, z2 in sorted(gwo_small, key=lambda p: (p[0], p[1])):
-            w.writerow(["CV-small", "GWO-HLD", f"{z1:.6f}", f"{z2:.6f}", ""])
+            w.writerow(["CV-small", "GWO-HD", f"{z1:.6f}", f"{z2:.6f}", ""])
         for z1, z2 in sorted(true_small, key=lambda p: (p[0], p[1])):
             w.writerow(["CV-small", "True Pareto (MILP)", f"{z1:.6f}", f"{z2:.6f}", ""])
 
@@ -329,7 +329,7 @@ def main():
         },
         "outputs": {
             "csv": csv_path,
-            "plot": os.path.join(out_dir, "exp2_pareto_pbnsga_vs_vnsts.pdf"),
+            "plot": os.path.join(out_dir, "exp2_pareto_tradeoff.pdf"),
         },
     }
 
@@ -340,7 +340,7 @@ def main():
     plot_tradeoff_two_panel(
         {"pb": pb_small, "vns": vns_small, "gwo": gwo_small, "true": true_small},
         {"pb": pb_nd, "vns": vns_nd, "gwo": gwo_nd, "combined_nd": union_nd},
-        os.path.join(out_dir, "exp2_pareto_pbnsga_vs_vnsts.pdf"),
+        os.path.join(out_dir, "exp2_pareto_tradeoff.pdf"),
     )
 
     print(f"[Saved] {csv_path}")

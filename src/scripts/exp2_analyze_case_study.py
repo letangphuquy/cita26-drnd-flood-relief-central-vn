@@ -5,7 +5,7 @@ STATUS: Active — called from run_exp2_case_study.bat / run_exp2_case_study.sh
         (Step 2 of 3).
 
 Analyses PB-NSGA results on CV instances and, when available, also
-includes VNS-TS seed results in the metric table.
+includes VNS-TS and GWO-HD seed results in the metric table.
 
 Expected solver output file patterns under results/exp2/:
     - PB-NSGA:  cv_<size>_seed{n}.json
@@ -18,6 +18,9 @@ Outputs (written to results/exp2/ and figures/):
   figures/<grp>_hub_freq.pdf    — bar chart of hub selection frequency
   figures/<grp>_hub_heatmap.pdf — hub × scenario risk heatmap (sensitivity)
 
+If a sibling paper/ directory exists, the generated CSV outputs are also
+exported there to keep manuscript-side data files synchronized.
+
 Note: The solution map (1×3 composite) is generated separately by
       exp2_map_solution.py in Step 3 of run_exp2_case_study.bat.
 
@@ -26,8 +29,8 @@ The sensitivity analysis (hub_heatmap) answers:
 This directly supports the managerial insights in the paper.
 
 Usage (canonical, from project root):
-  python src/scripts/exp2_analyze_case_study.py results/exp2 results/exp2 data/cv
-  python src/scripts/exp2_analyze_case_study.py <results_dir> [<out_dir> [<cv_data_dir>]]
+    python src/scripts/exp2_analyze_case_study.py results/exp2 results/exp2 data/cv paper
+    python src/scripts/exp2_analyze_case_study.py <results_dir> [<out_dir> [<cv_data_dir> [<paper_dir>]]]
 """
 
 import os
@@ -37,6 +40,7 @@ import math
 import csv
 import statistics
 import subprocess
+import shutil
 
 try:
     import matplotlib
@@ -163,12 +167,13 @@ def discover_cv_files(results_dir):
     Recognised file names (case-insensitive):
       - cv_small_seed0.json              -> PB-NSGA
       - cv_large_seed12.json             -> PB-NSGA
-      - cv_large_vns_ts_seed4.json       -> VNS-TS
+    - cv_large_vns_ts_seed4.json       -> VNS-TS
+    - cv_large_gwo_hd_seed2.json       -> GWO-HD
     """
     import re
 
     groups = {}
-    pat = re.compile(r"^cv_(small|large)(?:_(vns_ts))?_seed(\d+)\.json$", re.IGNORECASE)
+    pat = re.compile(r"^cv_(small|large)(?:_(vns_ts|gwo_hd))?_seed(\d+)\.json$", re.IGNORECASE)
 
     for fname in sorted(os.listdir(results_dir)):
         m = pat.match(fname)
@@ -177,7 +182,12 @@ def discover_cv_files(results_dir):
 
         size, algo_tag, seed_s = m.groups()
         group = f"CV_{size.lower()}"
-        algorithm = "VNS-TS" if algo_tag else "PB-NSGA"
+        if algo_tag == "vns_ts":
+            algorithm = "VNS-TS"
+        elif algo_tag == "gwo_hd":
+            algorithm = "GWO-HD"
+        else:
+            algorithm = "PB-NSGA"
         seed = int(seed_s)
 
         groups.setdefault(group, {}).setdefault(algorithm, []).append(
@@ -379,7 +389,7 @@ def plot_hub_scenario_heatmap(hub_labels, sc_labels, risk_matrix, chi,
 # Main analysis
 # ---------------------------------------------------------------------------
 
-def run(results_dir, out_dir, cv_data_dir=None):
+def run(results_dir, out_dir, cv_data_dir=None, paper_dir=None):
     fig_dir  = os.path.join(out_dir, "figures")
     maps_dir = os.path.join(out_dir, "maps")
     os.makedirs(fig_dir,  exist_ok=True)
@@ -398,6 +408,12 @@ def run(results_dir, out_dir, cv_data_dir=None):
         if not os.path.isdir(cv_data_dir):
             # Fallback to legacy location
             cv_data_dir = os.path.join(_project_dir, "data_prep")
+
+    if paper_dir is None:
+        _script_dir  = os.path.dirname(os.path.abspath(__file__))
+        _project_dir = os.path.dirname(os.path.dirname(_script_dir))
+        candidate_paper_dir = os.path.join(_project_dir, "paper")
+        paper_dir = candidate_paper_dir if os.path.isdir(candidate_paper_dir) else None
 
     metrics_rows   = []
     stability_rows_all = {}
@@ -531,20 +547,24 @@ def run(results_dir, out_dir, cv_data_dir=None):
         _call_map_solution(inst_path, best_path, map_out)
 
     # Write CSVs
-    _write_csv(metrics_rows, os.path.join(out_dir, "exp2_metrics.csv"), [
+    metrics_path = os.path.join(out_dir, "exp2_metrics.csv")
+    _write_csv(metrics_rows, metrics_path, [
         "instance", "algorithm", "n_runs",
         "pareto_combined", "pareto_mean", "pareto_std",
         "HV_mean", "HV_std", "IGDplus_mean", "IGDplus_std",
         "runtime_s_mean", "runtime_s_std",
         "cpu_time_s_mean", "cpu_time_s_std",
     ])
+    _export_csv_to_paper(metrics_path, paper_dir)
 
     all_stab = [r for rows in stability_rows_all.values() for r in rows]
     if all_stab:
-        _write_csv(all_stab, os.path.join(out_dir, "exp2_hub_stability.csv"), [
+        hub_stability_path = os.path.join(out_dir, "exp2_hub_stability.csv")
+        _write_csv(all_stab, hub_stability_path, [
             "instance", "hub_idx", "selection_pct",
             "selected_count", "total_solutions",
         ])
+        _export_csv_to_paper(hub_stability_path, paper_dir)
 
     print(f"\n[Exp2] Done. Results -> {out_dir}")
 
@@ -576,14 +596,23 @@ def _write_csv(rows, path, fields):
     print(f"  [CSV] {path}")
 
 
+def _export_csv_to_paper(src_path, paper_dir):
+    if not paper_dir or not os.path.isdir(paper_dir):
+        return
+    dst_path = os.path.join(paper_dir, os.path.basename(src_path))
+    shutil.copy2(src_path, dst_path)
+    print(f"  [Export] {dst_path}")
+
+
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
     _script_dir  = os.path.dirname(os.path.abspath(__file__))
-    _project_dir = os.path.dirname(_script_dir)
+    _project_dir = os.path.dirname(os.path.dirname(_script_dir))
     _results_dir = sys.argv[1] if len(sys.argv) > 1 else os.path.join(_project_dir, "results", "exp2")
     _out_dir     = sys.argv[2] if len(sys.argv) > 2 else _results_dir
     _cv_data_dir = sys.argv[3] if len(sys.argv) > 3 else None
-    run(_results_dir, _out_dir, _cv_data_dir)
+    _paper_dir   = sys.argv[4] if len(sys.argv) > 4 else None
+    run(_results_dir, _out_dir, _cv_data_dir, _paper_dir)

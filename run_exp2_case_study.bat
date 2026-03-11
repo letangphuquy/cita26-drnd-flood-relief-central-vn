@@ -9,8 +9,8 @@ REM ------------------------------------------------------------
 REM Runs PB-NSGA on the CV-Large instance across multiple seeds.
 REM Generates:
 REM   1. Statistical analysis of convergence (HV, IGD+)
-REM   2. VNS-TS baseline fronts for trade-off comparison
-REM   3. PB-NSGA vs VNS-TS Pareto trade-off analysis
+REM   2. VNS-TS and GWO-HD baseline fronts for trade-off comparison
+REM   3. Pareto trade-off analysis across tracked algorithms
 REM   4. Hub selection stability and sensitivity analysis
 REM   5. High-fidelity maps of representative solutions
 REM   6. End-to-end SAA/OOS robustness evaluation (seed-0 Pareto)
@@ -76,18 +76,30 @@ FOR /L %%s IN (0,1,4) DO (
     "%SOLVER_DIR%\vns_ts_baseline.exe" "%DATA_CV%" --seed %%s --iter 180 --time-limit 180 --tabu-tenure 7 --kmax 4 --starts 12 --enable-option3 --out "%RES2%\cv_large_vns_ts_seed%%s.json"
 )
 
+REM ── Step 2b: Run GWO-HD baseline (literature comparator) ───────────────
+echo.
+echo [Step 2b] Running GWO-HD baseline (5 seeds) on CV-Large...
+IF NOT EXIST "%SOLVER_DIR%\gwo_hd_baseline.exe" (
+    g++ -O3 -std=c++17 -I"%SOLVER_DIR%" "%SOLVER_DIR%\gwo_hd_baseline.cpp" -o "%SOLVER_DIR%\gwo_hd_baseline.exe"
+)
+
+FOR /L %%s IN (0,1,4) DO (
+    echo   [GWO Seed %%s] Running...
+    "%SOLVER_DIR%\gwo_hd_baseline.exe" "%DATA_CV%" --out "%RES2%\cv_large_gwo_hd_seed%%s.json" --seed %%s --wolves 30 --iter 560 --time-limit 180 --fracA-start 0.45 --fracA-end 0.06 --fracX-start 0.35 --fracX-end 0.04 --accept-worse 0.03 --stagnation-limit 20 --keep-ratio 0.45 --ps-op-prob 0.35
+)
+
 :analysis_steps
 
-REM ── Step 3: Pareto trade-off (PB-NSGA vs VNS-TS) ───────────────────────
+REM ── Step 3: Pareto trade-off ───────────────────────────────────────────
 echo.
-echo [Step 3] Building PB-NSGA vs VNS-TS Pareto trade-off outputs...
-"%PYTHON%" "%PROJECT%src\scripts\exp2_pareto_tradeoff_pbnsga_vs_vnsts.py" --results-exp2 "%RES2%" --results-exp1 "%PROJECT%results\exp1" --out-dir "%RES2%"
+echo [Step 3] Building Pareto trade-off outputs...
+"%PYTHON%" "%PROJECT%src\scripts\exp2_pareto_tradeoff.py" --results-exp2 "%RES2%" --results-exp1 "%PROJECT%results\exp1" --out-dir "%RES2%"
 
 REM ── Step 4: Statistical Analysis & Sensitivity ────────────────────────────
 echo.
 echo [Step 4] Analyzing Stability ^& Scenario Sensitivity...
-REM Args: <results_dir> <out_dir> <cv_data_dir>
-"%PYTHON%" "%PROJECT%src\scripts\exp2_analyze_case_study.py" "%RES2%" "%RES2%" "%PROJECT%data\cv"
+REM Args: <results_dir> <out_dir> <cv_data_dir> <paper_dir>
+"%PYTHON%" "%PROJECT%src\scripts\exp2_analyze_case_study.py" "%RES2%" "%RES2%" "%PROJECT%data\cv" "%PROJECT%paper"
 
 REM ── Step 5: High-Fidelity Mapping ─────────────────────────────────────────
 echo.
@@ -122,7 +134,8 @@ echo.
 echo Experiment 2 (Case Study) Completed.
 echo Results saved to: %RES2%\
 echo Map saved to: figures\cv_large_map_detailed.pdf
-echo Trade-off outputs: %RES2%\exp2_tradeoff_pareto.csv, %RES2%\exp2_pareto_pbnsga_vs_vnsts.pdf
+echo Trade-off outputs: %RES2%\exp2_tradeoff_pareto.csv, %RES2%\exp2_pareto_tradeoff.pdf
+echo Tracked algorithms in Exp2: PB-NSGA, VNS-TS, GWO-HD
 echo SAA/OOS summary saved to: %RES2%\exp2_saa_oos_summary.json
 exit /b 0
 
