@@ -6,7 +6,7 @@
   "combined_nd_points": 6,
   "cv_small": {
     "pb_points": 9,
-    "vns_points": 1,
+    "vns_points": 4,
     "true_milp_points": 4
   },
   "outputs": {

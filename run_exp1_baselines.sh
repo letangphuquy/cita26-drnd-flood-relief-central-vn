@@ -162,8 +162,9 @@ if should_run_step "$RES1/cv_small_vns_ts.json" "$SOLVER_DIR/vns_ts_baseline" "$
         --iter 120 \
         --time-limit 60 \
         --tabu-tenure 5 \
-        --kmax 3 \
-        --starts 8
+        --kmax 4 \
+        --starts 12 \
+        --enable-option3
 else
     echo "[Skip] VNS-TS run unchanged."
 fi

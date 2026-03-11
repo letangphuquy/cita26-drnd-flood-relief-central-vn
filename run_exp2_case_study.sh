@@ -96,8 +96,9 @@ do
         --iter 180 \
         --time-limit 180 \
         --tabu-tenure 7 \
-        --kmax 3 \
-        --starts 10 \
+    --kmax 4 \
+    --starts 12 \
+    --enable-option3 \
         --out "$RES2/cv_large_vns_ts_seed${seed}.json"
 done
 
