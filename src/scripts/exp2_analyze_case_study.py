@@ -12,7 +12,8 @@ Expected solver output file patterns under results/exp2/:
     - VNS-TS:   cv_<size>_vns_ts_seed{n}.json
 
 Outputs (written to results/exp2/ and figures/):
-  exp2_metrics.csv              — HV, IGD+ mean±std across 20 seeds
+    exp2_metrics.csv              — Shared-reference HV/IGD+ comparison metrics
+                                                                 (combined front per algorithm) and run-level std
   exp2_hub_stability.csv        — hub selection frequency + scenario safety profile
   figures/<grp>_pareto.pdf      — combined Pareto front across seeds
   figures/<grp>_hub_freq.pdf    — bar chart of hub selection frequency
@@ -389,6 +390,44 @@ def plot_hub_scenario_heatmap(hub_labels, sc_labels, risk_matrix, chi,
 # Main analysis
 # ---------------------------------------------------------------------------
 
+def _load_single_result(path):
+    """Load a single JSON result as one pseudo-seed run if file exists."""
+    if not os.path.isfile(path):
+        return None
+    pts, meta, pareto_full = load_result(path)
+    return (0, pts, meta, pareto_full)
+
+
+def _discover_exp1_cv_small_runs(exp1_dir):
+    """
+    Discover all available CV-small Exp1 result JSONs for tracked algorithms.
+    Returns: {algorithm: [path, ...]}
+    """
+    import re
+
+    out = {"PB-NSGA": [], "VNS-TS": [], "GWO-HD": []}
+    if not os.path.isdir(exp1_dir):
+        return out
+
+    files = sorted(fn for fn in os.listdir(exp1_dir) if fn.endswith(".json"))
+
+    pb_pat = re.compile(r"^cv_small_pb_nsga(?:_aega_.*)?\.json$", re.IGNORECASE)
+    vns_pat = re.compile(r"^cv_small_vns_ts(?:_.*)?\.json$", re.IGNORECASE)
+    # Supports both the tracked baseline file and historical compact runs.
+    gwo_pat = re.compile(r"^cv_small_gwo(?:_hd|_[a-z])\.json$", re.IGNORECASE)
+
+    for fn in files:
+        path = os.path.join(exp1_dir, fn)
+        if pb_pat.match(fn):
+            out["PB-NSGA"].append(path)
+        elif vns_pat.match(fn):
+            out["VNS-TS"].append(path)
+        elif gwo_pat.match(fn):
+            out["GWO-HD"].append(path)
+
+    return out
+
+
 def run(results_dir, out_dir, cv_data_dir=None, paper_dir=None):
     fig_dir  = os.path.join(out_dir, "figures")
     maps_dir = os.path.join(out_dir, "maps")
@@ -415,11 +454,26 @@ def run(results_dir, out_dir, cv_data_dir=None, paper_dir=None):
         candidate_paper_dir = os.path.join(_project_dir, "paper")
         paper_dir = candidate_paper_dir if os.path.isdir(candidate_paper_dir) else None
 
+    _script_dir = os.path.dirname(os.path.abspath(__file__))
+    _project_dir = os.path.dirname(os.path.dirname(_script_dir))
+    exp1_dir = os.path.join(_project_dir, "results", "exp1")
+
     metrics_rows   = []
     stability_rows_all = {}
 
     for grp in sorted(cv_groups.keys()):
         algo_seed_map = cv_groups[grp]
+
+        # For CV-small, aggregate all available Exp1 runs for tracked
+        # algorithms to improve statistical stability.
+        if grp == "CV_small":
+            exp1_runs = _discover_exp1_cv_small_runs(exp1_dir)
+            for algorithm in ("PB-NSGA", "VNS-TS", "GWO-HD"):
+                if exp1_runs.get(algorithm):
+                    base_seed = 10000
+                    algo_seed_map[algorithm] = [
+                        (base_seed + i, p) for i, p in enumerate(exp1_runs[algorithm])
+                    ]
 
         print(f"\n[{grp}] discovered algorithms: {', '.join(sorted(algo_seed_map.keys()))}")
 
@@ -428,29 +482,47 @@ def run(results_dir, out_dir, cv_data_dir=None, paper_dir=None):
         pb_hv_list = None
         pb_seeds = None
 
+        # Build a shared normalisation/reference space across all compared
+        # algorithms for this instance so HV/IGD+ are directly comparable.
+        algo_seed_results = {}
+        all_runs_across_algorithms = []
+
+        for algorithm in sorted(algo_seed_map.keys()):
+            seeds = sorted(algo_seed_map[algorithm], key=lambda x: x[0])
+            seed_results = []
+            for entry in seeds:
+                if len(entry) == 2:
+                    seed, path = entry
+                    pts, meta, pareto_full = load_result(path)
+                    seed_results.append((seed, pts, meta, pareto_full))
+                elif len(entry) == 4:
+                    # Pseudo-seed injected from _load_single_result.
+                    seed_results.append(entry)
+                else:
+                    raise RuntimeError(f"Unexpected seed entry format for {algorithm}: {entry}")
+            algo_seed_results[algorithm] = seed_results
+            all_runs_across_algorithms.extend([sr[1] for sr in seed_results])
+
+        _, shared_bounds = normalize_points(all_runs_across_algorithms)
+        combined_reference = dominant_pareto(all_runs_across_algorithms)
+        ref_norm, _ = normalize_points([combined_reference], bounds=shared_bounds)
+        reference_norm = ref_norm[0] if ref_norm else []
+        ref_pt = (1.0, 1.0)
+
         for algorithm in sorted(algo_seed_map.keys()):
             seeds = sorted(algo_seed_map[algorithm], key=lambda x: x[0])
             print(f"  - {algorithm}: {len(seeds)} seed files")
 
             # Load all seeds for this algorithm
-            seed_results = []   # [(seed, pts, meta, pareto_full)]
-            for seed, path in seeds:
-                pts, meta, pareto_full = load_result(path)
-                seed_results.append((seed, pts, meta, pareto_full))
+            seed_results = algo_seed_results[algorithm]   # [(seed, pts, meta, pareto_full)]
 
             all_runs = [sr[1] for sr in seed_results]
 
-            # Global normalisation (algorithm-specific)
-            _, bounds = normalize_points(all_runs)
-            norm_runs, _ = normalize_points(all_runs, bounds=bounds)
-
-            # Reference front: combined non-dominated front across all seeds
+            # Reference front for plotting this algorithm alone.
             combined = dominant_pareto(all_runs)
-            ref_norm, _ = normalize_points([combined], bounds=bounds)
-            reference_norm = ref_norm[0] if ref_norm else []
-            ref_pt = (1.1, 1.1)
+            norm_runs, _ = normalize_points(all_runs, bounds=shared_bounds)
 
-            # Per-seed metrics
+            # Per-seed metrics (used for variability reporting)
             hv_list, igd_list, sz_list, rt_list, cpu_list = [], [], [], [], []
             for pts, norm_pts, sr_tuple in zip(all_runs, norm_runs, seed_results):
                 meta = sr_tuple[2]  # (seed, pts, meta, pareto_full)
@@ -464,13 +536,20 @@ def run(results_dir, out_dir, cv_data_dir=None, paper_dir=None):
                 if "cpu_time_s" in meta:
                     cpu_list.append(float(meta["cpu_time_s"]))
 
-            hv_m, hv_s = _mean_std(hv_list)
-            igd_m, igd_s = _mean_std(igd_list)
+            # Comparison metrics: evaluate each algorithm's combined front
+            # against the same shared reference/front normalisation.
+            combined_norm, _ = normalize_points([combined], bounds=shared_bounds)
+            combined_norm_pts = combined_norm[0] if combined_norm else []
+            hv_cmp = hypervolume_2d(combined_norm_pts, ref_pt)
+            igd_cmp = igd_plus(combined_norm_pts, reference_norm)
+
+            _, hv_s = _mean_std(hv_list)
+            _, igd_s = _mean_std(igd_list)
             sz_m, sz_s = _mean_std([float(s) for s in sz_list])
             rt_m, rt_s = _mean_std(rt_list)
             cpu_m, cpu_s = _mean_std(cpu_list)
 
-            print(f"    HV={hv_m:.4f}±{hv_s:.4f}  IGD+={igd_m:.4f}±{igd_s:.4f}  "
+            print(f"    HV={hv_cmp:.4f}±{hv_s:.4f}  IGD+={igd_cmp:.4f}±{igd_s:.4f}  "
                   f"front_size={sz_m:.1f}±{sz_s:.1f}"
                   + (f"  rt={rt_m:.1f}s" if rt_list else "")
                   + (f"  cpu={cpu_m:.1f}s" if cpu_list else ""))
@@ -482,9 +561,9 @@ def run(results_dir, out_dir, cv_data_dir=None, paper_dir=None):
                 "pareto_combined": len(combined),
                 "pareto_mean":     f"{sz_m:.1f}",
                 "pareto_std":      f"{sz_s:.1f}",
-                "HV_mean":         f"{hv_m:.6f}",
+                "HV_mean":         f"{hv_cmp:.6f}",
                 "HV_std":          f"{hv_s:.6f}",
-                "IGDplus_mean":    f"{igd_m:.6f}",
+                "IGDplus_mean":    f"{igd_cmp:.6f}",
                 "IGDplus_std":     f"{igd_s:.6f}",
                 "runtime_s_mean":  f"{rt_m:.4f}" if rt_list else "N/A",
                 "runtime_s_std":   f"{rt_s:.4f}" if rt_list else "N/A",
@@ -542,7 +621,17 @@ def run(results_dir, out_dir, cv_data_dir=None, paper_dir=None):
 
         # Map visualisation: pick seed with highest HV for representative plot
         best_seed_idx = pb_hv_list.index(max(pb_hv_list))
-        best_seed, best_path = pb_seeds[best_seed_idx]
+        best_entry = pb_seeds[best_seed_idx]
+        if len(best_entry) == 2:
+            best_seed, best_path = best_entry
+        else:
+            best_seed = best_entry[0]
+            # Pseudo-seed entry from Exp1 fallback (CV-small).
+            if "small" in grp:
+                best_path = os.path.join(exp1_dir, "cv_small_pb_nsga.json")
+            else:
+                print("  [Skip map] Could not infer PB-NSGA source path for representative seed")
+                continue
         map_out = os.path.join(maps_dir, f"{grp}_solution_map.pdf")
         _call_map_solution(inst_path, best_path, map_out)
 
