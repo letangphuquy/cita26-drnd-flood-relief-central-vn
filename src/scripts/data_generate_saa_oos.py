@@ -4,7 +4,7 @@ data_generate_saa_oos.py - SAA and OOS scenario generator
 Standalone utility for Experiment-2 methodology.
 
 This script now follows a combinatorial SAA design:
-    - In-sample SAA set: 50 scenarios by default, generated from a profile bank
+    - In-sample SAA set: 100 scenarios by default, generated from a profile bank
         (mild/severe/extreme variants with different epicenter counts, intensity
         ranges, circuity, and disruption aggressiveness).
     - Out-of-sample (OOS) set: independently sampled stress scenarios used only
