@@ -4,6 +4,7 @@ REM ============================================================
 
 REM Optional flags:
 REM   --skip-unchanged   Skip compile/run steps whose outputs are newer than inputs
+REM   --analyze-only     Skip solver runs; only perform analysis on existing results/
 REM Experiment 1: Baseline Comparison on Central Vietnam (CV-Small)
 REM ------------------------------------------------------------
 REM Benchmarks PB-NSGA against:
@@ -19,8 +20,10 @@ SET "RES1=%PROJECT%results\exp1"
 SET "SOLVER_DIR=%PROJECT%src\solver"
 
 SET "SKIP_UNCHANGED=0"
+SET "ANALYZE_ONLY=0"
 FOR %%A IN (%*) DO (
     IF /I "%%~A"=="--skip-unchanged" SET "SKIP_UNCHANGED=1"
+    IF /I "%%~A"=="--analyze-only" SET "ANALYZE_ONLY=1"
     IF /I "%%~A"=="--help" GOTO :show_help
     IF /I "%%~A"=="-h" GOTO :show_help
 )
@@ -37,6 +40,16 @@ REM Python venv
 SET "PYTHON=%PROJECT%.venv\Scripts\python.exe"
 IF NOT EXIST "%PYTHON%" (
     SET "PYTHON=python"
+)
+
+IF "%ANALYZE_ONLY%"=="1" (
+    echo.
+    echo [Exp1] Running analysis only on existing results...
+    IF NOT EXIST "%RES1%" (
+        echo [Error] results\exp1\ not found. Run full experiment first.
+        exit /b 1
+    )
+    GOTO :analysis_steps
 )
 
 IF NOT EXIST "%RES1%" mkdir "%RES1%"
@@ -100,7 +113,7 @@ IF %ERRORLEVEL% EQU 0 (
 )
 CALL :ShouldRun "%RES1%\cv_small_vns_ts.json" "%SOLVER_DIR%\vns_ts_baseline.exe" "%DATA_CV%"
 IF %ERRORLEVEL% EQU 0 (
-    "%SOLVER_DIR%\vns_ts_baseline.exe" "%DATA_CV%" --out "%RES1%\cv_small_vns_ts.json" --seed 42 --iter 120 --time-limit 60 --tabu-tenure 5 --kmax 3 --starts 8
+    "%SOLVER_DIR%\vns_ts_baseline.exe" "%DATA_CV%" --out "%RES1%\cv_small_vns_ts.json" --seed 42 --iter 120 --time-limit 60 --tabu-tenure 5 --kmax 4 --starts 12 --enable-option3
 ) ELSE (
     echo [Skip] VNS-TS run unchanged.
 )
@@ -169,6 +182,7 @@ IF %ERRORLEVEL% EQU 0 (
     echo [Skip] PB-NSGA run unchanged.
 )
 
+:analysis_steps
 REM ── Step 5: Final Comparison Table ────────────────────────────────────────
 echo.
 echo [Step 5] Generating Comparison Metrics (HV, IGD+)...
@@ -192,7 +206,11 @@ echo Results saved to: %RES1%\cv_small_metrics.csv
 exit /b 0
 
 :show_help
-echo Usage: run_exp1_baselines.bat [--skip-unchanged]
+echo Usage: run_exp1_baselines.bat [--skip-unchanged] [--analyze-only]
+echo.
+echo Flags:
+echo   --skip-unchanged  Skip compile/run steps whose outputs are newer than inputs
+echo   --analyze-only    Skip solver runs; only perform analysis on existing results/
 exit /b 0
 
 :ShouldRun

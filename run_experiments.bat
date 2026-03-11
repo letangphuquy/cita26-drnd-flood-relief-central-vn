@@ -6,14 +6,18 @@ REM ------------------------------------------------------------
 REM Narrative:
 REM   Experiment 1: Baseline Comparison on CV-Small
 REM   Experiment 2: Case Study & Insights on CV-Large
+REM
+REM Modes:
+REM   run_experiments.bat               — full run (compile + data + solve + analyze)
+REM   run_experiments.bat data          — regenerate datasets only
+REM   run_experiments.bat analyze       — run analysis only (requires existing results/)
+REM   run_experiments.bat compile-only  — compile solvers only
 REM ============================================================
 
 SET "PROJECT=%~dp0"
 
-REM Usage:
-REM   run_experiments.bat          — full run
-REM   run_experiments.bat data     — regenerate datasets only
-REM   run_experiments.bat analyze  — run analysis only
+IF /I "%1"=="--help" GOTO :show_help
+IF /I "%1"=="-h" GOTO :show_help
 
 IF "%1"=="data" (
     echo Regenerating datasets...
@@ -22,6 +26,27 @@ IF "%1"=="data" (
     "%PYTHON%" src\scripts\data_generate_cv.py --outdir data\cv
     "%PYTHON%" src\scripts\data_process_hlp_benchmark.py --outdir data\benchmark
     echo Datasets ready.
+    exit /b 0
+)
+
+IF "%1"=="compile-only" (
+    echo Compiling solvers...
+    call "%PROJECT%compile.bat"
+    exit /b 0
+)
+
+IF "%1"=="analyze" (
+    echo Running analysis on existing results/
+    echo.
+    echo ^>^>^> Running Analysis for Experiment 1...
+    call "%PROJECT%run_exp1_baselines.bat" --analyze-only
+    echo.
+    echo ^>^>^> Running Analysis for Experiment 2...
+    call "%PROJECT%run_exp2_case_study.bat" --analyze-only
+    echo.
+    echo ============================================================
+    echo  Analysis complete.
+    echo ============================================================
     exit /b 0
 )
 
@@ -45,3 +70,14 @@ echo.
 echo ============================================================
 echo  All experiments in the current narrative completed.
 echo ============================================================
+exit /b 0
+
+:show_help
+echo Usage: run_experiments.bat [COMMAND]
+echo.
+echo Commands:
+echo   (none)         - Run full pipeline (compile, generate data, solve, analyze)
+echo   data           - Regenerate datasets only
+echo   analyze        - Run analysis only (assumes results/ exists)
+echo   compile-only   - Compile solvers only
+exit /b 0

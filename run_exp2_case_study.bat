@@ -2,6 +2,9 @@
 REM run_exp2_case_study.bat
 REM ============================================================
 REM Experiment 2: Central Vietnam Case Study, SAA, and OOS Insights
+REM
+REM Optional flags:
+REM   --analyze-only  Skip solver runs; only perform analysis on existing results/
 REM ------------------------------------------------------------
 REM Runs PB-NSGA on the CV-Large instance across multiple seeds.
 REM Generates:
@@ -21,6 +24,22 @@ SET "OOS_DATA=%DATA_PREP%\cv_large_oos10.json"
 SET "RES2=%PROJECT%results\exp2"
 SET "SOLVER_DIR=%PROJECT%src\solver"
 
+SET "ANALYZE_ONLY=0"
+FOR %%A IN (%*) DO (
+    IF /I "%%~A"=="--analyze-only" SET "ANALYZE_ONLY=1"
+    IF /I "%%~A"=="--help" GOTO :show_help
+    IF /I "%%~A"=="-h" GOTO :show_help
+)
+
+IF "%ANALYZE_ONLY%"=="1" (
+    echo.
+    echo [Exp2] Running analysis only on existing results...
+    IF NOT EXIST "%RES2%" (
+        echo [Error] results\exp2\ not found. Run full experiment first.
+        exit /b 1
+    )
+)
+
 REM Python venv
 SET "PYTHON=%PROJECT%.venv\Scripts\python.exe"
 IF NOT EXIST "%PYTHON%" (
@@ -29,6 +48,8 @@ IF NOT EXIST "%PYTHON%" (
 
 IF NOT EXIST "%RES2%" mkdir "%RES2%"
 IF NOT EXIST "%DATA_PREP%" mkdir "%DATA_PREP%"
+
+IF "%ANALYZE_ONLY%"=="1" GOTO :analysis_steps
 
 REM ── Step 1: Run PB-NSGA (Ours) 20 Seeds ────────────────────────────────────
 echo.
@@ -52,8 +73,10 @@ IF NOT EXIST "%SOLVER_DIR%\vns_ts_baseline.exe" (
 
 FOR /L %%s IN (0,1,4) DO (
     echo   [VNS Seed %%s] Running...
-    "%SOLVER_DIR%\vns_ts_baseline.exe" "%DATA_CV%" --seed %%s --iter 180 --time-limit 180 --tabu-tenure 7 --kmax 3 --starts 10 --out "%RES2%\cv_large_vns_ts_seed%%s.json"
+    "%SOLVER_DIR%\vns_ts_baseline.exe" "%DATA_CV%" --seed %%s --iter 180 --time-limit 180 --tabu-tenure 7 --kmax 4 --starts 12 --enable-option3 --out "%RES2%\cv_large_vns_ts_seed%%s.json"
 )
+
+:analysis_steps
 
 REM ── Step 3: Pareto trade-off (PB-NSGA vs VNS-TS) ───────────────────────
 echo.
@@ -101,3 +124,11 @@ echo Results saved to: %RES2%\
 echo Map saved to: figures\cv_large_map_detailed.pdf
 echo Trade-off outputs: %RES2%\exp2_tradeoff_pareto.csv, %RES2%\exp2_pareto_pbnsga_vs_vnsts.pdf
 echo SAA/OOS summary saved to: %RES2%\exp2_saa_oos_summary.json
+exit /b 0
+
+:show_help
+echo Usage: run_exp2_case_study.bat [--analyze-only]
+echo.
+echo Flags:
+echo   --analyze-only  Skip solver runs; only perform analysis on existing results/
+exit /b 0
