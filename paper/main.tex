@@ -101,7 +101,7 @@
 Conventional disaster relief models often assume uninterrupted road networks, making them inadequate for Central Vietnam, where frequent floods severely disrupt infrastructure.
 We formulate the Multi-Objective Incomplete Hub Location Network Design Problem (MO-IHLNDP), a two-stage stochastic program that jointly minimizes expected logistics cost and expected maximum deprivation cost over a set of flood scenarios. The model explicitly accounts for broken inter-hub links, multi-modal transport (land, water, and air), pre-positioned inventory, as well as adaptive lateral transshipments and reactive hub activations to recover from severe localized deficits.
 Deprivation cost is modeled as an exponential penalty on victim waiting time, and Daganzo's continuous approximation is embedded for tractable last-mile routing cost estimation.
-To solve MO-IHLNDP, we propose PB-NSGA (Priority-Based Nondominated Sorting Genetic Algorithm), which confines the chromosome to first-stage hub decisions and reconstructs all scenario-dependent second-stage variables through a structured priority-based decoder, reducing search-space complexity from $O(|\mathcal{S}|\times|\mathcal{V}|)$ to $O(|\mathcal{H}|)$.
+To solve MO-IHLNDP, we propose PB-NSGA (Priority-Based Nondominated Sorting Genetic Algorithm), which confines the chromosome to first-stage hub decisions and reconstructs all scenario-dependent second-stage variables through a structured priority-based decoder, reducing search-space complexity from $O(|\mathcal{S}|\times|\mathcal{V}|)$ to $O(|\mathcal{H}| + |\mathcal{I}|)$.
 On CV-Small, PB-NSGA achieves HV~$= 0.925$ in 1.1\,s, closely approaching the MILP reference front (HV~$= 0.997$, 4.9\,s) and outperforming VNS-TS (HV~$= 0.777$, 60\,s) and GWO-HD (HV~$= 0.780$, 0.6\,s). On the full-scale CV-Large instance, PB-NSGA defines the combined reference front (HV~$= 1.000 \pm 0.006$) in under 10\,s -- versus 180\,s for VNS-TS (HV~$= 0.793$).
 A case study across four flood-prone provinces in Central Vietnam yields a decision-support framework: the Quang Ngai Port Hub and Phuoc Son Helipad are unconditional network anchors (100\% Pareto-selection frequency), followed by the Huong Viet Depot (82.8\%) and Da Nang Airport Hub (77.3\%), while the Tam Ky Logistics Hub (67.2\%) is identified as a resilience gap requiring contingency planning.
 
@@ -167,7 +167,7 @@ This paper closes the gap by formulating the MO-IHLNDP and solving it via our pr
 
 We model the network design problem as a capacitated, single-allocation MO-IHLNDP. The network comprises \textbf{origins} (supply sources), \textbf{demands} (victim groups), and \textbf{hubs} of two types: planned (pre-disaster) and reactive (post-disaster, dynamically opened).
 
-From a practical standpoint, DRND involves two critical uncertainty factors. First, infrastructure disruption -- damaged roads and buildings -- can disable pre-programmed plans, urging the need for a dynamic solution~\cite{Yahyaei2019}. Second, the exact locations of demands, the total number of victims, and the availability of origins are all highly uncertain during rescue operations~\cite{tofighi2016humanitarian}. To account for these, we employ a two-stage stochastic programming approach across multiple scenarios, each assigning a specific risk factor per area, and assume that Search and Rescue operations rely heavily on dynamic external supply sources, as pre-positioned hubs may not fully satisfy uncertain demands under extreme scenarios.
+From a practical standpoint, DRND involves two critical uncertainty factors. First, infrastructure disruption -- damaged roads and buildings -- can disable pre-programmed plans, necessitating a dynamic solution~\cite{Yahyaei2019}. Second, the exact locations of demands, the total number of victims, and the availability of origins are all highly uncertain during rescue operations~\cite{tofighi2016humanitarian}. To account for these, we employ a two-stage stochastic programming approach across multiple scenarios, each assigning a specific risk factor per area, and assume that Search and Rescue operations rely heavily on dynamic external supply sources, as pre-positioned hubs may not fully satisfy uncertain demands under extreme scenarios.
 
 The model integrates the deprivation cost~\cite{holguin2013appropriate} for social equity, and Daganzo's continuous approximation (CA)~\cite{daganzo2005logistics} to tractably estimate last-mile rescue times.
 
@@ -215,6 +215,7 @@ $z_{iks} \in \{0,1\}$ & 1 if demand $i$ is assigned to be evacuated to hub $k$ i
 $z_{jks} \in \{0,1\}$ & 1 if origin $j$ supplies hub $k$ in scenario $s$, 0 otherwise \\
 $q_{k}$ & Amount of relief items inventoried at hub $k$ \\
 $f_{khms}$ & Lateral trans-shipment flow volume from hub $k$ to hub $h$ via mode $m$ in scenario $s$ \\
+% $W_s \ge 0$ & Auxiliary variable capturing the worst-case deprivation cost across all demand nodes in scenario $s$ \\
 \end{tabular}
 
 \subsection{Objectives}
@@ -256,10 +257,10 @@ Objective $Z_1$ minimizes total expected logistics cost. Using the previously me
 
 Objective $Z_2$ minimizes the expected value of maximum deprivation cost \cite{holguin2013appropriate}. The exponential function of waiting time $\Omega_{is}$ heavily penalizes the model if it lets a demand node wait slightly longer than the rest, forcing the model to distribute resources evenly. The penalty function is adjusted by $\lambda_{is} = \lambda_0 (1 + r_{is})$ so that highly vulnerable populations are prioritized. 
 
-To linearize $Z_2$, we exploit the single-allocation property \eqref{eq:single_alloc_demand}. Any demand $i$ is allocated to a single hub $k$. Thus, the deprivation cost $C^{\text{dep}}_{is}$ is pre-computed:
+To linearize $Z_2$, we exploit the single-allocation property \eqref{eq:single_alloc_demand}. Any demand $i$ is allocated to a single hub $k$. Thus, the deprivation cost $C^{\text{dep}}_{iks}$ is pre-computed:
 
 \begin{equation} \label{eq:deprivation_cost}
-    C^{\text{dep}}_{is} = D_{is} \cdot \left(e^{\lambda_{is} \cdot \left(\tau_{ks} + 2 \cdot \min_{m \in \mathcal{M} \mid a_{ikms}=1} \tau_{kim}\right)} - 1\right)
+    C^{\text{dep}}_{iks} = D_{is} \cdot \left(e^{\lambda_{is} \cdot \left(\tau_{ks} + 2 \cdot \min_{m \in \mathcal{M} \mid a_{ikms}=1} \tau_{kim}\right)} - 1\right)
 \end{equation}
 
 By introducing a continuous auxiliary variable $W_s \ge 0$ and constraint \eqref{eq:deprivation_bound} to capture the worst-case deprivation cost among all demand nodes in a given scenario $s$, we obtain the linearized program:
@@ -267,7 +268,7 @@ By introducing a continuous auxiliary variable $W_s \ge 0$ and constraint \eqref
 \begin{align}
     \text{Minimize } \quad & Z_1, Z_2^{\text{linear}} = \sum_{s \in \mathcal{S}} \pi_s \cdot W_s   \nonumber \\
     \text{subject to} \quad & \text{Constraints } \eqref{eq:deprivation_bound} - \eqref{eq:nonneg_vars} \nonumber \\
-    W_s & \ge C^{\text{dep}}_{is} \cdot z_{iks} \quad \forall i \in \mathcal{I}, s \in \mathcal{S} \label{eq:deprivation_bound}
+    W_s & \ge C^{\text{dep}}_{iks} \cdot z_{iks} \quad \forall i \in \mathcal{I}, k \in \mathcal{H}, s \in \mathcal{S} \label{eq:deprivation_bound}
 \end{align}
 
 \subsection{Constraints}
@@ -378,7 +379,7 @@ With hub activations and demand assignments fixed by Steps~1--3, the supply rout
 \subsection{Experimental Setup}
 \label{sec:exp_setup}
 
-PB-NSGA is implemented in C++17; dataset construction and post-processing are performed in Python~3, on a workstation with an 11th Gen Intel Core i5-1135G7 @ 2.40~GHz and 16~GB RAM. Algorithm parameters are fixed for all runs: $N = 200$, $G = 300$ (CV-Small) / $500$ (CV-Large), $p_c = 0.98$, $p_m^{\mathrm{high}} = 0.40$, $p_m^{\mathrm{low}} = 0.10$ (linear decay), $\eta_{\mathrm{SBX}} = 1.5$, $\eta_{\mathrm{poly}} = 8$. Problem constants are $\chi = 0.7$, $\alpha = 0.6$, $\gamma = 3.0$~kg/person, $\lambda_0 = 0.8$. Each configuration is executed for 20 independent runs, reporting mean~$\pm$~std. We use \textbf{Hypervolume (HV)}~\cite{zitzler1999multiobjective} and \textbf{IGD\textsuperscript{+}}~\cite{ishibuchi2015modified} as performance metrics, computed against the combined non-dominated reference front pooled across all algorithms.
+PB-NSGA is implemented in C++17; dataset construction and post-processing are performed in Python~3, on a workstation with an 11th Gen Intel Core i5-1135G7 @ 2.40~GHz and 16~GB RAM. Algorithm parameters are fixed for all runs: $N = 200$, $G = 300$ (CV-Small) / $500$ (CV-Large), $p_c = 0.98$, $p_m^{\mathrm{high}} = 0.40$, $p_m^{\mathrm{low}} = 0.10$ (linear decay), $\eta_{\mathrm{SBX}} = 1.5$, $\eta_{\mathrm{poly}} = 8$. The parameters are chosen via a grid search process. Problem constants are $\chi = 0.7$, $\alpha = 0.6$, $\gamma = 3.0$~kg/person, $\lambda_0 = 0.8$. Each configuration is executed for 20 independent runs, reporting mean~$\pm$~std. We use \textbf{Hypervolume (HV)}~\cite{zitzler1999multiobjective} and \textbf{IGD\textsuperscript{+}}~\cite{ishibuchi2015modified} as performance metrics, computed against the combined non-dominated reference front pooled across all algorithms.
 
 \subsection{Dataset Description}
 \label{sec:datasets}
@@ -432,7 +433,7 @@ We apply PB-NSGA, GWO-HD, and VNS-TS to the full-scale \textbf{CV-Large} instanc
 
 Figure~\ref{fig:pareto_tradeoff} shows the Pareto fronts for both instances. On CV-Small (left panel), PB-NSGA closely tracks the MILP true front across the full cost-deprivation range; GWO-HD eventually converges to a similar region but with more scattered solutions; VNS-TS only finds the cost-efficient tail, missing the deprivation-minimizing end entirely. On CV-Large (right panel, power scale), the trade-off space spans nearly an order of magnitude in $Z_1$. PB-NSGA concentrates its solutions in the low-cost, low-deprivation region ($Z_1$: 4.3M--5M, $Z_2$: 41K--45K), defining the efficient frontier. GWO-HD extends the front rightward, maintaining competitive $Z_2\approx44$K at the cost of substantially higher $Z_1$ (up to 26M). VNS-TS is dominated in both objectives, with solutions reaching $Z_1=81$M and $Z_2=150$K.
 
-On CV-Large across 20 runs, PB-NSGA achieves HV\,=\,1.000\,$\pm$\,0.006 and IGD\textsuperscript{+}\,=\,0.000\,$\pm$\,0.001, defining the combined reference front and confirming stable convergence. GWO-HD reaches HV\,=\,0.977\,$\pm$\,0.008 in 4.6\,s. VNS-TS achieves HV\,=\,0.793\,$\pm$\,0.044 at 180\,s per run -- a $20\times$ runtime disadvantage relative to PB-NSGA.
+On CV-Large across 20 runs, PB-NSGA achieves HV\,=\,1.000\,$\pm$\,0.006 and IGD\textsuperscript{+}\,=\,0.000\,$\pm$\,0.001, contributing the whole combined reference front and confirming stable convergence. GWO-HD reaches HV\,=\,0.977\,$\pm$\,0.008 in 4.6\,s. VNS-TS achieves HV\,=\,0.793\,$\pm$\,0.044 at 180\,s per run -- a $20\times$ runtime disadvantage relative to PB-NSGA.
 
 \begin{figure}[ht]
 \centering
@@ -446,7 +447,7 @@ Figure~\ref{fig:cv_large_map_detailed} visualizes the knee-point solution ($Z_1=
 \subsubsection*{Decision Support Framework}
 
 \textit{Robust hub prioritization.}
-Hub selection frequency across all 20 runs (128 Pareto solutions total) reveals a clear investment hierarchy. The Quang Ngai Port Hub (H15) and Phuoc Son Helipad (H16) are selected in every Pareto-optimal solution (100\%), making them unconditional anchors for permanent infrastructure investment. The Huong Viet Depot (H14, 82.8\%), Da Nang Airport Hub (H0, 77.3\%), Tam Ky Logistics Hub (H1, 67.2\%), Binh Son Warehouse (H9, 59.4\%), and Dong Giang Rescue Station (H3, 57.8\%) form a second tier, each appearing in more than half of all solutions.
+Hub selection frequency across all 20 runs on CV-Large (128 Pareto solutions total) reveals a clear investment hierarchy. The Quang Ngai Port Hub (H15) and Phuoc Son Helipad (H16) are selected in every Pareto-optimal solution (100\%), making them unconditional anchors for permanent infrastructure investment. The Huong Viet Depot (H14, 82.8\%), Da Nang Airport Hub (H0, 77.3\%), Tam Ky Logistics Hub (H1, 67.2\%), Binh Son Warehouse (H9, 59.4\%), and Dong Giang Rescue Station (H3, 57.8\%) form a second tier, each appearing in more than half of all solutions.
 
 \textit{Resilience gap.}
 The risk heatmap reveals a critical vulnerability: H1 (Tam Ky Logistics Hub), despite its high selection frequency, exposes a \emph{resilience gap} -- its risk escalates sharply from 0.46 under mild conditions to 0.94 and 0.92 under severe and extreme scenarios, both well above the safety threshold $\chi=0.7$. This hub will be closed by the risk constraint whenever disaster severity escalates, requiring the network to fall back on remaining hubs. Authorities should treat H1 as a conditional asset and pre-stage contingency inventory at neighbouring safe hubs accordingly. By contrast, the Huong Viet Depot (H14) stands out as the most disaster-resilient candidate with risk values of only 0.05, 0.09, and 0.13 across all three scenarios, reflecting its sheltered inland location.
