@@ -1,4 +1,6 @@
-call .\.venv\Scripts\activate.bat
+if exist ".\.venv\Scripts\activate.bat" (
+    call .\.venv\Scripts\activate.bat
+)
 python data\prep\patch_coords.py --dry-run
 
 set /p run_patch="Do you want to run patch_coords? (y/n): "

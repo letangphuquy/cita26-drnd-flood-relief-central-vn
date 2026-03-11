@@ -14,7 +14,7 @@ set SOLVER_DIR=%~dp0src\solver
 set OUT=%~dp0src\solver\solver.exe
 
 echo [Compile] Building PB-NSGA-II solver (v2)...
-g++ -O2 -std=c++17 -Wall ^
+g++ -O3 -std=c++17 -Wall ^
     "%SOLVER_DIR%\main.cpp" ^
     -o "%OUT%"
 
