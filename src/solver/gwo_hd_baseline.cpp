@@ -15,6 +15,8 @@
 //      alpha=min Z1, beta=min Z2, delta=knee solution on rank-1 set.
 //   3) Feasibility-aware update/selection via constrained dominance.
 //   4) Stagnation rescue: partial omega re-construction.
+//   5) W-vector HD move (mode matrix analog), R-level HD move,
+//      demand-weighted assignment, normalized fitness per Li et al. (2023).
 // -----------------------------------------------------------------------------
 
 #include "decoder.hpp"
@@ -169,9 +171,9 @@ static void repair_assignment(Individual &ind, const DRNDInstance &inst) {
 }
 
 static Wolf evaluate(Individual ind, const DRNDInstance &inst,
-                     const vector<double> &exp_dem) {
+                     const vector<double> &exp_dem, bool recompute_r = true) {
   repair_assignment(ind, inst);
-  reconstruct_R(ind, inst, exp_dem);
+  if (recompute_r) reconstruct_R(ind, inst, exp_dem);
   decode(ind, inst);
   Wolf w;
   w.ind = std::move(ind);
@@ -179,6 +181,18 @@ static Wolf evaluate(Individual ind, const DRNDInstance &inst,
   w.Z2 = w.ind.Z2;
   w.CV = w.ind.CV;
   return w;
+}
+
+static int mincost_open_for_demand(const DRNDInstance &inst, int ii, const vector<int> &open) {
+  int best = open[0];
+  double best_cost = std::numeric_limits<double>::infinity();
+  for (int ki : open) {
+    double avg_theta = 0.0;
+    for (int si = 0; si < inst.num_S; ++si)
+      avg_theta += inst.scenarios[si].prob * inst.theta[ki][ii][si];
+    if (avg_theta < best_cost) { best_cost = avg_theta; best = ki; }
+  }
+  return best;
 }
 
 static Individual random_structure(const DRNDInstance &inst, std::mt19937 &rng,
@@ -195,15 +209,40 @@ static Individual random_structure(const DRNDInstance &inst, std::mt19937 &rng,
 
   auto open = open_hubs(ind.X);
   for (int ii = 0; ii < inst.num_I; ++ii) {
-    if (std::uniform_real_distribution<double>(0.0, 1.0)(rng) < 0.75) {
+    double r = std::uniform_real_distribution<double>(0.0, 1.0)(rng);
+    if (r < 0.55) {
       ind.A[ii] = nearest_open_for_demand(inst, ii, open);
+    } else if (r < 0.80) {
+      ind.A[ii] = mincost_open_for_demand(inst, ii, open);
     } else {
       ind.A[ii] = open[std::uniform_int_distribution<int>(0, (int)open.size() - 1)(rng)];
     }
   }
 
-  ind.W = {0.7, 0.7, 0.6, 0.6, 0.5, 0.5};
-  reconstruct_R(ind, inst, exp_dem);
+  std::uniform_real_distribution<double> u(0.1, 0.9);
+  for (auto &wv : ind.W) wv = u(rng);
+
+  // Use discrete pre-positioning levels instead of reconstruct_R.
+  // reconstruct_R always anchors R to the demand/capacity ratio of the
+  // current assignment, which prevents exploring different pre-positioning
+  // strategies. Using discrete levels lets wolves explore the full
+  // pre-positioning spectrum (low=cheap/risky, high=safe/expensive).
+  static const double r_levels[] = {0.0, 0.1, 0.25, 0.4, 0.5, 0.6, 0.75, 0.9, 1.0};
+  static const int n_levels = 9;
+  // Occasionally use reconstruct_R for one mode (captures "just-enough" strategy)
+  bool use_reconstruct = std::uniform_real_distribution<double>(0.0, 1.0)(rng) < 0.25;
+  if (use_reconstruct) {
+    reconstruct_R(ind, inst, exp_dem);
+  } else {
+    // Pick a single level per wolf (encourages diverse pre-positioning levels)
+    int base_level = std::uniform_int_distribution<int>(0, n_levels - 1)(rng);
+    for (int ki : open) {
+      // Small per-hub variation around the base level
+      int variation = std::uniform_int_distribution<int>(-1, 1)(rng);
+      int li = std::clamp(base_level + variation, 0, n_levels - 1);
+      ind.R[ki] = r_levels[li];
+    }
+  }
   return ind;
 }
 
@@ -369,6 +408,72 @@ static void guided_hd_move(vector<int> &x, const vector<int> &leader,
   }
 }
 
+// HD-style move on W vector toward leader's W.
+// Paper §4.2.3: HD move on transportation mode matrix — here W controls
+// mode selection in the decoder (W[1]=hub speed → faster transport modes,
+// W[4]=planned hub preference, etc.).
+static void guided_w_move(vector<double> &w, const vector<double> &lw,
+                           std::mt19937 &rng, double move_frac) {
+  vector<int> diff;
+  for (int i = 0; i < (int)w.size(); ++i)
+    if (std::abs(w[i] - lw[i]) > 0.04)
+      diff.push_back(i);
+  if (diff.empty()) return;
+  int max_mv = std::max(1, (int)std::round(move_frac * (int)diff.size()));
+  int mv = std::uniform_int_distribution<int>(1, max_mv)(rng);
+  std::shuffle(diff.begin(), diff.end(), rng);
+  std::normal_distribution<double> noise(0.0, 0.04);
+  for (int t = 0; t < mv && t < (int)diff.size(); ++t) {
+    int i = diff[t];
+    w[i] = std::clamp(lw[i] + noise(rng), 0.02, 0.98);
+  }
+}
+
+// HD-style move on R (inventory pre-positioning ratio) toward leader.
+// Allows each wolf to explore different pre-positioning levels, which is
+// critical for finding low-cost solutions (MILP uses R≈0.5 which reduces
+// cost 3× vs always reconstruct_R). Discrete levels match the paper's
+// discrete mode choices.
+static void guided_r_move(vector<double> &r, const vector<int> &x,
+                           const vector<double> &lr,
+                           std::mt19937 &rng, double move_frac) {
+  static const double levels[] = {0.0, 0.25, 0.5, 0.75, 1.0};
+  vector<int> open;
+  for (int ki = 0; ki < (int)x.size(); ++ki)
+    if (x[ki]) open.push_back(ki);
+  if (open.empty()) return;
+  vector<int> diff;
+  for (int ki : open)
+    if (std::abs(r[ki] - lr[ki]) > 0.12)
+      diff.push_back(ki);
+  if (diff.empty()) return;
+  int max_mv = std::max(1, (int)std::round(move_frac * (int)diff.size()));
+  int mv = std::uniform_int_distribution<int>(1, max_mv)(rng);
+  std::shuffle(diff.begin(), diff.end(), rng);
+  for (int t = 0; t < mv && t < (int)diff.size(); ++t) {
+    int ki = diff[t];
+    // Snap to nearest discrete level toward leader's R
+    double target = lr[ki];
+    int best_l = 0;
+    double best_d = std::abs(levels[0] - target);
+    for (int l = 1; l < 5; ++l) {
+      if (std::abs(levels[l] - target) < best_d) { best_d = std::abs(levels[l] - target); best_l = l; }
+    }
+    r[ki] = levels[best_l];
+  }
+}
+
+// Normalized weighted fitness (paper Eq. 27).
+// Z2 (deprivation/time) gets weight 0.6 — matches paper's time priority;
+// Z1 (cost) gets weight 0.4.
+static double normalized_fitness(double z1, double z2,
+                                  double z1_min, double z1_range,
+                                  double z2_min, double z2_range) {
+  double n1 = (z1_range > EPS) ? (z1 - z1_min) / z1_range : 0.0;
+  double n2 = (z2_range > EPS) ? (z2 - z2_min) / z2_range : 0.0;
+  return 0.4 * n1 + 0.6 * n2;
+}
+
 static vector<int> rank1_indices(const vector<Wolf> &pop) {
   vector<int> out;
   for (int i = 0; i < (int)pop.size(); ++i) {
@@ -497,7 +602,9 @@ int main(int argc, char *argv[]) {
   vector<Wolf> pop;
   pop.reserve(wolves_n);
   for (int i = 0; i < wolves_n; ++i) {
-    Wolf w = evaluate(random_structure(inst, rng, exp_dem), inst, exp_dem);
+    // Use discrete R levels from random_structure (recompute_r=false preserves them).
+    Individual rs = random_structure(inst, rng, exp_dem);
+    Wolf w = evaluate(rs, inst, exp_dem, false);
     pop.push_back(w);
     archive.add(w);
     ++eval_count;
@@ -534,44 +641,112 @@ int main(int argc, char *argv[]) {
     const Wolf &beta = pop[beta_idx];
     const Wolf &delta = pop[delta_idx];
 
+    // Compute per-iteration Z range for normalized fitness (paper Eq. 27)
+    double z1_min = 1e18, z1_max = -1e18, z2_min = 1e18, z2_max = -1e18;
+    for (const auto &wf : pop) {
+      if (wf.CV > EPS) continue;
+      z1_min = std::min(z1_min, wf.Z1); z1_max = std::max(z1_max, wf.Z1);
+      z2_min = std::min(z2_min, wf.Z2); z2_max = std::max(z2_max, wf.Z2);
+    }
+    double z1_range = std::max(1.0, z1_max - z1_min);
+    double z2_range = std::max(1.0, z2_max - z2_min);
+
     for (int wi = 0; wi < (int)pop.size(); ++wi) {
       if (wi == alpha_idx || wi == beta_idx || wi == delta_idx)
         continue;
 
       const Wolf &cur = pop[wi];
-      vector<Wolf> cand(3);
       const Wolf *leaders[3] = {&alpha, &beta, &delta};
 
       double progress = (double)iter / std::max(1, max_iter - 1);
       double fracA = std::max(fracA_end, fracA_start - (fracA_start - fracA_end) * progress);
       double fracX = std::max(fracX_end, fracX_start - (fracX_start - fracX_end) * progress);
 
+      vector<Wolf> cand(4);   // 4 candidates: 3 leader-guided + 1 R-exploration
+
       for (int ci = 0; ci < 3; ++ci) {
         Individual ind = cur.ind;
+        // Paper §4.2.3: HD move on mode (→ W) + assignment (→ A) + hub (→ X)
         guided_hd_move(ind.A, leaders[ci]->ind.A, rng, fracA);
         guided_hd_move(ind.X, leaders[ci]->ind.X, rng, fracX);
-
-        if (std::uniform_real_distribution<double>(0.0, 1.0)(rng) < ps_op_prob)
-          drnd_capacity_reassign(ind, inst, exp_dem, rng);
+        guided_w_move(ind.W, leaders[ci]->ind.W, rng, fracA);
 
         if (std::accumulate(ind.X.begin(), ind.X.end(), 0) == 0)
           ind.X[std::uniform_int_distribution<int>(0, inst.num_H - 1)(rng)] = 1;
 
-        cand[ci] = evaluate(std::move(ind), inst, exp_dem);
+        if (std::uniform_real_distribution<double>(0.0, 1.0)(rng) < ps_op_prob)
+          drnd_capacity_reassign(ind, inst, exp_dem, rng);
+
+        // Keep the wolf's existing discrete R value 30% of the time,
+        // allowing explicit pre-positioning levels to persist through X/A moves.
+        bool keep_r = std::uniform_real_distribution<double>(0.0, 1.0)(rng) < 0.30;
+        if (keep_r) {
+          repair_assignment(ind, inst);
+          // Zero out R for any newly-closed hubs
+          for (int ki = 0; ki < inst.num_H; ++ki)
+            if (!ind.X[ki]) ind.R[ki] = 0.0;
+          cand[ci] = evaluate(std::move(ind), inst, exp_dem, false);
+        } else {
+          cand[ci] = evaluate(std::move(ind), inst, exp_dem);
+        }
         archive.add(cand[ci]);
         ++eval_count;
       }
 
-      Wolf best = cand[0];
-      if (constrained_better(cand[1], best))
-        best = cand[1];
-      if (constrained_better(cand[2], best))
-        best = cand[2];
+      // 4th candidate: random discrete R perturbation (paper spirit:
+      // explore transportation resource allocation — maps to inventory levels).
+      // We do NOT use guided_r_move toward leaders here because all leaders'
+      // R values are also compute via reconstruct_R (load/capacity anchoring),
+      // which makes guided_r_move a no-op for pre-positioning exploration.
+      // Instead, we directly assign a random discrete level to one or more hubs.
+      {
+        static const double r_lv[] = {0.0, 0.1, 0.25, 0.4, 0.5, 0.6, 0.75, 0.9, 1.0};
+        static const int n_lv = 9;
+        Individual ind = cur.ind;
+        auto cur_open = open_hubs(ind.X);
+        if (cur_open.empty()) cur_open.push_back(0);
+        // Move toward best leader's hub config and assignment
+        int bl = 0;
+        double bfit = 1e18;
+        for (int ci = 0; ci < 3; ++ci) {
+          if (cand[ci].CV > EPS) continue;
+          double f = normalized_fitness(cand[ci].Z1, cand[ci].Z2, z1_min, z1_range, z2_min, z2_range);
+          if (f < bfit) { bfit = f; bl = ci; }
+        }
+        guided_hd_move(ind.X, leaders[bl]->ind.X, rng, fracX * 0.5);
+        guided_hd_move(ind.A, leaders[bl]->ind.A, rng, fracA * 0.5);
+        if (std::accumulate(ind.X.begin(), ind.X.end(), 0) == 0)
+          ind.X[std::uniform_int_distribution<int>(0, inst.num_H - 1)(rng)] = 1;
+        repair_assignment(ind, inst);
+        // Assign a uniformly random discrete R level to each open hub
+        // (not tied to any leader's reconstruct_R value)
+        auto new_open = open_hubs(ind.X);
+        int base_level = std::uniform_int_distribution<int>(0, n_lv - 1)(rng);
+        for (int ki : new_open) {
+          int li = std::clamp(base_level + std::uniform_int_distribution<int>(-1, 1)(rng), 0, n_lv - 1);
+          ind.R[ki] = r_lv[li];
+        }
+        for (int ki = 0; ki < inst.num_H; ++ki)
+          if (!ind.X[ki]) ind.R[ki] = 0.0;
+        cand[3] = evaluate(std::move(ind), inst, exp_dem, false);  // keep explicit R
+        archive.add(cand[3]);
+        ++eval_count;
+      }
 
-      if (constrained_better(best, cur)) {
-        pop[wi] = best;
+      // Select best candidate using normalized fitness (paper Eq. 27)
+      Wolf best_cand = cand[0];
+      double best_fit_val = (cand[0].CV <= EPS) ?
+        normalized_fitness(cand[0].Z1, cand[0].Z2, z1_min, z1_range, z2_min, z2_range) : 1e18 + cand[0].CV;
+      for (int ci = 1; ci < 4; ++ci) {
+        double f = (cand[ci].CV <= EPS) ?
+          normalized_fitness(cand[ci].Z1, cand[ci].Z2, z1_min, z1_range, z2_min, z2_range) : 1e18 + cand[ci].CV;
+        if (f < best_fit_val) { best_fit_val = f; best_cand = cand[ci]; }
+      }
+
+      if (constrained_better(best_cand, cur)) {
+        pop[wi] = best_cand;
       } else if (std::uniform_real_distribution<double>(0.0, 1.0)(rng) < accept_worse_prob) {
-        pop[wi] = best;
+        pop[wi] = best_cand;
       }
     }
 
@@ -593,7 +768,10 @@ int main(int argc, char *argv[]) {
       int keep = std::max(3, (int)std::round(pop.size() * keep_ratio));
       for (int t = keep; t < (int)idx.size(); ++t) {
         int i = idx[t];
-        Wolf w = evaluate(random_structure(inst, rng, exp_dem), inst, exp_dem);
+        // random_structure now uses discrete R levels (not reconstruct_R),
+        // so pass recompute_r=false to preserve them.
+        Individual rs = random_structure(inst, rng, exp_dem);
+        Wolf w = evaluate(rs, inst, exp_dem, false);
         pop[i] = w;
         archive.add(w);
         ++eval_count;
@@ -615,9 +793,9 @@ int main(int argc, char *argv[]) {
   double cpu_s = 1.0 * (std::clock() - c0) / CLOCKS_PER_SEC;
 
   json j;
-  j["meta"]["solver"] = "GWO-HD-Baseline-v2";
+  j["meta"]["solver"] = "GWO-HD-Baseline-v4";
   j["meta"]["reference"] =
-      "Li et al. (2023) Applied Soft Computing 133:109925 (customized GWO + HD move)";
+      "Li et al. (2023) Applied Soft Computing 133:109925 — W-vector HD move (mode matrix analog), R-level HD move, demand-weighted assignment, normalized fitness per Li et al. (2023)";
   j["meta"]["elapsed_s"] = elapsed;
   j["meta"]["cpu_time_s"] = cpu_s;
   j["meta"]["seed"] = seed;
@@ -663,7 +841,7 @@ int main(int argc, char *argv[]) {
     cerr << "[Output] " << out_path << "\n";
   }
 
-  cerr << "[GWO-HD-v2] Pareto size=" << front.size() << ", evals=" << eval_count
+  cerr << "[GWO-HD-v3] Pareto size=" << front.size() << ", evals=" << eval_count
        << ", elapsed=" << elapsed << " s\n";
   return 0;
 }
