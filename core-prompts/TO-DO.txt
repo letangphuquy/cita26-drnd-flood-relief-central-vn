@@ -1,6 +1,19 @@
 ======================
 IMPROVE EXPERIMENTAL METHODOLOGY
 
+- [ ] Look at the figure: "results/exp2/maps/CV_large_solution_map.pdf"
+
+Representative solution should pick the "balanced" solution from Pareto front.
+
+And you should do quality audit, then if needed RCA and fixes for the following: 
+-  It seems like the model and the solver is omitting lateral hub trans-shipment. Or is it due to display error?
+- The inventory filling variables is overfitted to a single configuration. 
+- The hub configuration between scenario even looked the same
+
+They should exihibt structural difference, and only then we can have a meaningful interpretation
+
+
+
 - [x] Improve the dataset by combinatorial generation technique. It should have 50 scenarios. Then rewrite the experimental methodology prose text in the paper.
 
 - EXTEND EXPERIMENTS 2 BY:

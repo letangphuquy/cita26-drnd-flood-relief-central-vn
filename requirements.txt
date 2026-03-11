@@ -6,3 +6,5 @@ scipy
 cartopy
 geopandas
 pyproj
+contextily
+pymoo
