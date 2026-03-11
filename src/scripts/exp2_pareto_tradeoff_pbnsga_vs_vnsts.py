@@ -15,8 +15,11 @@ import argparse
 import csv
 import glob
 import json
+import math
 import os
 import re
+
+import numpy as np
 
 try:
     import matplotlib
@@ -71,6 +74,82 @@ def _must_load(path, label):
     return load_feasible_points(path)
 
 
+def _apply_power_scale(ax, pb_pts, all_pts, target_frac=0.25, n_ticks=7):
+    """
+    Apply a shifted power transform on both axes so that pb_pts spans
+    exactly target_frac of each axis, regardless of the actual data range.
+
+    The exponent p is solved per axis from:
+        ((pb_max - data_min) / (data_max - data_min)) ^ p  = target_frac
+    => p = log(target_frac) / log((pb_max - data_min) / (data_max - data_min))
+
+    Ticks are placed at n_ticks positions evenly spaced in the transformed
+    coordinate, then labelled with their original values.
+    """
+    z1 = [p[0] for p in all_pts]
+    z2 = [p[1] for p in all_pts]
+    x_min, x_max = min(z1), max(z1)
+    y_min, y_max = min(z2), max(z2)
+    pb_x_max = max(p[0] for p in pb_pts)
+    pb_y_max = max(p[1] for p in pb_pts)
+
+    def _exponent(mn, pb_mx, mx, frac):
+        r = (pb_mx - mn) / (mx - mn)
+        if r <= 0 or r >= 1:
+            return 1.0
+        return math.log(frac) / math.log(r)
+
+    px = _exponent(x_min, pb_x_max, x_max, target_frac)
+    py = _exponent(y_min, pb_y_max, y_max, target_frac)
+
+    def _fwd(mn, p):
+        def f(v):
+            v = np.asarray(v, dtype=float)
+            with np.errstate(invalid="ignore"):
+                return np.where(v >= mn, (v - mn) ** p, -((mn - v) ** p))
+        return f
+
+    def _inv(mn, p):
+        def f(t):
+            t = np.asarray(t, dtype=float)
+            with np.errstate(invalid="ignore"):
+                return np.where(t >= 0, mn + t ** (1 / p), mn - ((-t) ** (1 / p)))
+        return f
+
+    ax.set_xscale("function", functions=(_fwd(x_min, px), _inv(x_min, px)))
+    ax.set_yscale("function", functions=(_fwd(y_min, py), _inv(y_min, py)))
+
+    def _ceil_nice(v):
+        """Ceiling to 2 significant figures (1 decimal of leading digit)."""
+        if v == 0:
+            return 0.0
+        mag = 10 ** math.floor(math.log10(abs(v)))  # leading power of 10
+        step = mag / 10                              # 1/10th → 2 sig figs
+        return math.ceil(v / step) * step
+
+    # Ticks evenly spaced in transformed space → rounded original-value labels
+    t_x = np.linspace(0.0, (x_max - x_min) ** px, n_ticks)
+    t_y = np.linspace(0.0, (y_max - y_min) ** py, n_ticks)
+    x_ticks = np.array([_ceil_nice(x_min + float(t) ** (1 / px)) if t > 0 else x_min
+                        for t in t_x])
+    y_ticks = np.array([_ceil_nice(y_min + float(t) ** (1 / py)) if t > 0 else y_min
+                        for t in t_y])
+    ax.set_xticks(x_ticks)
+    ax.set_yticks(y_ticks)
+    def _fmt_x(v, _):
+        m = v / 1e6
+        return f"{m:.0f}M" if m == int(m) else f"{m:.1f}M"
+    ax.xaxis.set_major_formatter(plt.FuncFormatter(_fmt_x))
+    ax.yaxis.set_major_formatter(
+        plt.FuncFormatter(lambda v, _: f"{v/1e3:.0f}K")
+    )
+    # Tight limits with a small visual margin
+    x_margin = (x_max - x_min) * 0.03
+    y_margin = (y_max - y_min) * 0.03
+    ax.set_xlim(x_min - x_margin, x_max + x_margin)
+    ax.set_ylim(y_min - y_margin, y_max + y_margin)
+
+
 def plot_tradeoff_two_panel(small_panel, large_panel, out_pdf):
     if not HAS_MPL:
         print("[Warning] matplotlib not available, skipping plot generation.")
@@ -94,7 +173,7 @@ def plot_tradeoff_two_panel(small_panel, large_panel, out_pdf):
     ax_l.grid(True, alpha=0.25)
     ax_l.legend(fontsize=8)
 
-    # Right panel: CV-large (existing plot)
+    # Right panel: CV-large with auto power-scale
     pb_l = sorted(large_panel["pb"], key=lambda p: p[0])
     vns_l = sorted(large_panel["vns"], key=lambda p: p[0])
     nd_l = sorted(large_panel["combined_nd"], key=lambda p: p[0])
@@ -106,9 +185,10 @@ def plot_tradeoff_two_panel(small_panel, large_panel, out_pdf):
         ax_r.scatter([p[0] for p in nd_l], [p[1] for p in nd_l],
                      s=32, facecolors="none", edgecolors="black", linewidths=1.0,
                      label="Combined ND")
+    _apply_power_scale(ax_r, pb_pts=pb_l, all_pts=pb_l + vns_l, target_frac=0.25, n_ticks=7)
     ax_r.set_title("(b) CV-Large: PB-NSGA vs VNS-TS")
-    ax_r.set_xlabel("Z1 - Expected Logistics Cost")
-    ax_r.set_ylabel("Z2 - Expected Maximum Deprivation")
+    ax_r.set_xlabel(r"$Z_1$ - Expected Logistics Cost (power scale)")
+    ax_r.set_ylabel(r"$Z_2$ - Max. Deprivation (power scale)")
     ax_r.grid(True, alpha=0.25)
     ax_r.legend(fontsize=8)
 

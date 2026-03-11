@@ -1,7 +1,7 @@
 ======================
 IMPROVE EXPERIMENTAL METHODOLOGY
 
-- [ ] Look at the figure: "results/exp2/maps/CV_large_solution_map.pdf"
+- [~] Look at the figure: "results/exp2/maps/CV_large_solution_map.pdf"
 
 Representative solution should pick the "balanced" solution from Pareto front.
 
@@ -10,7 +10,7 @@ And you should do quality audit, then if needed RCA and fixes for the following:
 - The inventory filling variables is overfitted to a single configuration. 
 - The hub configuration between scenario even looked the same
 
-They should exihibt structural difference, and only then we can have a meaningful interpretation
+They should exhibit structural difference, and only then we can have a meaningful interpretation
 
 
 
