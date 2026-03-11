@@ -4,8 +4,8 @@
 # Run from project root: ./compile.sh
 
 # Algorithm version: V2
-#   - W vector: 6 weights (was 3)
-#   - Tiered hub selection with rotation-offset A segment
+#   - W vector: 6 weights (was 3); W[5] = Pass-1 window depth
+#   - Tiered hub selection with anchor-based hub ordering (A~anchor hub)
 #   - Normalised + stochastic demand priority scores
 #   - Hamming diversity tiebreaker in elitist selection
 

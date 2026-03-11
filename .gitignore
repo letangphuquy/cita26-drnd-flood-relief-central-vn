@@ -611,4 +611,5 @@ vcpkg_installed/
 
 # test output & cache
 Testing/
-.cache/
+.cache/data/prep/cv_large_oos200.json
+data/prep/cv_large_oos200.json

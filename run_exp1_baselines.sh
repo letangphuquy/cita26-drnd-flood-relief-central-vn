@@ -4,6 +4,7 @@
 
 # Optional flags:
 #   --skip-unchanged   Skip compile/run steps whose outputs are newer than inputs
+#   --analyze-only     Skip solver runs; only perform analysis on existing results/
 # Experiment 1: Baseline Comparison on Central Vietnam (CV-Small)
 # ------------------------------------------------------------
 # Benchmarks PB-NSGA against:
@@ -19,19 +20,36 @@ RES1="$PROJECT/results/exp1"
 SOLVER_DIR="$PROJECT/src/solver"
 
 SKIP_UNCHANGED=0
+ANALYZE_ONLY=0
 for arg in "$@"; do
     case "$arg" in
         --skip-unchanged)
             SKIP_UNCHANGED=1
             ;;
+        --analyze-only)
+            ANALYZE_ONLY=1
+            ;;
         --help|-h)
-            echo "Usage: ./run_exp1_baselines.sh [--skip-unchanged]"
+            echo "Usage: ./run_exp1_baselines.sh [--skip-unchanged] [--analyze-only]"
+            echo ""
+            echo "Flags:"
+            echo "  --skip-unchanged  Skip compile/run steps whose outputs are newer than inputs"
+            echo "  --analyze-only    Skip solver runs; only perform analysis on existing results/"
             exit 0
             ;;
         *)
             ;;
     esac
 done
+
+if [ "$ANALYZE_ONLY" -eq 1 ]; then
+    echo ""
+    echo "[Exp1] Running analysis only on existing results..."
+    if [ ! -d "$RES1" ]; then
+        echo "[Error] results/exp1/ not found. Run full experiment first."
+        exit 1
+    fi
+fi
 
 should_run_step() {
     local out="$1"
@@ -68,6 +86,9 @@ if [ ! -f "$PYTHON" ]; then
 fi
 
 mkdir -p "$RES1"
+
+# ── Skip all solver/compile steps if --analyze-only ──────────────────────
+if [ "$ANALYZE_ONLY" -eq 0 ]; then
 
 # ── Step 1: Recompile greedy_baseline ──────────────────────────────────────
 echo ""
@@ -238,6 +259,8 @@ if should_run_step "$RES1/cv_small_pb_nsga.json" \
 else
     echo "[Skip] PB-NSGA run unchanged."
 fi
+
+fi  # End of: if [ "$ANALYZE_ONLY" -eq 0 ]; then
 
 # ── Step 5: Final Comparison Table ────────────────────────────────────────
 echo ""

@@ -8,6 +8,10 @@ This guide documents the procedures to reproduce the experimental results for th
 - **Dependencies**: `pip install -r requirements.txt` (requires `pymoo`, `ortools`, `numpy`, `matplotlib`, `contextily`).
 - **OS**: Scripts are provided for both Windows (`.bat`) and Mac/Linux (`.sh`).
 
+## 1.1 Data Assumptions
+
+**Transport Network Symmetry**: All datasets (`cv_small_drnd.json`, `cv_large_drnd.json`, SAA/OOS variants) guarantee that transport cost/time matrices (`transport.cost`, `transport.time`) and accessibility matrices (`scenarios[s].accessibility`) are **symmetric** — i.e., the two-way routing cost/time between any pair of nodes (i, j) is identical, and disruption routing is bidirectional. This symmetric property is essential for model and solver correctness and is validated during dataset generation.
+
 ## 2. Compilation
 
 Compile the core `C++17` solvers using the provided universal scripts:
@@ -64,6 +68,7 @@ To run the entire pipeline (Datasets → Exp 1 → Exp 2):
 | **All (Datasets + Exp1 + Exp2)** | `./run_experiments.sh` | `.\run_experiments.bat` |
 | **Experiment 1 (Baselines)** | `./run_exp1_baselines.sh` | `.\run_exp1_baselines.bat` |
 | **Experiment 2 (Case Study)** | `./run_exp2_case_study.sh` | `.\run_exp2_case_study.bat` |
+| **Analysis Only** (re-run analysis on existing `results/`) | `./run_experiments.sh analyze` | `.\run_experiments.bat analyze` |
 | **Regenerate Datasets Only** | `./run_experiments.sh data` | `.\run_experiments.bat data` |
 
 ### Dataset Regeneration (Detailed)
