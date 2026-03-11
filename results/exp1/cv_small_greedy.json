@@ -1,6 +1,6 @@
 {
   "meta": {
-    "elapsed_s": 6.1167e-05,
+    "elapsed_s": 7.4791e-05,
     "solver": "GreedyBaseline_ManagerStyle",
     "strategy": "rule_based_constructive"
   },

@@ -1123,8 +1123,8 @@
   ],
   "meta": {
     "accept_worse_prob": 0.03,
-    "cpu_time_s": 4.546368,
-    "elapsed_s": 4.549461042,
+    "cpu_time_s": 4.598738,
+    "elapsed_s": 4.605194542,
     "evaluations": 61950,
     "fracA_end": 0.06,
     "fracA_start": 0.45,

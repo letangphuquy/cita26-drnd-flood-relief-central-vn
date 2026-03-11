@@ -31682,8 +31682,8 @@
     }
   ],
   "meta": {
-    "cpu_time_s": 8.782873,
-    "elapsed_s": 8.81647075,
+    "cpu_time_s": 8.574222,
+    "elapsed_s": 8.582801333,
     "legacy_seeding": false,
     "num_gen": 500,
     "pc": 0.98,

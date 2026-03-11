@@ -1763,8 +1763,8 @@
   ],
   "meta": {
     "accept_worse_prob": 0.03,
-    "cpu_time_s": 4.721076,
-    "elapsed_s": 4.724820708,
+    "cpu_time_s": 4.749376,
+    "elapsed_s": 4.755879791,
     "evaluations": 61062,
     "fracA_end": 0.06,
     "fracA_start": 0.45,
