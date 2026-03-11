@@ -52,6 +52,10 @@ except ImportError:
         y = math.log(math.tan((90 + lat) * math.pi / 360.0)) * 20037508.34 / math.pi
         return x, y
 
+# Basemap only needs Web-Mercator coordinates. We can provide those either via
+# pyproj (accurate) or via the analytical fallback above.
+HAS_MERCATOR = True
+
 # Visual Constants
 COL_DEMAND = "#4C72B0"    # Muted Blue
 COL_HUB_OPEN = "#DD8452"  # Safety Orange
@@ -72,15 +76,63 @@ def load_json(p):
     with open(p, "r", encoding="utf-8") as f:
         return json.load(f)
 
-def pick_balanced(pareto):
-    """Pick the min-Z1 solution from the rank-1 Pareto front.
-    The minimum-cost solution opens the most hubs geographically, producing
-    realistic reactive hub activations and lateral transshipment in severe/
-    extreme scenarios — the most informative configuration to display."""
-    if not pareto: return None
+def pick_balanced(pareto, inst=None):
+    """Pick a balanced (knee-like) solution from the rank-1 Pareto front.
+
+    We minimize Euclidean distance to the ideal point in normalized
+    objective space: min_s ||(z1_hat, z2_hat)||_2 where both objectives are
+    min-max normalized over the rank-1 front.
+    """
+    if not pareto:
+        return None
+
     rank1 = [s for s in pareto if s.get("rank", 1) == 1]
-    if not rank1: rank1 = pareto
-    return min(rank1, key=lambda s: s["Z1"])
+    if not rank1:
+        rank1 = pareto
+
+    z1_vals = [s["Z1"] for s in rank1]
+    z2_vals = [s["Z2"] for s in rank1]
+    z1_min, z1_max = min(z1_vals), max(z1_vals)
+    z2_min, z2_max = min(z2_vals), max(z2_vals)
+
+    def _norm(v, lo, hi):
+        if hi <= lo:
+            return 0.5
+        return (v - lo) / (hi - lo)
+
+    def _knee_score(s):
+        n1 = _norm(s["Z1"], z1_min, z1_max)
+        n2 = _norm(s["Z2"], z2_min, z2_max)
+        dist2 = n1 * n1 + n2 * n2
+        # Tie-break toward point that is more centered between objectives.
+        balance = abs(n1 - n2)
+        return (dist2, balance, s["Z1"])
+
+    if inst is None:
+        return min(rank1, key=_knee_score)
+
+    # Prefer structurally informative balanced points for scenario map panels.
+    # Primary: scenario-variation in active planned hubs / reactive hubs /
+    # transshipment links. Secondary: knee distance in objective space.
+    best = None
+    for s in rank1:
+        scen_active = []
+        scen_reactive = []
+        scen_trans = []
+        for si in range(inst["dimensions"]["num_S"]):
+            dec = decode_exact(s, inst, si)
+            scen_active.append(sum(1 for v in dec["active_planned"] if v))
+            scen_reactive.append(len(dec["reactive_hubs"]))
+            scen_trans.append(len(dec["transshipments"]))
+
+        structural_score = (
+            len(set(scen_active)) + len(set(scen_reactive)) + len(set(scen_trans))
+        )
+        rec = (-structural_score, *_knee_score(s))
+        if best is None or rec < best[0]:
+            best = (rec, s)
+
+    return best[1]
 
 def decode_exact(sol, inst, si):
     dims = inst["dimensions"]
@@ -350,6 +402,7 @@ def decode_exact(sol, inst, si):
         "assignments": assignments,
         "transshipments": transshipments,
         "reactive_hubs": reactive_hubs,
+        "active_planned": active,
         "hub_load": hub_load,
         "inventory": inventory,
         "y": y
@@ -372,6 +425,7 @@ def draw_scenario(ax, inst, sol, si, use_mercator=True):
     assignments = dec["assignments"]
     transshipments = dec["transshipments"]
     reactive_hubs = dec["reactive_hubs"]
+    active_planned = dec["active_planned"]
     hub_load = dec["hub_load"]
     inventory = dec["inventory"]
     y_open = dec["y"]
@@ -409,12 +463,23 @@ def draw_scenario(ax, inst, sol, si, use_mercator=True):
         h = hub_idx[ki]
         p = xy(h)
         is_planned = sol["X"][ki] == 1
+        is_planned_active = bool(active_planned[ki])
         is_reactive = ki in reactive_hubs
-        is_open = is_planned or is_reactive
+        is_open = is_planned_active or is_reactive
         safe = risks[h] <= chi
         
         if not is_open:
-            ax.scatter(p[0], p[1], s=40, c=COL_HUB_CLOSED, marker="^", edgecolors="black", lw=0.6, zorder=6)
+            if is_planned and not is_planned_active:
+                # Planned hub disabled by scenario risk threshold.
+                ax.scatter(
+                    p[0], p[1], s=85, c=COL_HUB_RISKY, marker="X",
+                    edgecolors="black", lw=0.6, alpha=0.85, zorder=6
+                )
+            else:
+                ax.scatter(
+                    p[0], p[1], s=40, c=COL_HUB_CLOSED, marker="^",
+                    edgecolors="black", lw=0.6, zorder=6
+                )
             continue
             
         color = COL_HUB_OPEN if safe else COL_HUB_RISKY
@@ -441,6 +506,18 @@ def draw_scenario(ax, inst, sol, si, use_mercator=True):
                     fontsize=7, fontweight="bold", ha="center", va="bottom",
                     path_effects=[matplotlib.patheffects.withStroke(linewidth=2, foreground='white')], zorder=8)
 
+    # Compact scenario diagnostics to make structural differences explicit.
+    ax.text(
+        0.02, 0.02,
+        f"Reactive hubs: {len(reactive_hubs)}\nLateral links: {len(transshipments)}",
+        transform=ax.transAxes,
+        fontsize=8,
+        ha="left",
+        va="bottom",
+        bbox=dict(boxstyle="round,pad=0.25", fc="white", ec="#BBBBBB", alpha=0.9),
+        zorder=20,
+    )
+
     # 4. Origins
     for jj, j in enumerate(ori_idx):
         p = xy(j)
@@ -461,7 +538,7 @@ def main():
     
     pareto = res.get("pareto_front", [])
     if not pareto: pareto = res.get("all_feasible", [])
-    sol = pick_balanced(pareto)
+    sol = pick_balanced(pareto, inst)
     
     if not sol:
         print("Error: Could not find valid solution.")
@@ -471,19 +548,33 @@ def main():
     fig, axes = plt.subplots(1, num_S, figsize=(6.5*num_S, 8))
     if num_S == 1: axes = [axes]
     
-    use_mercator = HAS_PYPROJ
+    use_mercator = HAS_MERCATOR
     for si in range(num_S):
         ax = axes[si]
         draw_scenario(ax, inst, sol, si, use_mercator=use_mercator)
         if HAS_CONTEXTILY and use_mercator:
             try:
-                ctx.add_basemap(ax, source=ctx.providers.CartoDB.Positron, zoom=9, alpha=0.6)
-            except: pass
+                ctx.add_basemap(
+                    ax,
+                    source=ctx.providers.CartoDB.Positron,
+                    zoom=9,
+                    alpha=0.65,
+                    attribution=False,
+                    reset_extent=False,
+                )
+            except Exception as e:
+                print(f"[Warning] Basemap tile load failed for panel {si}: {e}")
+
+    if not HAS_CONTEXTILY:
+        print("[Warning] contextily is not installed; generating map without Vietnam basemap.")
+    elif not HAS_PYPROJ:
+        print("[Info] pyproj not installed; using fallback Web-Mercator conversion for basemap.")
 
     # Elegant Legend
     legend_elements = [
         Line2D([0], [0], color=COL_HUB_OPEN, marker="s", ls="", label="Planned Hub (Safe)", markersize=8),
         Line2D([0], [0], color=COL_HUB_RISKY, marker="s", ls="", label="Planned Hub (Risky)", markersize=8),
+        Line2D([0], [0], color=COL_HUB_RISKY, marker="X", ls="", label="Planned Hub (Closed by Risk)", markersize=8),
         Line2D([0], [0], color=COL_HUB_REACT, marker="H", ls="", label="Reactive Hub", markersize=8),
         Line2D([0], [0], color="black", marker="s", ls="", markerfacecolor="gray", fillstyle="bottom", label="Inv. Fill %", markersize=8),
         Line2D([0], [0], color=COL_ORIGIN, marker="D", ls="", label="Supply Origin", markersize=8),
