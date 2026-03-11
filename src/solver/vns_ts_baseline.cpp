@@ -271,6 +271,30 @@ static bool dominates_2d(double a1, double a2, double b1, double b2) {
   return (a1 <= b1 && a2 <= b2 && (a1 < b1 || a2 < b2));
 }
 
+static vector<double> sample_w_profile(int mode, std::mt19937 &rng) {
+  // mode 0: cost-leaning, mode 1: deprivation-leaning, mode 2: balanced.
+  std::uniform_real_distribution<double> u01(0.0, 1.0);
+  std::normal_distribution<double> n01(0.0, 1.0);
+
+  vector<double> w(6, 0.5);
+  if (mode == 0) {
+    w = {0.45, 0.75, 0.70, 0.30, 0.80, 0.80};
+  } else if (mode == 1) {
+    w = {0.85, 0.35, 0.40, 0.85, 0.20, 0.35};
+  } else {
+    w = {0.62, 0.55, 0.52, 0.62, 0.55, 0.55};
+  }
+
+  for (double &x : w)
+    x = std::clamp(x + 0.08 * n01(rng), 0.02, 0.98);
+
+  if (u01(rng) < 0.15) {
+    int idx = std::uniform_int_distribution<int>(0, 5)(rng);
+    w[idx] = std::clamp(w[idx] + (u01(rng) < 0.5 ? -0.25 : 0.25), 0.02, 0.98);
+  }
+  return w;
+}
+
 static double elite_distance(const EliteEntry &a, const EliteEntry &b) {
   return std::abs(a.Z1 - b.Z1) + 10.0 * std::abs(a.Z2 - b.Z2);
 }
@@ -417,7 +441,7 @@ static Individual initial_solution(const DRNDInstance &inst, std::mt19937 &rng,
   assign_nearest_open_hub(ind, inst);
   repair_capacity(ind, inst, exp_dem, rng, 30);
 
-  ind.W = {0.6, 0.5, 0.5, 0.6, 0.6, 0.5};
+  ind.W = sample_w_profile(2, rng);
   return ind;
 }
 
@@ -437,7 +461,7 @@ static vector<Candidate> build_seed_candidates(const DRNDInstance &inst,
         c.ind.X[ki] = ((mask >> ki) & 1);
       assign_nearest_open_hub(c.ind, inst);
       repair_capacity(c.ind, inst, exp_dem, rng, 40);
-      c.ind.W = {0.6, 0.5, 0.5, 0.6, 0.6, 0.5};
+      c.ind.W = sample_w_profile(2, rng);
       evaluate_candidate(c, inst, &archive);
       ++eval_count;
       if (c.CV <= EPS)
@@ -499,6 +523,7 @@ static bool op_swap_hub(const Candidate &base, Candidate &out,
 static bool op_move_node(const Candidate &base, Candidate &out,
                          const DRNDInstance &inst,
                          const vector<double> &exp_dem,
+                         int mode,
                          std::mt19937 &rng) {
   auto open = opened_hubs(base.ind.X);
   if ((int)open.size() <= 1)
@@ -513,13 +538,30 @@ static bool op_move_node(const Candidate &base, Candidate &out,
   int best_to = from_ki;
   double best_score = std::numeric_limits<double>::infinity();
 
+  vector<double> load(inst.num_H, 0.0);
+  for (int ii = 0; ii < inst.num_I; ++ii) {
+    int ki = out.ind.A[ii];
+    if (ki >= 0 && ki < inst.num_H && out.ind.X[ki])
+      load[ki] += inst.gamma * exp_dem[ii];
+  }
+
   for (int ki : open) {
     if (ki == from_ki)
       continue;
     int h = inst.hub_idx[ki];
     double dx = inst.lat[d] - inst.lat[h];
     double dy = inst.lon[d] - inst.lon[h];
-    double score = dx * dx + dy * dy;
+    double dist2 = dx * dx + dy * dy;
+    double next_load = load[ki] + inst.gamma * exp_dem[picked_ii];
+    double cap_ratio = (inst.kappa[ki] > EPS) ? (next_load / inst.kappa[ki]) : 1e9;
+    double cap_penalty = std::max(0.0, cap_ratio - 1.0);
+    double urgency = inst.lambda[picked_ii][0] * exp_dem[picked_ii];
+    double score = dist2 + 1e5 * cap_penalty;
+    if (mode == 1)
+      score = 0.55 * dist2 + 0.45 * (1.0 / (urgency + 1e-6)) + 8e4 * cap_penalty;
+    else if (mode == 2)
+      score = 0.8 * dist2 + 0.2 * (1.0 / (urgency + 1e-6)) + 9e4 * cap_penalty;
+    score += std::uniform_real_distribution<double>(0.0, 1e-3)(rng);
     if (score < best_score) {
       best_score = score;
       best_to = ki;
@@ -531,6 +573,37 @@ static bool op_move_node(const Candidate &base, Candidate &out,
   out.ind.A[picked_ii] = best_to;
   repair_capacity(out.ind, inst, exp_dem, rng, 8);
   out.move_key = key_move(picked_ii, from_ki, best_to);
+  return true;
+}
+
+static bool op_perturb_rw(const Candidate &base, Candidate &out,
+                          const DRNDInstance &inst,
+                          const vector<double> &exp_dem,
+                          int mode,
+                          std::mt19937 &rng) {
+  out = base;
+  std::normal_distribution<double> n01(0.0, 1.0);
+  auto open = opened_hubs(out.ind.X);
+  if (open.empty())
+    return false;
+
+  int edits = std::max(1, (int)open.size() / 2);
+  for (int t = 0; t < edits; ++t) {
+    int ki = open[std::uniform_int_distribution<int>(0, (int)open.size() - 1)(rng)];
+    out.ind.R[ki] = std::clamp(out.ind.R[ki] + 0.12 * n01(rng), 0.0, 1.0);
+  }
+
+  reconstruct_R(out.ind, inst, exp_dem);
+  for (int t = 0; t < edits; ++t) {
+    int ki = open[std::uniform_int_distribution<int>(0, (int)open.size() - 1)(rng)];
+    out.ind.R[ki] = std::clamp(out.ind.R[ki] + 0.08 * n01(rng), 0.0, 1.0);
+  }
+
+  vector<double> w_target = sample_w_profile(mode, rng);
+  for (int i = 0; i < 6; ++i)
+    out.ind.W[i] = std::clamp(0.7 * out.ind.W[i] + 0.3 * w_target[i], 0.02, 0.98);
+
+  out.move_key = (3LL << 60) | std::uniform_int_distribution<int>(0, (1 << 20) - 1)(rng);
   return true;
 }
 
@@ -664,17 +737,19 @@ static Candidate ts_local_search(
     for (int t = 0; t < nhood_samples; ++t) {
       Candidate cand;
       bool ok = false;
-      int which = std::uniform_int_distribution<int>(1, enable_option3 ? 4 : 3)(rng);
+      int which = std::uniform_int_distribution<int>(1, enable_option3 ? 5 : 4)(rng);
       if (which == 1)
         ok = op_swap_hub(current, cand, inst, exp_dem, rng);
       else if (which == 2)
-        ok = op_move_node(current, cand, inst, exp_dem, rng);
+        ok = op_move_node(current, cand, inst, exp_dem, mode, rng);
       else if (which == 3)
         ok = op_path_relink_lite(current, cand, inst, exp_dem, elite_pool, mode,
                                  rng);
       else if (enable_option3)
         ok = op_mode_bank_relink(current, cand, inst, exp_dem, mode_bank, mode,
                                  rng);
+      else
+        ok = op_perturb_rw(current, cand, inst, exp_dem, mode, rng);
       if (!ok)
         continue;
 
@@ -776,10 +851,14 @@ int main(int argc, char *argv[]) {
       Candidate current;
       if (!seed_pool.empty()) {
         current = seed_pool[std::uniform_int_distribution<int>(0, (int)seed_pool.size() - 1)(rng)];
+        current.ind.W = sample_w_profile(mode, rng);
+        evaluate_candidate(current, inst, &archive);
+        ++eval_count;
       } else {
         int pmax = std::max(1, std::min(inst.num_H, inst.num_H / 2 + 1));
         int p = std::uniform_int_distribution<int>(1, pmax)(rng);
         current.ind = initial_solution(inst, rng, exp_dem, p);
+        current.ind.W = sample_w_profile(mode, rng);
         evaluate_candidate(current, inst, &archive);
         ++eval_count;
       }
@@ -803,10 +882,12 @@ int main(int argc, char *argv[]) {
           if (k == 1)
             ok = op_swap_hub(current, shaken, inst, exp_dem, rng);
           else if (k == 2)
-            ok = op_move_node(current, shaken, inst, exp_dem, rng);
-          else
+            ok = op_move_node(current, shaken, inst, exp_dem, mode, rng);
+          else if (k == 3)
             ok = op_path_relink_lite(current, shaken, inst, exp_dem, elite_pool,
                                      mode, rng);
+          else
+            ok = op_perturb_rw(current, shaken, inst, exp_dem, mode, rng);
 
           if (!ok) {
             ++k;
