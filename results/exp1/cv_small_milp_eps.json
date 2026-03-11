@@ -2,7 +2,7 @@
   "meta": {
     "solver": "MILP_EPSILON_Baseline",
     "instance": "/Users/quyle/cita26-drnd-flood-relief-central-vn/data/cv/cv_small_drnd.json",
-    "total_elapsed_s": 35.3640193939209,
+    "total_elapsed_s": 37.64435815811157,
     "epsilon_steps": 20
   },
   "pareto_front": [
