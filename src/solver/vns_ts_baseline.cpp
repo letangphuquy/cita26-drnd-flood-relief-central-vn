@@ -125,6 +125,31 @@ static void assign_nearest_open_hub(Individual &ind, const DRNDInstance &inst) {
   }
 }
 
+// Assign each demand to the open hub with minimum expected last-mile cost
+// (expected theta across scenarios). Paper §4.2: "assign to nearest hub" —
+// this adapts that to the actual transport cost structure of our problem.
+static void assign_min_cost_hub(Individual &ind, const DRNDInstance &inst) {
+  auto open_ki = opened_hubs(ind.X);
+  if (open_ki.empty()) {
+    std::fill(ind.A.begin(), ind.A.end(), 0);
+    return;
+  }
+  for (int ii = 0; ii < inst.num_I; ++ii) {
+    int best_ki = open_ki[0];
+    double best_cost = std::numeric_limits<double>::infinity();
+    for (int ki : open_ki) {
+      double avg_theta = 0.0;
+      for (int si = 0; si < inst.num_S; ++si)
+        avg_theta += inst.scenarios[si].prob * inst.theta[ki][ii][si];
+      if (avg_theta < best_cost) {
+        best_cost = avg_theta;
+        best_ki = ki;
+      }
+    }
+    ind.A[ii] = best_ki;
+  }
+}
+
 static void reconstruct_R(Individual &ind, const DRNDInstance &inst,
                           const vector<double> &exp_dem) {
   vector<double> load(inst.num_H, 0.0);
@@ -454,18 +479,28 @@ static vector<Candidate> build_seed_candidates(const DRNDInstance &inst,
 
   if (inst.num_H <= 12) {
     int total = 1 << inst.num_H;
+    // Paper §4.2: enumerate all hub configs; §4.3: use multiple assignment
+    // strategies and W profiles to build a diverse, high-quality seed pool.
     for (int mask = 1; mask < total; ++mask) {
-      Candidate c;
-      c.ind = Individual(inst.num_H, inst.num_I);
-      for (int ki = 0; ki < inst.num_H; ++ki)
-        c.ind.X[ki] = ((mask >> ki) & 1);
-      assign_nearest_open_hub(c.ind, inst);
-      repair_capacity(c.ind, inst, exp_dem, rng, 40);
-      c.ind.W = sample_w_profile(2, rng);
-      evaluate_candidate(c, inst, &archive);
-      ++eval_count;
-      if (c.CV <= EPS)
-        seeds.push_back(c);
+      // Two assignment strategies × 3 W-mode profiles per hub configuration.
+      for (int strat = 0; strat < 2; ++strat) {
+        for (int w_mode = 0; w_mode < 3; ++w_mode) {
+          Candidate c;
+          c.ind = Individual(inst.num_H, inst.num_I);
+          for (int ki = 0; ki < inst.num_H; ++ki)
+            c.ind.X[ki] = ((mask >> ki) & 1);
+          if (strat == 0)
+            assign_nearest_open_hub(c.ind, inst);   // distance-based (paper)
+          else
+            assign_min_cost_hub(c.ind, inst);        // cost-based (new)
+          repair_capacity(c.ind, inst, exp_dem, rng, 40);
+          c.ind.W = sample_w_profile(w_mode, rng);
+          evaluate_candidate(c, inst, &archive);
+          ++eval_count;
+          if (c.CV <= EPS)
+            seeds.push_back(c);
+        }
+      }
     }
   }
 
@@ -607,6 +642,26 @@ static bool op_perturb_rw(const Candidate &base, Candidate &out,
   return true;
 }
 
+// Directly adjust R (pre-positioning ratio) for one open hub.
+// This is the key operator for exploring inventory levels — paper §4.3
+// "allocation" neighborhood adapted to our bi-objective stochastic setting.
+// NOTE: Does NOT call reconstruct_R, so the chosen R value is preserved.
+static bool op_adjust_r(const Candidate &base, Candidate &out,
+                         const DRNDInstance &inst, std::mt19937 &rng) {
+  auto open = opened_hubs(base.ind.X);
+  if (open.empty())
+    return false;
+  out = base;
+  // Discrete R levels to explore; 0.0 means rely entirely on origin supply.
+  static const double r_levels[] = {0.0, 0.1, 0.25, 0.4, 0.5, 0.6, 0.75, 0.9, 1.0};
+  static const int n_levels = 9;
+  int ki = open[std::uniform_int_distribution<int>(0, (int)open.size() - 1)(rng)];
+  int ri = std::uniform_int_distribution<int>(0, n_levels - 1)(rng);
+  out.ind.R[ki] = r_levels[ri];
+  out.move_key = (5LL << 60) | ((long long)ki << 30) | ri;
+  return true;
+}
+
 static bool path_relink_to_target(const Candidate &base, Candidate &out,
                                   const Individual &target,
                                   const DRNDInstance &inst,
@@ -737,7 +792,8 @@ static Candidate ts_local_search(
     for (int t = 0; t < nhood_samples; ++t) {
       Candidate cand;
       bool ok = false;
-      int which = std::uniform_int_distribution<int>(1, enable_option3 ? 5 : 4)(rng);
+      // op_adjust_r is always available as operator 4 (R-level exploration).
+      int which = std::uniform_int_distribution<int>(1, enable_option3 ? 6 : 5)(rng);
       if (which == 1)
         ok = op_swap_hub(current, cand, inst, exp_dem, rng);
       else if (which == 2)
@@ -745,7 +801,9 @@ static Candidate ts_local_search(
       else if (which == 3)
         ok = op_path_relink_lite(current, cand, inst, exp_dem, elite_pool, mode,
                                  rng);
-      else if (enable_option3)
+      else if (which == 4)
+        ok = op_adjust_r(current, cand, inst, rng);
+      else if (which == 5 && enable_option3)
         ok = op_mode_bank_relink(current, cand, inst, exp_dem, mode_bank, mode,
                                  rng);
       else
@@ -928,8 +986,17 @@ int main(int argc, char *argv[]) {
           }
         }
 
-        if (!moved)
-          break;
+        // Paper §4.5: run for T_max or max_iter — do NOT break early.
+        // When no move was accepted, diversify via perturbation (VNS restart).
+        if (!moved) {
+          Candidate perturbed;
+          if (op_perturb_rw(current, perturbed, inst, exp_dem, mode, rng)) {
+            evaluate_candidate(perturbed, inst, &archive);
+            ++eval_count;
+            update_elite_pool(elite_pool, perturbed);
+            current = perturbed; // force diversification regardless of quality
+          }
+        }
       }
 
       update_elite_pool(elite_pool, best);
