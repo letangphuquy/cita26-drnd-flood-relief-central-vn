@@ -117,29 +117,9 @@ else
     echo "[Skip] Greedy run unchanged."
 fi
 
-# ── Step 2b: Recompile + Run BB-Exact baseline ────────────────────────────
+# ── Step 2b: BB-Exact baseline (disabled) ────────────────────────────────
 echo ""
-echo "[Step 2b] Compiling and running BB-Exact baseline..."
-if should_run_step "$SOLVER_DIR/bb_solver" "$SOLVER_DIR/bb_solver.cpp"; then
-    g++ -O3 -std=c++17 \
-        "$SOLVER_DIR/bb_solver.cpp" \
-        -o "$SOLVER_DIR/bb_solver"
-    if [ $? -ne 0 ]; then
-        echo "[Error] BB compilation failed."
-        exit 1
-    fi
-else
-    echo "[Skip] BB compile unchanged."
-fi
-if should_run_step "$RES1/cv_small_bb.json" "$SOLVER_DIR/bb_solver" "$DATA_CV"; then
-    "$SOLVER_DIR/bb_solver" "$DATA_CV" \
-        --out "$RES1/cv_small_bb.json" \
-        --mode enum \
-        --trials 300 \
-        --time-limit 180
-else
-    echo "[Skip] BB run unchanged."
-fi
+echo "[Step 2b] BB-Exact baseline is disabled (not tracked)."
 
 # ── Step 2c: Recompile + Run VNS-TS baseline ──────────────────────────────
 echo ""
@@ -215,18 +195,9 @@ else
     echo "[Skip] MILP AWS run unchanged."
 fi
 
-# ── Step 3b: Run MILP Epsilon-Constraint Baseline ────────────────────────
+# ── Step 3b: MILP Epsilon-Constraint baseline (disabled) ─────────────────
 echo ""
-echo "[Step 3b] Running MILP Epsilon-Constraint Baseline..."
-if should_run_step "$RES1/cv_small_milp_eps.json" "$SOLVER_DIR/milp_epsilon.py" "$DATA_CV"; then
-    "$PYTHON" "$SOLVER_DIR/milp_epsilon.py" \
-        --instance "$DATA_CV" \
-        --out "$RES1/cv_small_milp_eps.json" \
-        --time_limit 600 \
-        --epsilon_steps 20
-else
-    echo "[Skip] MILP EPS run unchanged."
-fi
+echo "[Step 3b] MILP EPS baseline is disabled (not tracked)."
 
 # ── Step 4: Run PB-NSGA (Ours) ─────────────────────────────────────────────
 echo ""
@@ -268,17 +239,15 @@ echo ""
 echo "[Step 5] Generating Comparison Metrics (HV, IGD+)..."
 if should_run_step "$RES1/cv_small_metrics.csv" \
     "$PROJECT/src/scripts/exp1_evaluate_cv_small.py" \
-    "$RES1/cv_small_pb_nsga.json" "$RES1/cv_small_bb.json" "$RES1/cv_small_vns_ts.json" "$RES1/cv_small_gwo_hd.json" \
-    "$RES1/cv_small_greedy.json" "$RES1/cv_small_milp_aws.json" "$RES1/cv_small_milp_eps.json"; then
+    "$RES1/cv_small_pb_nsga.json" "$RES1/cv_small_vns_ts.json" "$RES1/cv_small_gwo_hd.json" \
+    "$RES1/cv_small_greedy.json" "$RES1/cv_small_milp_aws.json"; then
     "$PYTHON" "$PROJECT/src/scripts/exp1_evaluate_cv_small.py" \
         --results-exp1 "$RES1" \
         --ours "$RES1/cv_small_pb_nsga.json" \
-        --bb "$RES1/cv_small_bb.json" \
         --vns-ts "$RES1/cv_small_vns_ts.json" \
         --gwo-hd "$RES1/cv_small_gwo_hd.json" \
         --greedy "$RES1/cv_small_greedy.json" \
-        --milp-aws "$RES1/cv_small_milp_aws.json" \
-        --milp-eps "$RES1/cv_small_milp_eps.json"
+        --milp-aws "$RES1/cv_small_milp_aws.json"
 else
     echo "[Skip] Metrics evaluation unchanged."
 fi
@@ -291,12 +260,10 @@ if [ "$AUDIT_ON" -eq 1 ]; then
         --instance "$DATA_CV" \
         --solutions \
         "$RES1/cv_small_pb_nsga.json" \
-        "$RES1/cv_small_bb.json" \
         "$RES1/cv_small_vns_ts.json" \
         "$RES1/cv_small_gwo_hd.json" \
         "$RES1/cv_small_greedy.json" \
-        "$RES1/cv_small_milp_aws.json" \
-        "$RES1/cv_small_milp_eps.json"
+        "$RES1/cv_small_milp_aws.json"
 fi
 
 echo ""
