@@ -361,13 +361,13 @@ With hub activations and demand assignments fixed by Steps~1--3, the supply rout
 
 \textbf{Initialization.} The population of $N$ chromosomes is seeded with randomly generated individuals: $\mathbf{X}$ opens between 1 and $\lfloor 0.6|\mathcal{H}|\rfloor$ hubs uniformly at random, $\mathbf{R}$ is drawn from a discrete set of pre-positioning levels, and $\mathbf{A}$, $\mathbf{W}$ are sampled uniformly.
 
-\textbf{Crossover} ($p_c = 0.9$) applies Uniform Crossover to $\mathbf{X}$ and $\mathbf{A}$, and Simulated Binary Crossover (SBX)~\cite{deb2002fast} to $\mathbf{R}$ and $\mathbf{W}$.
+\textbf{Crossover} with probability $p_c$ applies Uniform Crossover to $\mathbf{X}$ and $\mathbf{A}$, and Simulated Binary Crossover (SBX, index $\eta_{\mathrm{SBX}}$) to $\mathbf{R}$ and $\mathbf{W}$.
 
-\textbf{Mutation} ($p_m = 1/|\mathbf{C}|$) applies bit-flip to $\mathbf{X}$, random-reset to $\mathbf{A}$, and Polynomial mutation to $\mathbf{R}$ and $\mathbf{W}$.
+\textbf{Mutation} with base rate $p_m$ applies bit-flip to $\mathbf{X}$, random-reset to $\mathbf{A}$, and Polynomial mutation (index $\eta_{\mathrm{poly}}$) to $\mathbf{R}$ and $\mathbf{W}$. Each gene is mutated independently with probability $p_m / |\text{segment}|$, keeping the expected number of mutations per offspring constant across segments of different lengths.
 
 \textbf{Survival} follows the NSGA-II elitist scheme with constrained dominance~\cite{deb2002fast}: feasible solutions always dominate infeasible ones; among infeasible, lower CV wins. Minimum Hamming distance in $\mathbf{X}$-space serves as a final tiebreaker when crowding distance is tied, preserving diversity in hub configuration.
 
-\textbf{Diversity.} Inspired by adaptive population strategies~\cite{liang2011genetic}, a stagnation counter tracks the rank-1 front across generations. Upon stagnation, $p_m$ is temporarily elevated and tournament size is increased to restore exploration.
+\textbf{Diversity.} The base mutation rate $p_m$ follows a linear decay schedule from $p_m^{\mathrm{high}}$ to $p_m^{\mathrm{low}}$ over $G$ generations, balancing early exploration with late exploitation. The adaptive elitist-population strategy~\cite{liang2011genetic} is applied to maintain diversity. Further, a counter keeps track of the rank-1 front and conditionally increases tournament size and $\mathbf{W}$-segment mutation rate upon stagnation.
 
 % ============================================================
 %  REPLACE YOUR EXISTING \section{Computational Experiments}
@@ -378,14 +378,14 @@ With hub activations and demand assignments fixed by Steps~1--3, the supply rout
 \subsection{Experimental Setup}
 \label{sec:exp_setup}
 
-PB-NSGA is implemented in C++17; dataset construction and post-processing are performed in Python~3, on a workstation with an 11th Gen Intel Core i5-1135G7 @ 2.40~GHz and 16~GB RAM. Algorithm parameters are fixed for all runs: $N = 200$, $G = 300$, $p_c = 0.9$, $p_m = 1/|\mathbf{C}|$. Problem constants are $\chi = 0.7$, $\alpha = 0.6$, $\gamma = 3.0$~kg/person, $\lambda_0 = 0.8$. Each configuration is executed for 20 independent runs, reporting mean~$\pm$~std. We use \textbf{Hypervolume (HV)}~\cite{zitzler1999multiobjective} and \textbf{IGD\textsuperscript{+}}~\cite{ishibuchi2015modified} as performance metrics, computed against the combined non-dominated reference front pooled across all algorithms.
+PB-NSGA is implemented in C++17; dataset construction and post-processing are performed in Python~3, on a workstation with an 11th Gen Intel Core i5-1135G7 @ 2.40~GHz and 16~GB RAM. Algorithm parameters are fixed for all runs: $N = 200$, $G = 300$ (CV-Small) / $500$ (CV-Large), $p_c = 0.98$, $p_m^{\mathrm{high}} = 0.40$, $p_m^{\mathrm{low}} = 0.10$ (linear decay), $\eta_{\mathrm{SBX}} = 1.5$, $\eta_{\mathrm{poly}} = 8$. Problem constants are $\chi = 0.7$, $\alpha = 0.6$, $\gamma = 3.0$~kg/person, $\lambda_0 = 0.8$. Each configuration is executed for 20 independent runs, reporting mean~$\pm$~std. We use \textbf{Hypervolume (HV)}~\cite{zitzler1999multiobjective} and \textbf{IGD\textsuperscript{+}}~\cite{ishibuchi2015modified} as performance metrics, computed against the combined non-dominated reference front pooled across all algorithms.
 
 \subsection{Dataset Description}
 \label{sec:datasets}
 
 \textbf{Central Vietnam Dataset.}
 We construct two instances modelling four flood-prone provinces: Da Nang, Quang Nam, Thua Thien-Hue, and Quang Ngai. \textbf{CV-Small} uses district-level demand nodes ($|\mathcal{I}|=20$, $|\mathcal{H}|=5$, $|\mathcal{J}|=2$, $|\mathcal{S}|=3$); \textbf{CV-Large} uses commune-level resolution ($|\mathcal{I}|=100$, $|\mathcal{H}|=20$, $|\mathcal{J}|=12$, $|\mathcal{S}|=3$).
-Node coordinates map to real administrative centroids, confirmed logistics facilities, and vital supply origins. Scenario risks and road disruptions are calibrated using a multi-criteria flood vulnerability score~\cite{barzinpour2014}. Three transport modes -- trucks, motorboats, and helicopters -- are considered, with helicopter links capped at 15\% of active routing connections per scenario.
+Node coordinates map to real administrative centroids, confirmed logistics facilities, and vital supply origins. Scenario risks and road disruptions are calibrated using a multi-criteria flood vulnerability score~\cite{nguyen2021flood}. Three transport modes -- trucks, motorboats, and helicopters -- are considered, with helicopter links capped at 15\% of active routing connections per scenario.
 
 \textbf{Scenario generation via SAA~\cite{shapiro2003monte}.}
 To improve coverage of plausible flood conditions, scenarios are drawn from a profile bank spanning mild, severe, and extreme flood regimes with varying epicenter count, intensity, road disruption rate, and circuity coefficient. The CV-Large case study further validates the first-stage decisions $(\hat{x}, \hat{q})$ on an independent out-of-sample (OOS) set of $N'=10$ adversarial scenarios, disjoint from training, to assess generalization under catastrophic conditions.
