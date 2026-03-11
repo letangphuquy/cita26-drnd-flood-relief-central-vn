@@ -378,104 +378,90 @@ With hub activations and demand assignments fixed by Steps~1--3, the supply rout
 \subsection{Experimental Setup}
 \label{sec:exp_setup}
 
-PB-NSGA is implemented in C++17; dataset construction and post-processing are performed in Python~3, on a workstation with an 11th Gen Intel Core i5-1135G7 @ 2.40~GHz and 16~GB RAM. Algorithm parameters are fixed for all runs: $N = 200$, $G = 300$, $p_c = 0.9$, $\eta_c = \eta_m = 20$, $p_m = 1/|\mathbf{C}|$. Problem constants are $\chi = 0.7$, $\alpha = 0.6$, $\gamma = 3.0$~kg/person, $\lambda_0 = 0.8$. Each configuration is executed for 20 independent runs, reporting mean~$\pm$~std. We use \textbf{Hypervolume (HV)}~\cite{zitzler1999multiobjective} and \textbf{IGD\textsuperscript{+}}~\cite{ishibuchi2015modified} for performance metrics. Pareto union across all algorithms served as a proxy ground truth for small instances.
+PB-NSGA is implemented in C++17; dataset construction and post-processing are performed in Python~3, on a workstation with an 11th Gen Intel Core i5-1135G7 @ 2.40~GHz and 16~GB RAM. Algorithm parameters are fixed for all runs: $N = 200$, $G = 300$, $p_c = 0.9$, $p_m = 1/|\mathbf{C}|$. Problem constants are $\chi = 0.7$, $\alpha = 0.6$, $\gamma = 3.0$~kg/person, $\lambda_0 = 0.8$. Each configuration is executed for 20 independent runs, reporting mean~$\pm$~std. We use \textbf{Hypervolume (HV)}~\cite{zitzler1999multiobjective} and \textbf{IGD\textsuperscript{+}}~\cite{ishibuchi2015modified} as performance metrics, computed against the combined non-dominated reference front pooled across all algorithms.
 
 \subsection{Dataset Description}
 \label{sec:datasets}
 
 \textbf{Central Vietnam Dataset.}
-We construct two instances modelling four flood-prone provinces: Da Nang, Quang Nam, Thua Thien-Hue, and Quang Ngai. \textbf{CV-Small} uses district-level demand nodes ($|\mathcal{I}|=20$, $|\mathcal{H}|=5$, $|\mathcal{J}|=2$, $|\mathcal{S}|=3$); \textbf{CV-Large} uses commune-level resolution ($|\mathcal{I}|=100$, $|\mathcal{H}|=20$, $|\mathcal{J}|=12$, $|\mathcal{S}|=3$). 
-Node coordinates map to real administrative centroids, confirmed logistics facilities, and vital supply origins. Scenario risks and road disruptions are calibrated using a multi-criteria flood vulnerability score~\cite{barzinpour2014}. Three transport modes -- trucks, motorboats, and helicopters -- are considered. Roads are subject to disruption, while water mode is enabled on flood areas. Helicopter links (air mode) are capped at 15\% of all active routing connections per scenario, approximating a shared rotary-wing fleet of 2--3 aircraft across the 20 candidate hubs.
+We construct two instances modelling four flood-prone provinces: Da Nang, Quang Nam, Thua Thien-Hue, and Quang Ngai. \textbf{CV-Small} uses district-level demand nodes ($|\mathcal{I}|=20$, $|\mathcal{H}|=5$, $|\mathcal{J}|=2$, $|\mathcal{S}|=3$); \textbf{CV-Large} uses commune-level resolution ($|\mathcal{I}|=100$, $|\mathcal{H}|=20$, $|\mathcal{J}|=12$, $|\mathcal{S}|=3$).
+Node coordinates map to real administrative centroids, confirmed logistics facilities, and vital supply origins. Scenario risks and road disruptions are calibrated using a multi-criteria flood vulnerability score~\cite{barzinpour2014}. Three transport modes -- trucks, motorboats, and helicopters -- are considered, with helicopter links capped at 15\% of active routing connections per scenario.
+
+\textbf{Scenario generation via SAA~\cite{shapiro2003monte}.}
+To improve coverage of plausible flood conditions, scenarios are drawn from a profile bank spanning mild, severe, and extreme flood regimes with varying epicenter count, intensity, road disruption rate, and circuity coefficient. The CV-Large case study further validates the first-stage decisions $(\hat{x}, \hat{q})$ on an independent out-of-sample (OOS) set of $N'=10$ adversarial scenarios, disjoint from training, to assess generalization under catastrophic conditions.
 
 \subsection{Experiment 1: Baseline Comparison}
 \label{sec:exp1}
 
-To evaluate PB-NSGA against the structural complexity of MO-IHLNDP, we benchmarked the algorithm against two baselines on the risk-calibrated \textbf{CV-Small} sub-instance ($|\mathcal{H}|=5, |\mathcal{I}|=20$).
-The first baseline is a two-phased \textbf{Greedy Heuristic} that constructs upper bounds by selecting the cheapest or safest hubs and assigns demands via nearest-neighbour logic. The second is an exact \textbf{Mixed-Integer Linear Programming (MILP)} formulation solved via OR-Tools~\cite{ortools} with the $\epsilon$-constraint method.
-% Furthermore, to guarantee solution quality without relying on relaxations, we deployed a custom Branch-and-Bound (BB) solver for complete enumeration to extract the absolute proxy Pareto front.
+We evaluate PB-NSGA against four baselines on the \textbf{CV-Small} instance.
+The \textbf{Greedy Heuristic} simulates ad-hoc decision-making: it constructs a council of managers with different cost-safety weight profiles, each greedily selecting hubs and assigning demands by nearest-neighbour logic, then returns their combined non-dominated solutions.
+\textbf{VNS-TS}~\cite{sangsawang2020capacitated} is a Variable Neighbourhood Search with Tabu Search, adapted from the flood relief literature as a strong meta-heuristic baseline.
+\textbf{GWO-HD}~\cite{Li2023} is a Grey Wolf Optimizer with Hamming Distance moves, representing a recent meta-heuristic designed for discrete hub-location problems.
+The \textbf{MILP} solver~\cite{ortools} applies the Adaptive Weighted Sum method~\cite{kim2005adaptive} to systematically sweep the objective space and produces the reference Pareto front for CV-Small.
 
 \begin{table}[ht]
 \centering
-\caption{Baseline comparison on the CV-Small instance. HV is normalized w.r.t.\ the combined non-dominated reference front (BB $\cup$ Greedy $\cup$ PB-NSGA). $-$: no feasible solution returned.}
+\caption{Baseline comparison on CV-Small. HV and IGD\textsuperscript{+} are normalized w.r.t.\ the combined non-dominated reference front across all algorithms. Best values in \textbf{bold}.}
 \label{tab:exp1_results}
 \begin{tabular}{lrrr}
 \toprule
 Algorithm & HV (norm.) $\uparrow$ & IGD\textsuperscript{+} $\downarrow$ & CPU Time (s) $\downarrow$ \\
 \midrule
-Greedy Heuristic                & $0.000$ & $3.803$ & $\mathbf{<0.1}$ \\
-MILP ($\epsilon$-constraint)    & $0.000$ & $1.596$ & $208.9$ \\
-Exact Enum (BB)                 & $0.443$ & $0.385$ & $0.2$ \\
-\textbf{PB-NSGA (Ours)}         & $\mathbf{0.589 \pm 0.219}$ & $\mathbf{0.319 \pm 0.179}$ & $0.5$ \\
+Greedy Heuristic           & $0.292$ & $0.333$ & $\mathbf{<0.1}$ \\
+VNS-TS                     & $0.777$ & $0.117$ & $60.0$ \\
+GWO-HD                     & $0.780$ & $0.152$ & $0.6$ \\
+MILP (Adaptive WS)         & $\mathbf{0.997}$ & $\mathbf{0.005}$ & $4.9$ \\
+\textbf{PB-NSGA (Ours)}    & $0.925$ & $0.039$ & $1.1$ \\
 \bottomrule
-\multicolumn{4}{l}{\footnotesize $^*$ All metrics normalized against the union of all algorithm results.} \\
 \end{tabular}
 \end{table}
 
-Table~\ref{tab:exp1_results} reveals an instructive pattern for the small instance.
-The greedy heuristic remains distant from the reference front despite stochastic resets.
-The MILP $\epsilon$-constraint solver failed to return any feasible Pareto solution within 1800\,s, consistent with known Big-M numerical difficulties on non-linear deprivation objectives.
-PB-NSGA converges to the optimal region and defines the combined non-dominated reference front, reaching a hypervolume of $1.000$.
-This efficiency stems from PB-NSGA's ability to simultaneously optimize the decoder's priority-weight vectors ($W$), discovering more refined routing and inventory patterns for each hub configuration than the exhaustive BB enumeration with fixed weights.
-
-As demonstrated in Experiment~2 (Sec.~\ref{sec:exp2}), this scalability advantage becomes even more pronounced on larger instances where exact methods become computationally intractable.
+Table~\ref{tab:exp1_results} reveals a clear performance hierarchy. The MILP solver defines the reference Pareto front for CV-Small, establishing the quality ceiling at HV\,=\,0.997. The Greedy heuristic runs near-instantly but remains far from the front. VNS-TS and GWO-HD both achieve competitive HV ($\approx$0.78) with VNS-TS requiring 60\,s and GWO-HD only 0.6\,s. PB-NSGA closes the gap to MILP substantially (HV\,=\,0.925, IGD\textsuperscript{+}\,=\,0.039) in 1.1\,s, demonstrating that the priority-based decoder effectively navigates the combinatorial structure of MO-IHLNDP.
 
 \subsection{Experiment 2: Case Study on Central Vietnam}
 \label{sec:exp2}
 
-To investigate the practical managerial insights generated by the model on realistic operational scales, we executed PB-NSGA on the \textbf{CV-Large} instance ($|\mathcal{I}|=100, |\mathcal{H}|=20$). Table~\ref{tab:exp2_results} reports the algorithm's performance metrics.
-
-\begin{table}[ht]
-\centering
-\caption{PB-NSGA performance metrics across 20 independent runs (mean $\pm$ std). \#Pareto (combined) is the size of the union Pareto front across all runs.}
-\label{tab:exp2_results}
-\begin{tabular}{lrrrr}
-\toprule
-Instance & HV (norm.) $\uparrow$ & IGD\textsuperscript{+} $\downarrow$ & \#Pareto (mean) & \#Pareto (combined) \\
-\midrule
-CV-Small ($|\mathcal{I}|$=20)   & $1.190 \pm 0.015$ & $0.006 \pm 0.007$ & $42.8 \pm 44.4$ & 5 \\
-CV-Large ($|\mathcal{I}|$=100)  & $1.049 \pm 0.045$ & $0.076 \pm 0.059$ & $95.7 \pm 31.7$  & 24 \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-Table~\ref{tab:exp2_results} demonstrates that PB-NSGA maintains competitive solution quality even as the problem scales to commune-level resolution ($2^{20} \approx 10^6$ hub configurations). On the CV-Large instance, the algorithm achieves a mean IGD\textsuperscript{+} of $0.117 \pm 0.051$ and a combined Pareto front of 17 non-dominated solutions across all 20 runs, indicating consistent convergence toward a stable region of the objective space. The HV standard deviation ($0.090$) reflects the inherent stochasticity of searching a vast multimodal landscape, yet remains within acceptable bounds for a practical decision-support tool.
-
-% The generated Pareto fronts exhibit a definitively convex cost-deprivation trade-off: marginal reductions in expected maximum deprivation $Z_2$ require disproportionately large increases in logistics cost $Z_1$ toward the stringent-deprivation end. This non-linearity is structural -- under severe and extreme scenarios, demand volumes are amplified by factors of 1.8 and 2.8 respectively, rendering purely cost-optimised infrastructure critically insufficient during tail-events.
+We apply PB-NSGA, GWO-HD, and VNS-TS to the full-scale \textbf{CV-Large} instance ($|\mathcal{I}|=100$, $|\mathcal{H}|=20$), where exact solvers become intractable. All other parameters follow Sec.~\ref{sec:exp_setup}.
 
 \begin{figure}[ht]
 \centering
-\includegraphics[width=\linewidth]{figures/cv_large_map_detailed.pdf}
-\caption{Detailed multi-modal network mapping for a representative \quo{Balanced} trade-off solution in CV-Large across three probabilistic scenarios (Mild, Severe, Extreme). Modes are indicated by distinct line styles and colors.}
+\includegraphics[width=\linewidth]{figures/exp2_pareto_tradeoff.pdf}
+\caption{Combined Pareto fronts for PB-NSGA, GWO-HD, and VNS-TS. \textbf{Left (CV-Small):} all three algorithms compared against the MILP true Pareto front. \textbf{Right (CV-Large, power scale):} combined non-dominated front across 20 runs (PB-NSGA), 5 runs (GWO-HD), and 5 runs (VNS-TS). $Z_1$: expected logistics cost; $Z_2$: expected maximum deprivation cost.}
+\label{fig:pareto_tradeoff}
+\end{figure}
+
+Figure~\ref{fig:pareto_tradeoff} shows the Pareto fronts for both instances. On CV-Small (left panel), PB-NSGA closely tracks the MILP true front across the full cost-deprivation range; GWO-HD eventually converges to a similar region but with more scattered solutions; VNS-TS only finds the cost-efficient tail, missing the deprivation-minimizing end entirely. On CV-Large (right panel, power scale), the trade-off space spans nearly an order of magnitude in $Z_1$. PB-NSGA concentrates its solutions in the low-cost, low-deprivation region ($Z_1$: 4.3M--5M, $Z_2$: 41K--45K), defining the efficient frontier. GWO-HD extends the front rightward, maintaining competitive $Z_2\approx44$K at the cost of substantially higher $Z_1$ (up to 26M). VNS-TS is dominated in both objectives, with solutions reaching $Z_1=81$M and $Z_2=150$K.
+
+On CV-Large across 20 runs, PB-NSGA achieves HV\,=\,1.000\,$\pm$\,0.006 and IGD\textsuperscript{+}\,=\,0.000\,$\pm$\,0.001, defining the combined reference front and confirming stable convergence. GWO-HD reaches HV\,=\,0.977\,$\pm$\,0.008 in 4.6\,s. VNS-TS achieves HV\,=\,0.793\,$\pm$\,0.044 at 180\,s per run -- a $20\times$ runtime disadvantage relative to PB-NSGA.
+
+\begin{figure}[ht]
+\centering
+\includegraphics[width=\linewidth]{figures/CV_large_solution_map.pdf}
+\caption{Strategic relief network for a representative solution on CV-Large ($Z_1=\$4.6$M, $Z_2=43{,}453$) across three probabilistic scenarios: mild ($p=0.60$), severe ($p=0.30$), and extreme ($p=0.10$). Hub inventory fill levels are annotated in brackets. No reactive hub is activated in any scenario. Line styles indicate transport mode: solid gray (truck), blue dashed (water), orange dashed (helicopter).}
 \label{fig:cv_large_map_detailed}
 \end{figure}
 
-Figure~\ref{fig:cv_large_map_detailed} visualizes a representative \quo{Balanced} solution.
-Under mild conditions, the network utilizes a dense combination of coastal watercraft links and terrestrial road networks, drawing heavily from pre-positioned inventory at strategic hubs H4, H15, and H16 (indicated by their high filling ratios).
-As severity intensifies to the extreme scenario, a pronounced modal shift occurs: the decoder activates rotary-wing (helicopter) links to reach isolated clusters in the mountainous north-west and vulnerable eastern regions. 
-To supplement critical logistics bottlenecks, the model triggers a reactive hub (H8, shown in purple) and facilitates lateral transshipment flows between established hubs to rebalance inventory deficits.
+Figure~\ref{fig:cv_large_map_detailed} visualizes the knee-point solution ($Z_1=\$4.6$M, $Z_2=43{,}453$) across three scenarios. The most striking feature is structural stability: the same eight planned hubs (H0, H1, H3, H11, H14, H15, H16, H19) remain active with identical inventory fill levels across all scenarios -- no reactive hub is ever opened and no lateral transshipment occurs. This reveals that the algorithm converges to a network design robust enough to serve all flood regimes purely through pre-positioning. H16 (91\%) and H15 (89\%) carry the heaviest pre-positioned loads, anchoring coverage for the central and southern coastal corridor. The primary adaptation across scenarios is modal: mild and severe conditions are served by a mix of truck and watercraft links, while the extreme scenario activates helicopter routes (orange dashed) to reach high-risk demand nodes that become inaccessible by road and water.
 
-\subsubsection*{Sample Average Approximation and Out-Of-Sample Validation}
-
-To evaluate generalization beyond the three training scenarios, we adopted a two-stage SAA/OOS protocol aligned with stochastic-programming practice.
-
-\textit{Step 1 (In-sample SAA).} We generated a combinatorial SAA dataset with $N=100$ i.i.d. scenarios for CV-Large. Instead of sampling only from a single severity mix, scenarios were drawn from a profile bank spanning mild, severe, and extreme flood regimes with varying epicenter count, intensity range, accessibility disruption factor, and circuity coefficient. Each SAA scenario was assigned equal probability $\pi_s=1/N$. This larger in-sample set improves coverage of plausible disaster patterns while preserving tractable optimization time.
-
-\textit{Step 2 (Out-of-sample evaluation).} Let $(\hat{x},\hat{q})$ denote first-stage hub-opening and pre-positioning decisions returned by SAA optimization. We then evaluated these fixed first-stage decisions on an independent adversarial OOS sample with $N'=10$ catastrophic scenarios (disjoint from SAA), each generated with high epicenter multiplicity and severe accessibility disruption. Recourse was solved per scenario and aggregated as:
-\[
-Z_1^{\mathrm{OOS}}(\hat{x},\hat{q})=
-\sum_{k\in\mathcal{H}}(F_k\hat{x}_k+c_k\hat{q}_k)+\frac{1}{N'}\sum_{s'=1}^{N'}Z_{1,s'}
-\]
-with the analogous computation for $Z_2^{\mathrm{OOS}}$.
-
-\textit{Step 3 (Gap analysis).} We report the SAA-OOS gap by comparing in-sample estimates $(\hat{Z}_1^N,\hat{Z}_2^N)$ against $(Z_1^{\mathrm{OOS}},Z_2^{\mathrm{OOS}})$. Small gaps indicate robust first-stage design; large positive gaps indicate optimizer's-curse overfitting and motivate increasing $N$ and repeating the SAA cycle.
-
-\subsubsection*{Methodological Framework for Decision Support}
+\subsubsection*{Decision Support Framework}
 
 \textit{Robust hub prioritization.}
-Across all 20 independent runs, hub selection frequency on the CV-Large combined Pareto front reveals a clear hierarchy of strategic priority. The Quang Ngai Port Hub appears in every Pareto-optimal solution (100\% selection frequency), establishing it as the unconditional anchor of the relief network. The Phuoc Son Helipad follows at 70.6\%, and the Tam Ky Logistics Hub at 38.3\%, together forming a robust hub core for permanent infrastructure investment. Hubs that are cost-effective under mild conditions but breach the $\chi=0.7$ safety threshold during extreme disruptions expose a critical \emph{resilience gap}: identifying these gaps enables authorities to pre-position backup inventory or activate contingency evacuations before a disaster strikes.
+Hub selection frequency across all 20 runs (128 Pareto solutions total) reveals a clear investment hierarchy. The Quang Ngai Port Hub (H15) and Phuoc Son Helipad (H16) are selected in every Pareto-optimal solution (100\%), making them unconditional anchors for permanent infrastructure investment. The Huong Viet Depot (H14, 82.8\%), Da Nang Airport Hub (H0, 77.3\%), Tam Ky Logistics Hub (H1, 67.2\%), Binh Son Warehouse (H9, 59.4\%), and Dong Giang Rescue Station (H3, 57.8\%) form a second tier, each appearing in more than half of all solutions.
+
+\textit{Resilience gap.}
+The risk heatmap reveals a critical vulnerability: H1 (Tam Ky Logistics Hub), despite its high selection frequency, exposes a \emph{resilience gap} -- its risk escalates sharply from 0.46 under mild conditions to 0.94 and 0.92 under severe and extreme scenarios, both well above the safety threshold $\chi=0.7$. This hub will be closed by the risk constraint whenever disaster severity escalates, requiring the network to fall back on remaining hubs. Authorities should treat H1 as a conditional asset and pre-stage contingency inventory at neighbouring safe hubs accordingly. By contrast, the Huong Viet Depot (H14) stands out as the most disaster-resilient candidate with risk values of only 0.05, 0.09, and 0.13 across all three scenarios, reflecting its sheltered inland location.
 
 \textit{Transport mode diversification.}
-The extreme scenario enforces a pronounced modal shift away from disrupted road networks. Pre-equipping coastal hubs -- particularly the robust core anchored by the Quang Ngai Port and Phuoc Son Helipad -- with resilient watercraft terminals and maintaining emergency airspace access for rotary-wing aircraft delivers asymmetric resilience yield at a fraction of the cost of deploying redundant mega-hubs.
+The extreme scenario enforces a modal shift away from disrupted roads. Pre-equipping coastal hubs -- anchored by Quang Ngai Port (H15) and Phuoc Son Helipad (H16) -- with watercraft terminals and maintaining rotary-wing airspace access at Da Nang Airport (H0) delivers asymmetric resilience at far lower cost than deploying redundant infrastructure.
+
+% \begin{figure}[ht]
+% \centering
+% \includegraphics[width=\linewidth]{figures/cv_large_convergence.pdf}
+% \caption{Convergence of HV and IGD\textsuperscript{+} over generations for PB-NSGA on CV-Large (mean $\pm$ std across 20 runs).}
+% \label{fig:convergence}
+% \end{figure}
+%
+% Figure~\ref{fig:convergence} shows that PB-NSGA converges rapidly within the first 100 generations, with marginal gains thereafter. The low variance across runs confirms algorithmic stability on the large-scale instance.
 
 \section{Conclusion and Future Work}
 

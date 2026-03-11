@@ -1,5 +1,53 @@
 NOTE: THIS IS THE CANONICAL VERSION. IMPLEMENT THIS.
 
+Update: The newest paper structure
+section Computational Experiments
+subsection Experimental Setup
+- modify the parameters to match newest
+
+subsection Dataset Description
+- unchanged from previous experimental baselines, but you can audit just to make sure
+- [Important Decision design question] We move up the SAA and OOS strategy up here in the first two subsection. Need to modify the code so that training happen on the 50-scenario datasets.
+
+subsection Experiment 1: Benchmark comparision
+textbf Baseline algorithms
+- MILP solver implemented in pymoo with Adaptive Weighted Sum method (cite) produces a true Pareto front for the CV-Small instance.
+- Greedy heuristic method simulates a council of decision makers with different weight profiles (please explain in a highly simple and easy to understand manner)
+- VNS-TS (cite) is a meta-heuristic baseline in the literature that shown effectiveness in the flood relief model ...
+
+table 1 Metrics on CV-Small (same as before, just change number and algorithm)
+
+- Result interpretation: The exact solver defined the Pareto front for the CV-Small instance. Greedy runs blazing fast but has poor result. VNS-TS performs better, but still inadequate. The proposed PB-NSGA outperforms with faster run time and near-optimal Pareto approximation. As can be seen in figure 1, PB-NSGA consistently find solutions with optimal Z2 deprivation cost, and within a small optimality gap on Z1 logistic cost.
+
+subsection Experiment 2: Case study on Central Vietnam
+- brief prose text summarizing the parameters that are set differently than Exp. 1
+
+figure 1 Pareto front
+
+- prose on trade-off analysis and re-affirms proposed PB-NSGA superiority. Talk about knee point -- the "balanced" solution.
+
+- removed table 2 (still keep the values for analysis), instead write a paragraph to report stddev values and confirm algorithm stability. The VNS-TS remains in a close gap with the proposed algorithm, but its run-time is much worse (180s compared to 8s)
+
+figure 2 Visualization of a solution accross three repr. scenarios
+- prose text: 
+  - The algorithm evolved and learnt that earlier investment is cheapier than any reactive fallback resolution. The hub structure remains the same across scenario, and is robust enough to serve the demands well under different scenarios. 
+  - The algorithm favors in-place rescue and need not rely on lateral hub trans-shipment. (comment: The interactivity between hubs structure shall be a future work)
+
+- decision support framework: suggestion for disaster relief management. Adjust the old writing so that new insights match current data perfectly.
+
+
+figure 3 Convergence analysis.
+
+section Conclusion and future work
+- contributions brief (modeling, solving and DSS framework)
+- Limitation: Lack of real-world dataset (keep it as it is, but should reduce writing to be cleaner and more compact)
+- Future work:
+ - Incorporating real-world data and into an DSS ecosystem that can simulate and operate on real-time insights.
+ - Improve the model to better account for risk and assess the effect of "black swan" event, and quantify the effects into relief operation (for e.g., increased time and cost at hubs with higher risk)
+ - Improve the proposed algorithm so that it works well when scale allowed budget runtime to 1 hour, ensuring continous convergence for meaningful practical implementation.
+
+================
+
 Narrative, thông điệp chính muốn truyền tải thông qua phần Thực nghiệm:
 1. The proposed algorithm is effective and efficient for solving the DRND problem (specifically, the proposed MO-IHLNDP model).
 2. The joint framework (model and solver) produces useful results and practical managerial insights for flood prevention in Central Vietnam.
