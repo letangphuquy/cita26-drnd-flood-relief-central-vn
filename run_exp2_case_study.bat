@@ -58,7 +58,7 @@ FOR /L %%s IN (0,1,4) DO (
 REM ── Step 3: Pareto trade-off (PB-NSGA vs VNS-TS) ───────────────────────
 echo.
 echo [Step 3] Building PB-NSGA vs VNS-TS Pareto trade-off outputs...
-"%PYTHON%" "%PROJECT%src\scripts\exp2_pareto_tradeoff_pbnsga_vs_vnsts.py" --results-exp2 "%RES2%" --out-dir "%RES2%"
+"%PYTHON%" "%PROJECT%src\scripts\exp2_pareto_tradeoff_pbnsga_vs_vnsts.py" --results-exp2 "%RES2%" --results-exp1 "%PROJECT%results\exp1" --out-dir "%RES2%"
 
 REM ── Step 4: Statistical Analysis & Sensitivity ────────────────────────────
 echo.
