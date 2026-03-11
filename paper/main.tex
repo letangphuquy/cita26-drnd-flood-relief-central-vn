@@ -325,7 +325,7 @@ The decoder is invoked once per chromosome per scenario $s \in \mathcal{S}$, rec
 
 \textbf{Step 2 -- Demand Prioritisation.} Each demand node $i$ receives a composite score prioritising urgency, isolation, and proximity to active hubs. Demands are then processed in descending score order.
 
-\textbf{Step 3 -- Tiered Hub Assignment.} For each demand $i$, active hubs are trialled in proximity order from the anchor hub $\pi_{A_i}$. \textit{Pass~1} selects the best candidate by residual capacity, travel time, and operational status. If no feasible candidate is found, \textit{Pass~2} relaxes capacity constraints. If no reachable active hub exists, the decoder opens the nearest safe inactive hub as a reactive fallback and increments~CV.
+\textbf{Step 3 -- Tiered Hub Assignment.} Each demand $i$ is assigned to the best reachable active hub, scored by travel time and residual capacity, starting from its anchor $\pi_{A_i}$. If all candidates are at capacity (\textit{Pass~2}), the assignment still proceeds with a capacity violation. Only when no reachable active hub exists does the decoder open a new reactive hub as a last resort, incurring its setup cost and incrementing CV.
 
 \textbf{Step 4 -- Supply Routing and Objective Accumulation.} Origins supply the most under-supplied active hubs, and surplus is redistributed via discounted inter-hub trans-shipment ($\alpha$). Expected objectives $Z_1$ and $Z_2$ are accumulated across all $s \in \mathcal{S}$. Algorithm~\ref{alg:decoder} formalises these procedures.
 
@@ -349,15 +349,25 @@ The decoder is invoked once per chromosome per scenario $s \in \mathcal{S}$, rec
         \State \textit{Reactive fallback:} open nearest safe inactive hub; add $F^a_{ks}$; $\text{CV}^s\!\mathrel{+}=\!1$
     \EndIf
 \EndFor
-\State Assign origins greedily; redistribute surplus via inter-hub trans-shipment.
+\State Route supply from origins to hubs and redistribute surplus via MCF on the hub sub-network.
 \State Accumulate $Z_1^s$, $Z_2^s$
 \State \Return $(Z_1^s,\,Z_2^s,\,\text{CV}^s)$
 \end{algorithmic}
 \end{algorithm}
 
-\subsection{Genetic Operators and Selection}
+With hub activations and demand assignments fixed by Steps~1--3, the supply routing in Step~4 reduces to a \textbf{minimum cost flow (MCF)} sub-problem: origins are sources, under-supplied hubs are sinks, and surplus inventory is redistributed via lateral transshipment arcs. Solving MCF exactly per scenario ensures that $Z_1$ is minimised to near-optimality for any decoded hub configuration, and is a key driver of PB-NSGA's solution quality.
 
-\emph{Selection} uses binary tournament on Pareto rank with crowding distance as tiebreaker. To prevent stagnation in the multi-modal search space, our implementation monitors the diversity of the rank-1 front in objective space ($Z_1, Z_2$). If the front remains unchanged for 20 generations, selection pressure is boosted via 3-way tournaments and weight-vector ($W$) hypermutation is applied to escape the local basin. \emph{Crossover} applies Uniform Crossover to $\mathbf{X}$ and $\mathbf{A}$, and SBX~\cite{deb2002fast} to the continuous segments $\mathbf{R}$ and $\mathbf{W}$, whose distribution-index control concentrates offspring near parents and preserves the parental mean on bounded real vectors. \emph{Mutation} ($p_m = 1/|\mathbf{C}|$) applies Bit-flip to $\mathbf{X}$, random-reset to $\mathbf{A}$, and Polynomial mutation to $\mathbf{R}$ and $\mathbf{W}$. Constraint handling follows the constrained-dominance principle~\cite{deb2002fast}: feasible solutions always dominate infeasible ones; among infeasible solutions, lower CV dominates. When a partial Pareto front must be split, tiebreaking proceeds by (1) Pareto rank, (2) crowding distance, (3) minimum Hamming distance in $\mathbf{X}$-space -- preserving genotypic diversity in hub configuration and countering premature convergence.
+\subsection{Genetic Operators}
+
+\textbf{Initialization.} The population of $N$ chromosomes is seeded with randomly generated individuals: $\mathbf{X}$ opens between 1 and $\lfloor 0.6|\mathcal{H}|\rfloor$ hubs uniformly at random, $\mathbf{R}$ is drawn from a discrete set of pre-positioning levels, and $\mathbf{A}$, $\mathbf{W}$ are sampled uniformly.
+
+\textbf{Crossover} ($p_c = 0.9$) applies Uniform Crossover to $\mathbf{X}$ and $\mathbf{A}$, and Simulated Binary Crossover (SBX)~\cite{deb2002fast} to $\mathbf{R}$ and $\mathbf{W}$.
+
+\textbf{Mutation} ($p_m = 1/|\mathbf{C}|$) applies bit-flip to $\mathbf{X}$, random-reset to $\mathbf{A}$, and Polynomial mutation to $\mathbf{R}$ and $\mathbf{W}$.
+
+\textbf{Survival} follows the NSGA-II elitist scheme with constrained dominance~\cite{deb2002fast}: feasible solutions always dominate infeasible ones; among infeasible, lower CV wins. Minimum Hamming distance in $\mathbf{X}$-space serves as a final tiebreaker when crowding distance is tied, preserving diversity in hub configuration.
+
+\textbf{Diversity.} Inspired by adaptive population strategies~\cite{liang2011genetic}, a stagnation counter tracks the rank-1 front across generations. Upon stagnation, $p_m$ is temporarily elevated and tournament size is increased to restore exploration.
 
 % ============================================================
 %  REPLACE YOUR EXISTING \section{Computational Experiments}
