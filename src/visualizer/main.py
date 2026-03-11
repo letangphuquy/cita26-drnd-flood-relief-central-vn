@@ -32,6 +32,7 @@ Usage examples
 """
 import argparse
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -41,9 +42,36 @@ sys.path.insert(0, str(_SRC))
 
 from visualizer.solution_loader import (
     load_instance, load_result, load_results_from_folder,
+    deduplicate_solutions,
 )
 from visualizer.map_renderer import SolutionMapRenderer
 from visualizer.pareto_plot import plot_pareto_comparison
+
+
+def _can_start_tk_gui() -> tuple[bool, str]:
+    """
+    Probe Tk root startup in a child process.
+
+    Some macOS Python/Tk builds abort the interpreter during tk.Tk().
+    Running the probe in a subprocess prevents taking down the main process.
+    """
+    cmd = [
+        sys.executable,
+        "-c",
+        (
+            "import tkinter as tk; "
+            "r=tk.Tk(); r.withdraw(); r.update_idletasks(); r.destroy(); "
+            "print('ok')"
+        ),
+    ]
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    if proc.returncode == 0:
+        return True, ""
+
+    details = (proc.stderr or proc.stdout or "").strip()
+    if not details:
+        details = f"tkinter probe failed with exit code {proc.returncode}"
+    return False, details
 
 
 def _cli_list(result, show_feasible: bool = False):
@@ -124,6 +152,13 @@ def main():
                         help="[CLI] Output file path for image or Pareto plot")
     parser.add_argument("--compare",  action="store_true",
                         help="[CLI] Produce a Pareto comparison plot for --folder")
+    parser.add_argument("--dedup",    action="store_true", default=True,
+                        help="[CLI] Remove duplicate solutions before display/export (default: on)")
+    parser.add_argument("--no-dedup", dest="dedup", action="store_false",
+                        help="[CLI] Disable de-duplication")
+    parser.add_argument("--dedup-mode", default="objective",
+                        choices=["objective", "decision", "exact"],
+                        help="[CLI] De-dup key: objective (Z1,Z2), decision (X), or exact (both)")
 
     args = parser.parse_args()
 
@@ -138,6 +173,18 @@ def main():
             parser.error("--cli requires --file (or --folder with --compare)")
 
         result = load_result(args.file)
+
+        if args.dedup:
+            pf_deduped, pf_removed = deduplicate_solutions(
+                result.pareto_front, mode=args.dedup_mode)
+            feas_deduped, feas_removed = deduplicate_solutions(
+                result.all_feasible, mode=args.dedup_mode)
+            if pf_removed or feas_removed:
+                print(f"[dedup] mode={args.dedup_mode}  "
+                      f"PF: {pf_removed} removed ({len(pf_deduped)} kept)  "
+                      f"all_feasible: {feas_removed} removed ({len(feas_deduped)} kept)")
+            result.pareto_front = pf_deduped
+            result.all_feasible = feas_deduped
 
         if args.list:
             _cli_list(result, show_feasible=args.feasible)
@@ -161,6 +208,14 @@ def main():
         return
 
     # ── GUI mode ──────────────────────────────────────────────────────────
+    ok_gui, gui_err = _can_start_tk_gui()
+    if not ok_gui:
+        print("[error] GUI mode is unavailable in this Python/Tk environment.")
+        print("[hint] Use CLI mode: python -m src.visualizer.main --cli --file <result.json> --list")
+        print("[hint] Or install a Python build with a compatible Tk runtime for your macOS.")
+        print(f"[detail] {gui_err}")
+        sys.exit(1)
+
     import tkinter as tk
     from visualizer.gui.app import VisualizerApp
 

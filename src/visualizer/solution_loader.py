@@ -259,6 +259,44 @@ def merged_pareto_front(results: List[SolverResult]) -> List[Solution]:
     return [s for s, d in zip(all_sols, dominated) if not d]
 
 
+def deduplicate_solutions(
+    solutions: List[Solution],
+    mode: str = "objective",
+    tol: float = 1.0,
+) -> Tuple[List[Solution], int]:
+    """
+    Remove duplicate solutions, preserving the first (best-ranked) occurrence.
+
+    Parameters
+    ----------
+    solutions : list of Solution — should be sorted by rank / crowding first.
+    mode      : 'objective' | 'decision' | 'exact'
+                  objective — same rounded (Z1, Z2) objective pair
+                  decision  — same hub-establishment vector X
+                  exact     — same (Z1, Z2) *and* same X
+    tol       : rounding unit applied to each objective value before comparison
+                (default 1.0 rounds to nearest integer, filtering floating-point
+                noise while keeping numerically different solutions distinct).
+
+    Returns
+    -------
+    (deduped, n_removed)
+    """
+    seen: set = set()
+    result: List[Solution] = []
+    for s in solutions:
+        if mode == "objective":
+            key: object = (round(s.Z1 / tol), round(s.Z2 / tol))
+        elif mode == "decision":
+            key = tuple(s.X)
+        else:  # exact
+            key = (round(s.Z1 / tol), round(s.Z2 / tol), tuple(s.X))
+        if key not in seen:
+            seen.add(key)
+            result.append(s)
+    return result, len(solutions) - len(result)
+
+
 def infer_hub_allocations(solution: Solution, node_info: NodeInfo
                           ) -> List[Tuple[int, int]]:
     """
