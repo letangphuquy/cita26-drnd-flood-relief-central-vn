@@ -78,25 +78,9 @@ IF %ERRORLEVEL% EQU 0 (
     echo [Skip] Greedy run unchanged.
 )
 
-REM ── Step 2b: Recompile + Run BB-Exact baseline ───────────────────────────
+REM ── Step 2b: BB-Exact baseline (disabled) ───────────────────────────────
 echo.
-echo [Step 2b] Compiling and running BB-Exact baseline...
-CALL :ShouldRun "%SOLVER_DIR%\bb_solver.exe" "%SOLVER_DIR%\bb_solver.cpp"
-IF %ERRORLEVEL% EQU 0 (
-    g++ -O3 -std=c++17 "%SOLVER_DIR%\bb_solver.cpp" -o "%SOLVER_DIR%\bb_solver.exe"
-    IF %ERRORLEVEL% NEQ 0 (
-        echo [Error] BB compilation failed.
-        exit /b 1
-    )
-) ELSE (
-    echo [Skip] BB compile unchanged.
-)
-CALL :ShouldRun "%RES1%\cv_small_bb.json" "%SOLVER_DIR%\bb_solver.exe" "%DATA_CV%"
-IF %ERRORLEVEL% EQU 0 (
-    "%SOLVER_DIR%\bb_solver.exe" "%DATA_CV%" --out "%RES1%\cv_small_bb.json" --mode enum --trials 300 --time-limit 180
-) ELSE (
-    echo [Skip] BB run unchanged.
-)
+echo [Step 2b] BB-Exact baseline is disabled (not tracked).
 
 REM ── Step 2c: Recompile + Run VNS-TS baseline ───────────────────────────
 echo.
@@ -149,15 +133,9 @@ IF %ERRORLEVEL% EQU 0 (
     echo [Skip] MILP AWS run unchanged.
 )
 
-REM ── Step 3b: Run MILP Epsilon-Constraint Baseline ────────────────────────
+REM ── Step 3b: MILP Epsilon-Constraint baseline (disabled) ─────────────────
 echo.
-echo [Step 3b] Running MILP Epsilon-Constraint Baseline...
-CALL :ShouldRun "%RES1%\cv_small_milp_eps.json" "%SOLVER_DIR%\milp_epsilon.py" "%DATA_CV%"
-IF %ERRORLEVEL% EQU 0 (
-    "%PYTHON%" "%SOLVER_DIR%\milp_epsilon.py" --instance "%DATA_CV%" --out "%RES1%\cv_small_milp_eps.json" --time_limit 600 --epsilon_steps 20
-) ELSE (
-    echo [Skip] MILP EPS run unchanged.
-)
+echo [Step 3b] MILP EPS baseline is disabled (not tracked).
 
 REM ── Step 4: Run PB-NSGA (Ours) ─────────────────────────────────────────────
 echo.
@@ -186,9 +164,9 @@ IF %ERRORLEVEL% EQU 0 (
 REM ── Step 5: Final Comparison Table ────────────────────────────────────────
 echo.
 echo [Step 5] Generating Comparison Metrics (HV, IGD+)...
-CALL :ShouldRun "%RES1%\cv_small_metrics.csv" "%PROJECT%src\scripts\exp1_evaluate_cv_small.py" "%RES1%\cv_small_pb_nsga.json" "%RES1%\cv_small_bb.json" "%RES1%\cv_small_vns_ts.json" "%RES1%\cv_small_gwo_hd.json" "%RES1%\cv_small_greedy.json" "%RES1%\cv_small_milp_aws.json" "%RES1%\cv_small_milp_eps.json"
+CALL :ShouldRun "%RES1%\cv_small_metrics.csv" "%PROJECT%src\scripts\exp1_evaluate_cv_small.py" "%RES1%\cv_small_pb_nsga.json" "%RES1%\cv_small_vns_ts.json" "%RES1%\cv_small_gwo_hd.json" "%RES1%\cv_small_greedy.json" "%RES1%\cv_small_milp_aws.json"
 IF %ERRORLEVEL% EQU 0 (
-    "%PYTHON%" "%PROJECT%src\scripts\exp1_evaluate_cv_small.py" --results-exp1 "%RES1%" --ours "%RES1%\cv_small_pb_nsga.json" --bb "%RES1%\cv_small_bb.json" --vns-ts "%RES1%\cv_small_vns_ts.json" --gwo-hd "%RES1%\cv_small_gwo_hd.json" --greedy "%RES1%\cv_small_greedy.json" --milp-aws "%RES1%\cv_small_milp_aws.json" --milp-eps "%RES1%\cv_small_milp_eps.json"
+    "%PYTHON%" "%PROJECT%src\scripts\exp1_evaluate_cv_small.py" --results-exp1 "%RES1%" --ours "%RES1%\cv_small_pb_nsga.json" --vns-ts "%RES1%\cv_small_vns_ts.json" --gwo-hd "%RES1%\cv_small_gwo_hd.json" --greedy "%RES1%\cv_small_greedy.json" --milp-aws "%RES1%\cv_small_milp_aws.json"
 ) ELSE (
     echo [Skip] Metrics evaluation unchanged.
 )
@@ -197,7 +175,7 @@ REM ── Step 6: Audit Solver Outputs (optional) ─────────�
 IF "%AUDIT_ON%"=="1" (
     echo.
     echo [Step 6] Auditing output correctness/completeness...
-    "%PYTHON%" "%PROJECT%src\scripts\audit_solution_outputs.py" --instance "%DATA_CV%" --solutions "%RES1%\cv_small_pb_nsga.json" "%RES1%\cv_small_bb.json" "%RES1%\cv_small_vns_ts.json" "%RES1%\cv_small_gwo_hd.json" "%RES1%\cv_small_greedy.json" "%RES1%\cv_small_milp_aws.json" "%RES1%\cv_small_milp_eps.json"
+    "%PYTHON%" "%PROJECT%src\scripts\audit_solution_outputs.py" --instance "%DATA_CV%" --solutions "%RES1%\cv_small_pb_nsga.json" "%RES1%\cv_small_vns_ts.json" "%RES1%\cv_small_gwo_hd.json" "%RES1%\cv_small_greedy.json" "%RES1%\cv_small_milp_aws.json"
 )
 
 echo.
