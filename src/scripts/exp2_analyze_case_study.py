@@ -4,8 +4,12 @@ exp2_analyze_case_study.py — Experiment 2: Case Study Central Vietnam (CV-Larg
 STATUS: Active — called from run_exp2_case_study.bat / run_exp2_case_study.sh
         (Step 2 of 3).
 
-Analyses PB-NSGA results on the CV-Large instance (20 seeds, seeds 0–19).
-Expects solver output files at: results/exp2/cv_large_seed{0..19}.json
+Analyses PB-NSGA results on CV instances and, when available, also
+includes VNS-TS seed results in the metric table.
+
+Expected solver output file patterns under results/exp2/:
+    - PB-NSGA:  cv_<size>_seed{n}.json
+    - VNS-TS:   cv_<size>_vns_ts_seed{n}.json
 
 Outputs (written to results/exp2/ and figures/):
   exp2_metrics.csv              — HV, IGD+ mean±std across 20 seeds
@@ -154,24 +158,32 @@ def _mean_std(vals):
 
 def discover_cv_files(results_dir):
     """
-    Returns {group: [(seed_int, path)]} for CV instances.
-    Recognises: CV_{type}_seed{n}.json
+    Returns {group: {algorithm: [(seed_int, path)]}} for CV instances.
+
+    Recognised file names (case-insensitive):
+      - cv_small_seed0.json              -> PB-NSGA
+      - cv_large_seed12.json             -> PB-NSGA
+      - cv_large_vns_ts_seed4.json       -> VNS-TS
     """
+    import re
+
     groups = {}
+    pat = re.compile(r"^cv_(small|large)(?:_(vns_ts))?_seed(\d+)\.json$", re.IGNORECASE)
+
     for fname in sorted(os.listdir(results_dir)):
-        if not fname.endswith(".json"):
+        m = pat.match(fname)
+        if not m:
             continue
-        base = fname[:-5]
-        if not base.startswith("CV_"):
-            continue
-        parts = base.split("_")
-        if len(parts) == 3 and parts[2].startswith("seed"):
-            grp  = "_".join(parts[:2])       # CV_small or CV_large
-            try:
-                seed = int(parts[2].replace("seed", ""))
-                groups.setdefault(grp, []).append((seed, os.path.join(results_dir, fname)))
-            except ValueError:
-                continue
+
+        size, algo_tag, seed_s = m.groups()
+        group = f"CV_{size.lower()}"
+        algorithm = "VNS-TS" if algo_tag else "PB-NSGA"
+        seed = int(seed_s)
+
+        groups.setdefault(group, {}).setdefault(algorithm, []).append(
+            (seed, os.path.join(results_dir, fname))
+        )
+
     return groups
 
 
@@ -391,77 +403,100 @@ def run(results_dir, out_dir, cv_data_dir=None):
     stability_rows_all = {}
 
     for grp in sorted(cv_groups.keys()):
-        seeds = sorted(cv_groups[grp], key=lambda x: x[0])
-        print(f"\n[{grp}] {len(seeds)} seed files found")
+        algo_seed_map = cv_groups[grp]
 
-        # Load all seeds
-        seed_results = []   # [(seed, pts, meta, pareto_full)]
-        for seed, path in seeds:
-            pts, meta, pareto_full = load_result(path)
-            seed_results.append((seed, pts, meta, pareto_full))
+        print(f"\n[{grp}] discovered algorithms: {', '.join(sorted(algo_seed_map.keys()))}")
 
-        all_runs = [sr[1] for sr in seed_results]
+        combined_for_plot = {}
+        pb_seed_results = None
+        pb_hv_list = None
+        pb_seeds = None
 
-        # Global normalisation
-        _, bounds = normalize_points(all_runs)
-        norm_runs, _ = normalize_points(all_runs, bounds=bounds)
+        for algorithm in sorted(algo_seed_map.keys()):
+            seeds = sorted(algo_seed_map[algorithm], key=lambda x: x[0])
+            print(f"  - {algorithm}: {len(seeds)} seed files")
 
-        # Reference front: combined non-dominated front across all seeds
-        combined  = dominant_pareto(all_runs)
-        ref_norm, _ = normalize_points([combined], bounds=bounds)
-        reference_norm = ref_norm[0] if ref_norm else []
-        ref_pt = (1.1, 1.1)
+            # Load all seeds for this algorithm
+            seed_results = []   # [(seed, pts, meta, pareto_full)]
+            for seed, path in seeds:
+                pts, meta, pareto_full = load_result(path)
+                seed_results.append((seed, pts, meta, pareto_full))
 
-        # Per-seed metrics
-        hv_list, igd_list, sz_list, rt_list, cpu_list = [], [], [], [], []
-        for pts, norm_pts, sr_tuple in zip(all_runs, norm_runs, seed_results):
-            meta = sr_tuple[2]  # (seed, pts, meta, pareto_full)
-            hv_list.append(hypervolume_2d(norm_pts, ref_pt))
-            igd_list.append(igd_plus(norm_pts, reference_norm))
-            sz_list.append(len(pts))
-            for k in ("runtime_s", "elapsed_s"):
-                if k in meta:
-                    rt_list.append(float(meta[k]))
-                    break
-            if "cpu_time_s" in meta:
-                cpu_list.append(float(meta["cpu_time_s"]))
+            all_runs = [sr[1] for sr in seed_results]
 
-        hv_m,  hv_s  = _mean_std(hv_list)
-        igd_m, igd_s = _mean_std(igd_list)
-        sz_m,  sz_s  = _mean_std([float(s) for s in sz_list])
-        rt_m,  rt_s  = _mean_std(rt_list)
-        cpu_m, cpu_s = _mean_std(cpu_list)
-        
-        print(f"  HV={hv_m:.4f}±{hv_s:.4f}  IGD+={igd_m:.4f}±{igd_s:.4f}  "
-              f"front_size={sz_m:.1f}±{sz_s:.1f}"
-              + (f"  rt={rt_m:.1f}s" if rt_list else "")
-              + (f"  cpu={cpu_m:.1f}s" if cpu_list else ""))
+            # Global normalisation (algorithm-specific)
+            _, bounds = normalize_points(all_runs)
+            norm_runs, _ = normalize_points(all_runs, bounds=bounds)
 
-        metrics_rows.append({
-            "instance":        grp,
-            "algorithm":       "PB-NSGA",
-            "n_runs":          len(seeds),
-            "pareto_combined": len(combined),
-            "pareto_mean":     f"{sz_m:.1f}",
-            "pareto_std":      f"{sz_s:.1f}",
-            "HV_mean":         f"{hv_m:.6f}",
-            "HV_std":          f"{hv_s:.6f}",
-            "IGDplus_mean":    f"{igd_m:.6f}",
-            "IGDplus_std":     f"{igd_s:.6f}",
-            "runtime_s_mean":  f"{rt_m:.4f}" if rt_list else "N/A",
-            "runtime_s_std":   f"{rt_s:.4f}" if rt_list else "N/A",
-            "cpu_time_s_mean": f"{cpu_m:.4f}" if cpu_list else "N/A",
-            "cpu_time_s_std":  f"{cpu_s:.4f}" if cpu_list else "N/A",
-        })
+            # Reference front: combined non-dominated front across all seeds
+            combined = dominant_pareto(all_runs)
+            ref_norm, _ = normalize_points([combined], bounds=bounds)
+            reference_norm = ref_norm[0] if ref_norm else []
+            ref_pt = (1.1, 1.1)
 
-        # Pareto plot (combined front across seeds)
+            # Per-seed metrics
+            hv_list, igd_list, sz_list, rt_list, cpu_list = [], [], [], [], []
+            for pts, norm_pts, sr_tuple in zip(all_runs, norm_runs, seed_results):
+                meta = sr_tuple[2]  # (seed, pts, meta, pareto_full)
+                hv_list.append(hypervolume_2d(norm_pts, ref_pt))
+                igd_list.append(igd_plus(norm_pts, reference_norm))
+                sz_list.append(len(pts))
+                for k in ("runtime_s", "elapsed_s"):
+                    if k in meta:
+                        rt_list.append(float(meta[k]))
+                        break
+                if "cpu_time_s" in meta:
+                    cpu_list.append(float(meta["cpu_time_s"]))
+
+            hv_m, hv_s = _mean_std(hv_list)
+            igd_m, igd_s = _mean_std(igd_list)
+            sz_m, sz_s = _mean_std([float(s) for s in sz_list])
+            rt_m, rt_s = _mean_std(rt_list)
+            cpu_m, cpu_s = _mean_std(cpu_list)
+
+            print(f"    HV={hv_m:.4f}±{hv_s:.4f}  IGD+={igd_m:.4f}±{igd_s:.4f}  "
+                  f"front_size={sz_m:.1f}±{sz_s:.1f}"
+                  + (f"  rt={rt_m:.1f}s" if rt_list else "")
+                  + (f"  cpu={cpu_m:.1f}s" if cpu_list else ""))
+
+            metrics_rows.append({
+                "instance":        grp,
+                "algorithm":       algorithm,
+                "n_runs":          len(seeds),
+                "pareto_combined": len(combined),
+                "pareto_mean":     f"{sz_m:.1f}",
+                "pareto_std":      f"{sz_s:.1f}",
+                "HV_mean":         f"{hv_m:.6f}",
+                "HV_std":          f"{hv_s:.6f}",
+                "IGDplus_mean":    f"{igd_m:.6f}",
+                "IGDplus_std":     f"{igd_s:.6f}",
+                "runtime_s_mean":  f"{rt_m:.4f}" if rt_list else "N/A",
+                "runtime_s_std":   f"{rt_s:.4f}" if rt_list else "N/A",
+                "cpu_time_s_mean": f"{cpu_m:.4f}" if cpu_list else "N/A",
+                "cpu_time_s_std":  f"{cpu_s:.4f}" if cpu_list else "N/A",
+            })
+
+            combined_for_plot[f"{algorithm} (combined)"] = combined
+
+            # Keep PB-NSGA seed context for legacy sensitivity/map outputs.
+            if algorithm == "PB-NSGA":
+                pb_seed_results = seed_results
+                pb_hv_list = hv_list
+                pb_seeds = seeds
+
+        # Pareto plot: include all discovered algorithms for this instance
+        total_runs = sum(len(algo_seed_map[a]) for a in algo_seed_map)
         plot_pareto(
-            {"PB-NSGA (combined)": combined},
+            combined_for_plot,
             os.path.join(fig_dir, f"{grp}_pareto.pdf"),
-            title=f"Pareto Front — {grp.replace('_', ' ').title()} ({len(seeds)} seeds)"
+            title=f"Pareto Front — {grp.replace('_', ' ').title()} ({total_runs} runs)"
         )
 
-        # Sensitivity and stability analysis (requires instance file)
+        # Sensitivity and stability analysis (PB-NSGA only, requires instance file)
+        if pb_seed_results is None:
+            print("  [Skip sensitivity] PB-NSGA seeds not found for this instance")
+            continue
+
         inst_name   = "cv_small_drnd.json" if "small" in grp else "cv_large_drnd.json"
         inst_path   = os.path.join(cv_data_dir, inst_name)
         if not os.path.isfile(inst_path):
@@ -471,7 +506,7 @@ def run(results_dir, out_dir, cv_data_dir=None):
         inst = load_instance(inst_path)
 
         # Hub stability
-        stab = hub_stability(seed_results, inst)
+        stab = hub_stability(pb_seed_results, inst)
         stability_rows_all[grp] = stab
         for r in stab:
             r["instance"] = grp
@@ -490,8 +525,8 @@ def run(results_dir, out_dir, cv_data_dir=None):
         )
 
         # Map visualisation: pick seed with highest HV for representative plot
-        best_seed_idx = hv_list.index(max(hv_list))
-        best_seed, best_path = seeds[best_seed_idx]
+        best_seed_idx = pb_hv_list.index(max(pb_hv_list))
+        best_seed, best_path = pb_seeds[best_seed_idx]
         map_out = os.path.join(maps_dir, f"{grp}_solution_map.pdf")
         _call_map_solution(inst_path, best_path, map_out)
 
