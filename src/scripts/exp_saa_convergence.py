@@ -3,11 +3,19 @@ exp_saa_convergence.py
 ======================
 SAA scenario-count sensitivity analysis for MO-IHLNDP (CV-Small).
 
-For N in {3, 5, 8, 10, 15, 20, 30}:
-  1. Generate a CV-Small-scale SAA instance with N balanced scenarios
-     (same node pool, hub capacities, and transport matrix as cv_small_drnd.json)
-  2. Solve to optimality with bb_solver --mode enum (|H|=5 → 32 configs)
-  3. Extract knee-point Z1/Z2 and Pareto HV (normalised against N=30 reference)
+Design: replication-based convergence.
+  1. Build shared base infrastructure (same geography/hub-params as cv_small_drnd.json).
+  2. Generate a master scenario pool of MAX_POOL=50 balanced scenarios once
+     (round-robin from 10 profiles → 5 reps each → equal mild/severe/extreme
+     coverage). Fixed seed ensures reproducibility.
+  3. For each N in N_VALUES, run K_REPS replications:
+       - Randomly sub-sample N scenarios from the master pool (without replacement).
+       - Build instance, solve to optimality via bb_solver --mode enum (|H|=5 → 32 configs).
+       - Record knee-point Z1/Z2 and Pareto HV.
+  4. Plot mean ± std across K_REPS for each N → shows stabilisation.
+
+As N grows, the sample average converges to the pool mean, variance shrinks,
+and the optimal decision stabilises — demonstrating SAA sufficiency.
 
 Outputs:
   results/saa_convergence/convergence_summary.csv
@@ -15,332 +23,319 @@ Outputs:
 
 Usage:
   cd <repo_root>
-  python src/scripts/exp_saa_convergence.py [--skip-solve]
+  python3 src/scripts/exp_saa_convergence.py [--skip-solve]
 """
 
 import argparse
+import copy
+import csv
 import json
-import math
 import os
 import random
 import subprocess
 import sys
-import csv
 
-# ── repo root & path helpers ──────────────────────────────────────────────────
-REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+# ── repo root & paths ─────────────────────────────────────────────────────────
+REPO_ROOT   = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 SCRIPTS_DIR = os.path.join(REPO_ROOT, "src", "scripts")
 SOLVER_DIR  = os.path.join(REPO_ROOT, "src", "solver")
 DATA_DIR    = os.path.join(REPO_ROOT, "data", "prep", "saa_convergence")
 RESULTS_DIR = os.path.join(REPO_ROOT, "results", "saa_convergence")
 FIGURES_DIR = os.path.join(REPO_ROOT, "figures")
 
-os.makedirs(DATA_DIR,    exist_ok=True)
-os.makedirs(RESULTS_DIR, exist_ok=True)
-os.makedirs(FIGURES_DIR, exist_ok=True)
+for d in (DATA_DIR, RESULTS_DIR, FIGURES_DIR):
+    os.makedirs(d, exist_ok=True)
 
 sys.path.insert(0, SCRIPTS_DIR)
 from data_generate_saa_oos import generate_saa_scenarios
 from data_generate_cv import (
     DEMAND_NODES, HUB_NODES, ORIGIN_NODES, NUM_MODES, GAMMA, ALPHA, CHI,
-    LAMBDA0, DAGANZO_ETA, DAGANZO_C_LOC, BIG_M,
+    LAMBDA0, DAGANZO_ETA, BIG_M,
     compute_aux_risk, risk_interval, build_transport, compute_theta, terrain_factor,
+    generate_scenarios as _cv_orig_scenarios,
 )
 
-# ── experiment config ─────────────────────────────────────────────────────────
-N_VALUES    = [3, 5, 8, 10, 15, 20, 30]
-CV_SMALL    = dict(n_I=20, n_H=5, n_J=2)
-BB_SOLVER   = os.path.join(SOLVER_DIR, "bb_solver")
-BB_TRIALS   = 300   # sub-problem trials per leaf (H=5 → fast)
-BB_TIMELIMIT = 120  # seconds — more than enough for |H|=5
+# ── config ────────────────────────────────────────────────────────────────────
+N_VALUES  = [3, 5, 8, 10, 15, 20, 30]
+MAX_POOL  = 50        # master pool (50 = 5 reps × 10 profiles → balanced)
+K_REPS    = 10        # replications per N (random sub-samples from pool)
+POOL_SEED = 31415     # fixed seed for master pool generation
+CV_SMALL  = dict(n_I=20, n_H=5, n_J=2)
+
+BB_SOLVER    = os.path.join(SOLVER_DIR, "bb_solver")
+BB_TRIALS    = 400
+BB_TIMELIMIT = 120    # seconds
 
 
-# ── instance builder ──────────────────────────────────────────────────────────
+# ── shared base infrastructure ────────────────────────────────────────────────
 
-def build_cv_small_saa(num_scenarios: int, seed: int = 2026) -> dict:
-    """Build a CV-Small instance with `num_scenarios` balanced SAA scenarios.
-
-    Node pool, transport matrix, hub capacities, and base population are taken
-    directly from the original cv_small_drnd.json geometry so the instances are
-    directly comparable to the Exp-1 baseline.
-    """
-    n_I = CV_SMALL["n_I"]
-    n_H = CV_SMALL["n_H"]
-    n_J = CV_SMALL["n_J"]
-
-    demand_pool = DEMAND_NODES[:n_I]
-    hub_pool    = HUB_NODES[:n_H]
-    origin_pool = ORIGIN_NODES[:n_J]
-    all_nodes   = demand_pool + hub_pool + origin_pool
-    n_total     = len(all_nodes)
-    coords      = [(lat, lon) for lat, lon, _ in all_nodes]
-    names       = [nm for _, _, nm in all_nodes]
-
+def build_base() -> dict:
+    """Construct shared geographic & cost infrastructure for CV-Small (seed=2026)."""
+    n_I, n_H, n_J = CV_SMALL["n_I"], CV_SMALL["n_H"], CV_SMALL["n_J"]
+    all_nodes  = DEMAND_NODES[:n_I] + HUB_NODES[:n_H] + ORIGIN_NODES[:n_J]
+    coords     = [(lat, lon) for lat, lon, _ in all_nodes]
+    names      = [nm for _, _, nm in all_nodes]
     demand_idx = list(range(n_I))
     hub_idx    = list(range(n_I, n_I + n_H))
-    origin_idx = list(range(n_I + n_H, n_total))
+    origin_idx = list(range(n_I + n_H, len(all_nodes)))
 
     aux_risk    = [compute_aux_risk(lat, lon) for lat, lon in coords]
     r_intervals = [risk_interval(r) for r in aux_risk]
 
-    # Deterministic population matching the original cv_small generation seed
     random.seed(2026)
     base_pop = {}
     for i in demand_idx:
         lat, lon = coords[i]
-        coast_f  = max(0.15, 1.0 - abs(lon - 108.2) / 1.6)
+        coast_f = max(0.15, 1.0 - abs(lon - 108.2) / 1.6)
         pop_base = int(500 + 6500 * coast_f)
-        noise    = int(random.gauss(0, 0.12 * pop_base))
-        base_pop[i] = max(100, pop_base + noise)
+        base_pop[i] = max(100, pop_base + int(random.gauss(0, 0.12 * pop_base)))
 
-    area_km2 = {}
-    for i in demand_idx:
-        _, lon = coords[i]
-        tf = terrain_factor(lon)
-        area_km2[str(i)] = round(random.uniform(8.0, 18.0) * tf, 2)
+    area_km2 = {str(i): round(random.uniform(8.0, 18.0) * terrain_factor(coords[i][1]), 2)
+                for i in demand_idx}
 
     C_all, T_all = build_transport(coords)
 
-    # Hub capacities: replicate cv_small generation (seed 2026, same logic)
-    # We use the 3-scenario original demand to set capacity, then swap scenarios.
-    from data_generate_cv import generate_scenarios as _orig_scenarios
-    random.seed(2026)
-    orig_scens     = _orig_scenarios(coords, aux_risk, r_intervals,
-                                     demand_idx, hub_idx, origin_idx, base_pop)
-    max_demand_kg  = max(
-        GAMMA * sum(float(v) for v in sc["demand"].values())
-        for sc in orig_scens
-    )
-    hub_capacity   = {}
-    hub_fixed_cost = {}
-    hub_hold_cost  = {}
+    orig_scens    = _cv_orig_scenarios(coords, aux_risk, r_intervals,
+                                       demand_idx, hub_idx, origin_idx, base_pop)
+    max_dem_kg    = max(GAMMA * sum(float(v) for v in sc["demand"].values())
+                        for sc in orig_scens)
+    hub_params = {"capacity": {}, "fixed_cost": {}, "hold_cost": {}}
     for k in hub_idx:
-        _, lon = coords[k]
-        tf = terrain_factor(lon)
-        hub_capacity[str(k)]   = int(max_demand_kg / n_H * random.uniform(3.0, 6.0) * tf)
-        hub_fixed_cost[str(k)] = round(random.uniform(60000, 200000) * tf, 2)
-        hub_hold_cost[str(k)]  = round(random.uniform(0.2, 0.8), 4)
+        tf = terrain_factor(coords[k][1])
+        hub_params["capacity"][str(k)]   = int(max_dem_kg / n_H * random.uniform(3.0, 6.0) * tf)
+        hub_params["fixed_cost"][str(k)] = round(random.uniform(60000, 200000) * tf, 2)
+        hub_params["hold_cost"][str(k)]  = round(random.uniform(0.2, 0.8), 4)
 
-    # Generate N SAA scenarios (independent seed so different from hub-cap seed)
-    random.seed(seed + 101 + num_scenarios)
-    scenarios = generate_saa_scenarios(
-        coords, aux_risk, r_intervals,
-        demand_idx, hub_idx, origin_idx, base_pop,
-        num_scenarios=num_scenarios,
+    return dict(n_I=n_I, n_H=n_H, n_J=n_J,
+                demand_idx=demand_idx, hub_idx=hub_idx, origin_idx=origin_idx,
+                coords=coords, names=names,
+                aux_risk=aux_risk, r_intervals=r_intervals,
+                base_pop=base_pop, area_km2=area_km2,
+                C_all=C_all, T_all=T_all, hub_params=hub_params)
+
+
+def build_master_pool(base: dict) -> list:
+    """Generate MAX_POOL balanced scenarios (round-robin × 10 profiles, fixed seed)."""
+    random.seed(POOL_SEED)
+    return generate_saa_scenarios(
+        base["coords"], base["aux_risk"], base["r_intervals"],
+        base["demand_idx"], base["hub_idx"], base["origin_idx"],
+        base["base_pop"], num_scenarios=MAX_POOL,
     )
 
-    Theta  = compute_theta(C_all, hub_idx, demand_idx, scenarios, area_km2)
-    Lambda = {}
-    for si, sc in enumerate(scenarios):
-        for i in demand_idx:
-            Lambda[f"{i}_{si}"] = round(LAMBDA0 * (1.0 + sc["risk"][i]), 4)
+
+# ── instance builder ──────────────────────────────────────────────────────────
+
+def make_instance(base: dict, scenarios: list) -> dict:
+    N    = len(scenarios)
+    scens = copy.deepcopy(scenarios)
+    for sc in scens:
+        sc["probability"] = 1.0 / N
+
+    Theta  = compute_theta(base["C_all"], base["hub_idx"],
+                           base["demand_idx"], scens, base["area_km2"])
+    Lambda = {f"{i}_{si}": round(LAMBDA0 * (1.0 + sc["risk"][i]), 4)
+              for si, sc in enumerate(scens)
+              for i in base["demand_idx"]}
 
     return {
-        "meta": {
-            "name": f"CentralVietnam_SMALL_SAA{num_scenarios}",
-            "description": "CV-Small SAA convergence instance",
-            "seed": seed,
-            "size": "small",
-            "num_scenarios": num_scenarios,
-        },
-        "dimensions": {
-            "num_I": n_I, "num_H": n_H, "num_J": n_J,
-            "num_S": num_scenarios, "num_M": NUM_MODES,
-        },
+        "meta":       {"name": f"CV_SMALL_SAA{N}", "num_scenarios": N},
+        "dimensions": {"num_I": base["n_I"], "num_H": base["n_H"],
+                       "num_J": base["n_J"], "num_S": N, "num_M": NUM_MODES},
         "nodes": {
-            "coords":         [[lat, lon] for lat, lon in coords],
-            "names":          names,
-            "demand_indices": demand_idx,
-            "hub_indices":    hub_idx,
-            "origin_indices": origin_idx,
-            "aux_risk":       aux_risk,
-            "risk_intervals": [[r[0], r[1]] for r in r_intervals],
+            "coords":         [[lat, lon] for lat, lon in base["coords"]],
+            "names":          base["names"],
+            "demand_indices": base["demand_idx"],
+            "hub_indices":    base["hub_idx"],
+            "origin_indices": base["origin_idx"],
+            "aux_risk":       base["aux_risk"],
+            "risk_intervals": [[r[0], r[1]] for r in base["r_intervals"]],
         },
-        "global_params": {
-            "alpha": ALPHA, "chi": CHI, "gamma": GAMMA,
-            "big_M": BIG_M, "daganzo_phi": 0.57, "daganzo_eta": DAGANZO_ETA,
-        },
-        "hub_params": {
-            "capacity":   hub_capacity,
-            "fixed_cost": hub_fixed_cost,
-            "hold_cost":  hub_hold_cost,
-        },
-        "base_population": {str(i): base_pop[i] for i in demand_idx},
-        "area_km2":  area_km2,
-        "transport": {"cost": C_all, "time": T_all},
-        "scenarios": scenarios,
-        "theta":     Theta,
-        "lambda":    Lambda,
+        "global_params": {"alpha": ALPHA, "chi": CHI, "gamma": GAMMA,
+                          "big_M": BIG_M, "daganzo_phi": 0.57,
+                          "daganzo_eta": DAGANZO_ETA},
+        "hub_params":      base["hub_params"],
+        "base_population": {str(i): base["base_pop"][i] for i in base["demand_idx"]},
+        "area_km2":        base["area_km2"],
+        "transport":       {"cost": base["C_all"], "time": base["T_all"]},
+        "scenarios":       scens,
+        "theta":           Theta,
+        "lambda":          Lambda,
     }
 
 
-# ── Pareto metric helpers ─────────────────────────────────────────────────────
+# ── solver wrapper ────────────────────────────────────────────────────────────
 
-def _knee_point(front: list[dict]) -> dict:
-    """Return the Pareto solution minimising normalised Chebyshev distance to ideal."""
+def solve(inst_path: str, out_path: str) -> bool:
+    cmd = [BB_SOLVER, inst_path,
+           "--out", out_path,
+           "--mode", "enum",
+           "--trials", str(BB_TRIALS),
+           "--time-limit", str(BB_TIMELIMIT)]
+    p = subprocess.run(cmd, capture_output=True, text=True)
+    return p.returncode == 0
+
+
+# ── metrics ───────────────────────────────────────────────────────────────────
+
+def knee_point(front: list) -> dict:
     z1s = [s["Z1"] for s in front]
     z2s = [s["Z2"] for s in front]
-    z1_min, z1_max = min(z1s), max(z1s)
-    z2_min, z2_max = min(z2s), max(z2s)
-    rng1 = z1_max - z1_min or 1.0
-    rng2 = z2_max - z2_min or 1.0
-
-    best, best_d = None, float("inf")
+    r1 = (max(z1s) - min(z1s)) or 1.0
+    r2 = (max(z2s) - min(z2s)) or 1.0
+    best, bd = None, float("inf")
     for s in front:
-        d = max((s["Z1"] - z1_min) / rng1, (s["Z2"] - z2_min) / rng2)
-        if d < best_d:
-            best_d, best = d, s
+        d = max((s["Z1"] - min(z1s)) / r1, (s["Z2"] - min(z2s)) / r2)
+        if d < bd:
+            bd, best = d, s
     return best
 
 
-def _hypervolume_2d(front: list[dict], ref: tuple) -> float:
-    """2-D hypervolume dominated by `front` w.r.t. reference point `ref`."""
-    pts = sorted([(s["Z1"], s["Z2"]) for s in front], key=lambda p: p[0])
-    hv = 0.0
-    prev_z2 = ref[1]
+def hypervolume_2d(front: list, ref: tuple) -> float:
+    pts = sorted([(s["Z1"], s["Z2"]) for s in front
+                  if s["Z1"] < ref[0] and s["Z2"] < ref[1]], key=lambda p: p[0])
+    hv, prev = 0.0, ref[1]
     for z1, z2 in pts:
-        if z1 < ref[0] and z2 < ref[1]:
-            hv += (ref[0] - z1) * (prev_z2 - z2)
-            prev_z2 = z2
+        hv += (ref[0] - z1) * (prev - z2)
+        prev = z2
     return hv
 
 
 # ── main pipeline ─────────────────────────────────────────────────────────────
 
-def generate_instances():
-    paths = {}
+def run_all(base: dict, pool: list, skip_solve: bool) -> list:
+    """Run K_REPS replications for each N; return list of per-run metric dicts."""
+    rng = random.Random(POOL_SEED + 1)   # separate RNG for sub-sampling
+    all_runs = []
+
     for N in N_VALUES:
-        out = os.path.join(DATA_DIR, f"cv_small_saa{N}.json")
-        if os.path.exists(out):
-            print(f"  [skip] {out} already exists")
-        else:
-            print(f"  Generating N={N} ...", end=" ", flush=True)
-            inst = build_cv_small_saa(N)
-            with open(out, "w", encoding="utf-8") as f:
-                json.dump(inst, f, separators=(",", ":"))
-            print("done")
-        paths[N] = out
-    return paths
+        print(f"  N={N:2d}: ", end="", flush=True)
+        for rep in range(K_REPS):
+            label = f"N{N}_rep{rep}"
+            inst_path = os.path.join(DATA_DIR,    f"{label}.json")
+            out_path  = os.path.join(RESULTS_DIR, f"{label}_bb.json")
+
+            # sub-sample N from the pool
+            subset = rng.sample(pool, N)
+
+            if not os.path.exists(inst_path):
+                inst = make_instance(base, subset)
+                with open(inst_path, "w") as f:
+                    json.dump(inst, f, separators=(",", ":"))
+
+            if not (skip_solve or os.path.exists(out_path)):
+                ok = solve(inst_path, out_path)
+                if not ok:
+                    print(f"[ERR rep{rep}] ", end="", flush=True)
+                    continue
+
+            if os.path.exists(out_path):
+                front = json.load(open(out_path)).get("pareto_front", [])
+                if front:
+                    k = knee_point(front)
+                    all_runs.append({"N": N, "rep": rep,
+                                     "Z1": k["Z1"], "Z2": k["Z2"],
+                                     "pareto_size": len(front),
+                                     "front": front})
+            print(".", end="", flush=True)
+        print()
+
+    return all_runs
 
 
-def solve_instances(paths: dict, skip: bool = False) -> dict:
-    results = {}
-    for N, inst_path in paths.items():
-        out_path = os.path.join(RESULTS_DIR, f"saa{N}_bb.json")
-        if skip or os.path.exists(out_path):
-            print(f"  [skip] solver for N={N}")
-        else:
-            print(f"  Solving N={N} (enum, H=5) ...", end=" ", flush=True)
-            cmd = [
-                BB_SOLVER, inst_path,
-                "--out", out_path,
-                "--mode", "enum",
-                "--trials", str(BB_TRIALS),
-                "--time-limit", str(BB_TIMELIMIT),
-            ]
-            proc = subprocess.run(cmd, capture_output=True, text=True)
-            if proc.returncode != 0:
-                print(f"ERROR\n{proc.stderr[:400]}")
-                continue
-            elapsed = json.loads(open(out_path).read()).get("meta", {}).get("elapsed_s", "?")
-            print(f"done ({elapsed:.1f}s)" if isinstance(elapsed, float) else "done")
-        results[N] = out_path
-    return results
+def aggregate(all_runs: list) -> list:
+    """Aggregate per-run records into per-N mean ± std rows."""
+    import statistics
 
-
-def collect_metrics(result_paths: dict) -> list[dict]:
-    # Use N=30 Pareto front as reference for HV normalisation
-    ref_path = result_paths.get(30)
-    ref_front = []
-    if ref_path and os.path.exists(ref_path):
-        with open(ref_path) as f:
-            ref_front = json.load(f).get("pareto_front", [])
-
-    # Reference point: 110% of the worst values across all fronts
-    all_z1, all_z2 = [], []
-    for N, path in result_paths.items():
-        if not os.path.exists(path):
-            continue
-        front = json.load(open(path)).get("pareto_front", [])
-        all_z1 += [s["Z1"] for s in front]
-        all_z2 += [s["Z2"] for s in front]
+    # Global reference point for HV (110 % of worst across all runs)
+    all_z1 = [r["Z1"] for r in all_runs]
+    all_z2 = [r["Z2"] for r in all_runs]
     ref_pt = (max(all_z1) * 1.1, max(all_z2) * 1.1) if all_z1 else (1e12, 1e12)
-    hv_ref = _hypervolume_2d(ref_front, ref_pt) if ref_front else 1.0
+
+    # Normalise HV by the mean HV at the largest N
+    max_N  = max(N_VALUES)
+    hvs_at_max = [hypervolume_2d(r["front"], ref_pt)
+                  for r in all_runs if r["N"] == max_N]
+    hv_ref = statistics.mean(hvs_at_max) if hvs_at_max else 1.0
 
     rows = []
     for N in N_VALUES:
-        path = result_paths.get(N)
-        if not path or not os.path.exists(path):
+        runs_N = [r for r in all_runs if r["N"] == N]
+        if not runs_N:
             continue
-        front = json.load(open(path)).get("pareto_front", [])
-        if not front:
-            continue
-        knee   = _knee_point(front)
-        hv_raw = _hypervolume_2d(front, ref_pt)
+        z1_vals = [r["Z1"] / 1e6 for r in runs_N]   # millions
+        z2_vals = [r["Z2"] / 1e3 for r in runs_N]   # thousands
+        hv_vals = [hypervolume_2d(r["front"], ref_pt) / hv_ref for r in runs_N]
+
+        def _s(vals):
+            return statistics.stdev(vals) if len(vals) > 1 else 0.0
+
         rows.append({
             "N":        N,
-            "Z1_knee":  knee["Z1"],
-            "Z2_knee":  knee["Z2"],
-            "HV_raw":   hv_raw,
-            "HV_norm":  hv_raw / hv_ref if hv_ref else 0.0,
-            "pareto_size": len(front),
+            "reps":     len(runs_N),
+            "Z1_mean":  statistics.mean(z1_vals),
+            "Z1_std":   _s(z1_vals),
+            "Z2_mean":  statistics.mean(z2_vals),
+            "Z2_std":   _s(z2_vals),
+            "HV_mean":  statistics.mean(hv_vals),
+            "HV_std":   _s(hv_vals),
         })
     return rows
 
 
-def save_csv(rows: list[dict]):
+def save_csv(rows: list):
     path = os.path.join(RESULTS_DIR, "convergence_summary.csv")
+    fields = ["N","reps","Z1_mean","Z1_std","Z2_mean","Z2_std","HV_mean","HV_std"]
     with open(path, "w", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=["N","Z1_knee","Z2_knee","HV_raw","HV_norm","pareto_size"])
+        w = csv.DictWriter(f, fieldnames=fields)
         w.writeheader()
         w.writerows(rows)
     print(f"  Saved: {path}")
-    return path
 
 
-def plot_convergence(rows: list[dict]):
+def plot_convergence(rows: list):
     try:
         import matplotlib
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
-        import matplotlib.ticker as ticker
+        import matplotlib.ticker as mticker
     except ImportError:
-        print("  [warn] matplotlib not installed — skipping plot")
+        print("  [warn] matplotlib not available — skipping plot")
         return
 
-    Ns       = [r["N"] for r in rows]
-    Z1s      = [r["Z1_knee"] / 1e6 for r in rows]   # millions
-    Z2s      = [r["Z2_knee"] / 1e3 for r in rows]   # thousands
-    HVs      = [r["HV_norm"] for r in rows]
+    Ns   = [r["N"] for r in rows]
+    Z2_m = [r["Z2_mean"] for r in rows]
+    Z2_s = [r["Z2_std"]  for r in rows]
+    HV_m = [r["HV_mean"] for r in rows]
+    HV_s = [r["HV_std"]  for r in rows]
 
-    fig, axes = plt.subplots(1, 3, figsize=(10, 3.0))
-    fig.subplots_adjust(wspace=0.38)
+    fig, axes = plt.subplots(1, 2, figsize=(6.5, 2.8))
+    fig.subplots_adjust(wspace=0.44)
+    blue, red = "#2166ac", "#d6604d"
 
-    style = dict(marker="o", markersize=5, linewidth=1.5, color="#2166ac")
-
-    axes[0].plot(Ns, Z1s, **style)
-    axes[0].set_xlabel("Number of scenarios $N$")
-    axes[0].set_ylabel("Knee-point $Z_1$ (M\$)")
-    axes[0].set_title("Expected logistics cost")
-    axes[0].xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
-
-    axes[1].plot(Ns, Z2s, **style)
-    axes[1].set_xlabel("Number of scenarios $N$")
-    axes[1].set_ylabel("Knee-point $Z_2$ (k\$)")
-    axes[1].set_title("Expected deprivation cost")
-    axes[1].xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
-
-    axes[2].plot(Ns, HVs, marker="s", markersize=5, linewidth=1.5, color="#d6604d")
-    axes[2].set_xlabel("Number of scenarios $N$")
-    axes[2].set_ylabel("Normalised HV")
-    axes[2].set_title("Pareto front quality (HV)")
-    axes[2].set_ylim(0, 1.05)
-    axes[2].xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
-
-    for ax in axes:
+    def _panel(ax, ys, errs, color, ylabel, title, ylim=None):
+        ax.plot(Ns, ys, marker="o", markersize=4.5, linewidth=1.5, color=color)
+        lo = [max(0, y - e) for y, e in zip(ys, errs)]
+        hi = [y + e for y, e in zip(ys, errs)]
+        ax.fill_between(Ns, lo, hi, alpha=0.18, color=color)
+        ax.set_xlabel(r"No. of scenarios $|S|$", fontsize=9)
+        ax.set_ylabel(ylabel, fontsize=9)
+        ax.set_title(title, fontsize=9)
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
-        ax.grid(axis="y", linestyle="--", alpha=0.4)
+        ax.grid(axis="y", linestyle="--", alpha=0.35)
+        ax.tick_params(labelsize=8)
+        ax.xaxis.set_major_locator(mticker.FixedLocator(Ns))
+        if ylim:
+            ax.set_ylim(*ylim)
+
+    _panel(axes[0], Z2_m, Z2_s, blue,
+           r"Expected deprivation $Z_2$ (k\$)",
+           r"Deprivation cost stability ($Z_2$)")
+    _panel(axes[1], HV_m, HV_s, red,
+           "Normalised HV",
+           "Pareto front quality (HV)",
+           ylim=(0.3, 1.45))
 
     out = os.path.join(FIGURES_DIR, "saa_convergence.pdf")
     fig.savefig(out, bbox_inches="tight")
@@ -348,30 +343,37 @@ def plot_convergence(rows: list[dict]):
     print(f"  Saved: {out}")
 
 
+# ── entry point ───────────────────────────────────────────────────────────────
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--skip-solve", action="store_true",
-                        help="Skip bb_solver calls, reuse existing result JSONs")
+    parser.add_argument("--skip-solve", action="store_true")
     args = parser.parse_args()
 
-    print("\n=== Step 1: Generate SAA instances ===")
-    inst_paths = generate_instances()
+    print("\n=== Build shared base (CV-Small geometry, seed=2026) ===")
+    base = build_base()
+    print(f"  |I|={base['n_I']}  |H|={base['n_H']}  |J|={base['n_J']}")
 
-    print("\n=== Step 2: Solve with bb_solver (enum mode) ===")
-    result_paths = solve_instances(inst_paths, skip=args.skip_solve)
+    print(f"\n=== Generate master pool (N={MAX_POOL}, seed={POOL_SEED}) ===")
+    pool = build_master_pool(base)
+    print(f"  {len(pool)} scenarios ready (10-profile round-robin, balanced mild/severe/extreme)")
 
-    print("\n=== Step 3: Collect metrics ===")
-    rows = collect_metrics(result_paths)
-    for r in rows:
-        print(f"  N={r['N']:2d}  Z1={r['Z1_knee']/1e6:.3f}M  "
-              f"Z2={r['Z2_knee']/1e3:.1f}k  HV={r['HV_norm']:.3f}  "
-              f"|front|={r['pareto_size']}")
+    print(f"\n=== Run {K_REPS} replications × {len(N_VALUES)} N-values ===")
+    all_runs = run_all(base, pool, skip_solve=args.skip_solve)
+    print(f"  Total valid runs: {len(all_runs)}")
 
-    print("\n=== Step 4: Save CSV ===")
-    save_csv(rows)
+    print("\n=== Aggregate metrics ===")
+    summary = aggregate(all_runs)
+    for r in summary:
+        print(f"  N={r['N']:2d}  Z1={r['Z1_mean']:.3f}±{r['Z1_std']:.3f}M  "
+              f"Z2={r['Z2_mean']:.1f}±{r['Z2_std']:.1f}k  "
+              f"HV={r['HV_mean']:.3f}±{r['HV_std']:.3f}")
 
-    print("\n=== Step 5: Plot convergence ===")
-    plot_convergence(rows)
+    print("\n=== Save CSV ===")
+    save_csv(summary)
+
+    print("\n=== Plot convergence ===")
+    plot_convergence(summary)
 
     print("\nDone.")
 
