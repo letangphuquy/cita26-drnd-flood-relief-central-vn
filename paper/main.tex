@@ -158,6 +158,29 @@ NSGA-II~\cite{deb2002fast} is the standard framework for multi-objective combina
 Zhou et al.~\cite{Zhou2017} applied a multi-objective evolutionary algorithm to multi-period dynamic emergency resource scheduling under uncertain road networks, demonstrating the effectiveness of population-based search when scenario-dependent decisions are coupled to shared strategic variables. Li et al.~\cite{Li2023} designed a bi-objective multimodal hub-and-spoke network for emergency relief using a meta-heuristic approach, showing that problem-specific customized operators are essential for maintaining feasibility across complex network topologies.
 
 \textbf{Research gap and contributions.}
+% ┌─────────────────────────────────────────────────────────────────────┐
+% │ CAMERA-READY [R2]: Replace existing gap paragraph with explicit    │
+% │ before/after comparison. REPLACE the 3 lines below                │
+% │ (starting "To the best of our knowledge...") with:                │
+% ├─────────────────────────────────────────────────────────────────────┤
+% │ To the best of our knowledge, no existing model simultaneously     │
+% │ addresses all four of the following: (1)~incomplete hub networks   │
+% │ with severed inter-hub arcs, (2)~two-stage stochastic programming  │
+% │ under flood uncertainty, (3)~bi-objective optimisation of          │
+% │ logistics cost and deprivation cost, and (4)~a calibrated          │
+% │ flood-disaster case study.                                         │
+% │ Deterministic models~\cite{sangsawang2020capacitated} are the      │
+% │ closest precedent: they assume full network connectivity and        │
+% │ optimise a single cost objective, failing structurally when floods  │
+% │ sever road links.                                                  │
+% │ Stochastic exact models~\cite{tofighi2016humanitarian,Yahyaei2019} │
+% │ capture uncertainty but either assume complete connectivity or omit │
+% │ the deprivation cost that captures social equity.                  │
+% │ This paper closes all four gaps simultaneously by formulating       │
+% │ MO-IHLNDP and solving it via our proposed PB-NSGA, a              │
+% │ priority-based~\cite{gen2006priority} evolutionary algorithm proven │
+% │ to handle the complex two-stage stochastic decision structure.     │
+% └─────────────────────────────────────────────────────────────────────┘
 To the best of our knowledge, existing literature rarely simultaneously addresses incomplete hub network design, two-stage stochastic programming, multi-objective humanitarian objectives (logistics cost and deprivation cost), and a flood-disaster case study.
 Sangsawang and Chanta~\cite{sangsawang2020capacitated} is the closest precedent, yet it is deterministic and single-objective.
 This paper closes the gap by formulating the MO-IHLNDP and solving it via our proposed PB-NSGA, a priority-based~\cite{gen2006priority} evolutionary algorithm, as this encoding strategy is proven to be particularly effective for handling the complex decision variables of two-stage stochastic programming.
@@ -312,6 +335,20 @@ Constraints \eqref{eq:flow_balance} and \eqref{eq:throughput_cap} maintain flow 
 
 The MO-IHLNDP is NP-hard, as its single-objective, single-scenario relaxation subsumes the uncapacitated facility location problem~\cite{mirchandani1990discrete}. 
 We therefore propose \textbf{PB-NSGA} (Priority-Based Nondominated Sorting Genetic Algorithm), which embeds the NSGA-II framework~\cite{deb2002fast} with a custom heuristic decoder.
+% ┌─────────────────────────────────────────────────────────────────────┐
+% │ CAMERA-READY [R1.3]: Justify NSGA-II over MOEA/D                   │
+% │ INSERT AFTER: "...with a custom heuristic decoder."                │
+% ├─────────────────────────────────────────────────────────────────────┤
+% │ We choose NSGA-II rather than MOEA/D~\cite{zhang2007moead} for     │
+% │ three reasons: (i) MOEA/D requires pre-specifying decomposition     │
+% │ weight vectors, which presupposes knowledge of the Pareto front     │
+% │ geometry -- unavailable for MO-IHLNDP; (ii) NSGA-II's crowding-   │
+% │ distance selection maintains spread across the full $Z_1$--$Z_2$   │
+% │ trade-off without weight tuning; and (iii) the encoder-decoder     │
+% │ design is algorithm-agnostic -- the decoder is the contribution,   │
+% │ and NSGA-II is the dominant sorter in the humanitarian logistics   │
+% │ MOEA literature~\cite{Zhou2017,Li2023}.                           │
+% └─────────────────────────────────────────────────────────────────────┘
 
 \subsection{Chromosome Encoding Scheme}
 
@@ -390,6 +427,35 @@ Node coordinates map to real administrative centroids, confirmed logistics facil
 
 \textbf{Scenario generation via SAA~\cite{shapiro2003monte}.}
 To improve coverage of plausible flood conditions, scenarios are drawn from a profile bank spanning mild, severe, and extreme flood regimes with varying epicenter count, intensity, road disruption rate, and circuity coefficient. The CV-Large case study further validates the first-stage decisions $(\hat{x}, \hat{q})$ on an independent out-of-sample (OOS) set of $N'=10$ adversarial scenarios, disjoint from training, to assess generalization under catastrophic conditions.
+% ┌─────────────────────────────────────────────────────────────────────┐
+% │ CAMERA-READY [R1.2]: SAA convergence — INSERT paragraph + figure  │
+% │ INSERT AFTER the OOS sentence above, before \subsection{Exp 1}    │
+% ├─────────────────────────────────────────────────────────────────────┤
+% │ \textbf{Scenario-count sensitivity.}                               │
+% │ Figure~\ref{fig:saa_convergence} shows the mean and $\pm$1\,std   │
+% │ of the knee-point deprivation cost $Z_2$ and normalised Pareto    │
+% │ hypervolume (HV) across $K=10$ independent random sub-samples of  │
+% │ $N\in\{3,5,8,10,15,20,30\}$ scenarios from a balanced 50-scenario │
+% │ pool on CV-Small.                                                  │
+% │ Both metrics stabilise beyond $N=8$: the std of $Z_2$ contracts   │
+% │ from $\pm110$k ($N=3$) to $\pm30$k ($N=30$), and HV std from      │
+% │ $0.25$ to $0.07$.                                                  │
+% │ Our fixed three-profile design (mild $p=0.60$, severe $p=0.30$,   │
+% │ extreme $p=0.10$) uses calibrated historical frequencies rather    │
+% │ than uniform random sampling, achieving the coverage of            │
+% │ $N\approx10$ random draws through deliberate stratification.       │
+% │                                                                    │
+% │ \begin{figure}[ht]                                                 │
+% │ \centering                                                         │
+% │ \includegraphics[width=\linewidth]{figures/saa_convergence.pdf}   │
+% │ \caption{Scenario-count sensitivity on CV-Small ($K=10$           │
+% │ replications per $N$). Shaded bands show $\pm$1\,std across       │
+% │ random sub-samples from a balanced 50-scenario pool. Std of $Z_2$ │
+% │ and HV contract monotonically with $N$, confirming that scenario- │
+% │ space variance shrinks as coverage increases.}                     │
+% │ \label{fig:saa_convergence}                                        │
+% │ \end{figure}                                                       │
+% └─────────────────────────────────────────────────────────────────────┘
 
 \subsection{Experiment 1: Baseline Comparison}
 \label{sec:exp1}
@@ -442,7 +508,21 @@ On CV-Large across 20 runs, PB-NSGA achieves HV\,=\,1.000\,$\pm$\,0.006 and IGD\
 \label{fig:cv_large_map_detailed}
 \end{figure}
 
-Figure~\ref{fig:cv_large_map_detailed} visualizes the knee-point solution ($Z_1=\$4.6$M, $Z_2=43{,}453$) across three scenarios. The most striking feature is structural stability: the same eight planned hubs (H0, H1, H3, H11, H14, H15, H16, H19) remain active with identical inventory fill levels across all scenarios -- no reactive hub is ever opened and no lateral transshipment occurs. This reveals that the algorithm converges to a network design robust enough to serve all flood regimes purely through pre-positioning. H16 (91\%) and H15 (89\%) carry the heaviest pre-positioned loads, anchoring coverage for the central and southern coastal corridor. The primary adaptation across scenarios is modal: mild and severe conditions are served by a mix of truck and watercraft links, while the extreme scenario activates helicopter routes (orange dashed) to reach high-risk demand nodes that become inaccessible by road and water.
+Figure~\ref{fig:cv_large_map_detailed} visualizes the knee-point solution ($Z_1=\$4.6$M, $Z_2=43{,}453$) across three scenarios. The most striking feature is structural stability: the same eight planned hubs (H0, H1, H3, H11, H14, H15, H16, H19) remain active with identical inventory fill levels across all scenarios -- no reactive hub is ever opened and no lateral transshipment occurs. This reveals that the algorithm converges to a network design robust enough to serve all flood regimes purely through pre-positioning.
+% ┌─────────────────────────────────────────────────────────────────────┐
+% │ CAMERA-READY [R1.1]: Defend "no reactive hub" finding             │
+% │ INSERT AFTER: "...purely through pre-positioning."                 │
+% ├─────────────────────────────────────────────────────────────────────┤
+% │ This outcome is economically rational at the CV-Large scale: with  │
+% │ 20 candidate hubs and commune-level resolution, the optimiser      │
+% │ finds that dense pre-positioning at eight locations eliminates the  │
+% │ marginal value of reactive hub setup costs                         │
+% │ (range: \$51K--\$109K per scenario).                               │
+% │ The reactive recourse mechanism is demonstrably active in the      │
+% │ decoder (Pass~3, Algorithm~\ref{alg:decoder}) and engages when     │
+% │ local capacity or connectivity is exhausted -- a condition that     │
+% │ does not arise in this well-resourced configuration.               │
+% └─────────────────────────────────────────────────────────────────────┘ H16 (91\%) and H15 (89\%) carry the heaviest pre-positioned loads, anchoring coverage for the central and southern coastal corridor. The primary adaptation across scenarios is modal: mild and severe conditions are served by a mix of truck and watercraft links, while the extreme scenario activates helicopter routes (orange dashed) to reach high-risk demand nodes that become inaccessible by road and water.
 
 \subsubsection*{Decision Support Framework}
 
