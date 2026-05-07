@@ -247,10 +247,11 @@ def aggregate(all_runs: list) -> list:
     """Aggregate per-run records into per-N mean ± std rows."""
     import statistics
 
-    # Global reference point for HV (110 % of worst across all runs)
-    all_z1 = [r["Z1"] for r in all_runs]
-    all_z2 = [r["Z2"] for r in all_runs]
-    ref_pt = (max(all_z1) * 1.1, max(all_z2) * 1.1) if all_z1 else (1e12, 1e12)
+    # Global reference point for HV: 110 % of worst objective across ALL Pareto
+    # front solutions (not just knee points) to avoid truncating extreme solutions.
+    all_z1_full = [s["Z1"] for r in all_runs for s in r["front"]]
+    all_z2_full = [s["Z2"] for r in all_runs for s in r["front"]]
+    ref_pt = (max(all_z1_full) * 1.1, max(all_z2_full) * 1.1) if all_z1_full else (1e12, 1e12)
 
     # Normalise HV by the mean HV at the largest N
     max_N  = max(N_VALUES)
