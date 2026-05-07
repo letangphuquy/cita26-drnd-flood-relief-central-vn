@@ -437,9 +437,10 @@ To improve coverage of plausible flood conditions, scenarios are drawn from a pr
 % │ hypervolume (HV) across $K=10$ independent random sub-samples of  │
 % │ $N\in\{3,5,8,10,15,20,30\}$ scenarios from a balanced 50-scenario │
 % │ pool on CV-Small.                                                  │
-% │ Both metrics stabilise beyond $N=8$: the std of $Z_2$ contracts   │
-% │ from $\pm110$k ($N=3$) to $\pm30$k ($N=30$), and HV std from      │
-% │ $0.25$ to $0.07$.                                                  │
+% │ Both metrics stabilise beyond $N=8$: the std of $Z_2$ follows an  │
+% │ overall decreasing trend from $\pm110$k ($N=3$) to $\pm30$k       │
+% │ ($N=30$), with a transient peak at $N=5$ due to unlucky extreme-  │
+% │ heavy draws; HV std decreases from $0.25$ to $0.07$.              │
 % │ Our fixed three-profile design (mild $p=0.60$, severe $p=0.30$,   │
 % │ extreme $p=0.10$) uses calibrated historical frequencies rather    │
 % │ than uniform random sampling, achieving the coverage of            │
@@ -450,9 +451,11 @@ To improve coverage of plausible flood conditions, scenarios are drawn from a pr
 % │ \includegraphics[width=\linewidth]{figures/saa_convergence.pdf}   │
 % │ \caption{Scenario-count sensitivity on CV-Small ($K=10$           │
 % │ replications per $N$). Shaded bands show $\pm$1\,std across       │
-% │ random sub-samples from a balanced 50-scenario pool. Std of $Z_2$ │
-% │ and HV contract monotonically with $N$, confirming that scenario- │
-% │ space variance shrinks as coverage increases.}                     │
+% │ random sub-samples from a balanced 50-scenario pool. Standard      │
+% │ deviation of $Z_2$ and HV follow an overall decreasing trend      │
+% │ with $N$ (from $\pm110$k at $N=3$ to $\pm30$k at $N=30$),       │
+% │ confirming that scenario-space variance shrinks as coverage        │
+% │ increases.}                                                        │
 % │ \label{fig:saa_convergence}                                        │
 % │ \end{figure}                                                       │
 % └─────────────────────────────────────────────────────────────────────┘
