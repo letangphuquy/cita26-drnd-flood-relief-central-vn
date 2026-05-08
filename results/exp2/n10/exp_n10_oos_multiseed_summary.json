@@ -1,0 +1,409 @@
+{
+  "per_seed": {
+    "0": {
+      "seed": 0,
+      "saa": {
+        "n_evaluations": 15,
+        "feasible_count": 13,
+        "feasibility_rate": 0.8667,
+        "mean_cv": 3847.06,
+        "mean_z2": 3045077.1349,
+        "mean_z2_diff_pct": 845.9083
+      },
+      "oos": {
+        "n_evaluations": 15,
+        "feasible_count": 7,
+        "feasibility_rate": 0.4667,
+        "mean_cv": 216243.36,
+        "mean_z2": 55343665.3486,
+        "mean_z2_diff_pct": 22036.637,
+        "z2_bigm_count": 4
+      }
+    },
+    "1": {
+      "seed": 1,
+      "saa": {
+        "n_evaluations": 23,
+        "feasible_count": 23,
+        "feasibility_rate": 1.0,
+        "mean_cv": 0.0,
+        "mean_z2": 329190.0393,
+        "mean_z2_diff_pct": 47.207
+      },
+      "oos": {
+        "n_evaluations": 23,
+        "feasible_count": 22,
+        "feasibility_rate": 0.9565,
+        "mean_cv": 21935.260435,
+        "mean_z2": 1157304.8588,
+        "mean_z2_diff_pct": 398.8786,
+        "z2_bigm_count": 1
+      }
+    },
+    "2": {
+      "seed": 2,
+      "saa": {
+        "n_evaluations": 19,
+        "feasible_count": 18,
+        "feasibility_rate": 0.9474,
+        "mean_cv": 0.0,
+        "mean_z2": 334232.212,
+        "mean_z2_diff_pct": 45.4051
+      },
+      "oos": {
+        "n_evaluations": 19,
+        "feasible_count": 16,
+        "feasibility_rate": 0.8421,
+        "mean_cv": 0.0,
+        "mean_z2": 1012881.3082,
+        "mean_z2_diff_pct": 341.0358
+      }
+    },
+    "3": {
+      "seed": 3,
+      "saa": {
+        "n_evaluations": 35,
+        "feasible_count": 35,
+        "feasibility_rate": 1.0,
+        "mean_cv": 0.0,
+        "mean_z2": 319193.685,
+        "mean_z2_diff_pct": 45.4652
+      },
+      "oos": {
+        "n_evaluations": 35,
+        "feasible_count": 34,
+        "feasibility_rate": 0.9714,
+        "mean_cv": 0.0,
+        "mean_z2": 796775.1415,
+        "mean_z2_diff_pct": 264.297
+      }
+    },
+    "4": {
+      "seed": 4,
+      "saa": {
+        "n_evaluations": 29,
+        "feasible_count": 29,
+        "feasibility_rate": 1.0,
+        "mean_cv": 0.0,
+        "mean_z2": 315570.2783,
+        "mean_z2_diff_pct": 45.8851
+      },
+      "oos": {
+        "n_evaluations": 29,
+        "feasible_count": 29,
+        "feasibility_rate": 1.0,
+        "mean_cv": 0.0,
+        "mean_z2": 852396.0646,
+        "mean_z2_diff_pct": 294.9602
+      }
+    },
+    "5": {
+      "seed": 5,
+      "saa": {
+        "n_evaluations": 29,
+        "feasible_count": 28,
+        "feasibility_rate": 0.9655,
+        "mean_cv": 0.0,
+        "mean_z2": 323109.3408,
+        "mean_z2_diff_pct": 44.4744
+      },
+      "oos": {
+        "n_evaluations": 29,
+        "feasible_count": 26,
+        "feasibility_rate": 0.8966,
+        "mean_cv": 0.0,
+        "mean_z2": 872383.8524,
+        "mean_z2_diff_pct": 280.7903
+      }
+    },
+    "6": {
+      "seed": 6,
+      "saa": {
+        "n_evaluations": 41,
+        "feasible_count": 41,
+        "feasibility_rate": 1.0,
+        "mean_cv": 0.0,
+        "mean_z2": 325218.3199,
+        "mean_z2_diff_pct": 44.0609
+      },
+      "oos": {
+        "n_evaluations": 41,
+        "feasible_count": 41,
+        "feasibility_rate": 1.0,
+        "mean_cv": 0.0,
+        "mean_z2": 869983.3845,
+        "mean_z2_diff_pct": 283.8769
+      }
+    },
+    "7": {
+      "seed": 7,
+      "saa": {
+        "n_evaluations": 24,
+        "feasible_count": 24,
+        "feasibility_rate": 1.0,
+        "mean_cv": 0.0,
+        "mean_z2": 328980.8217,
+        "mean_z2_diff_pct": 44.2418
+      },
+      "oos": {
+        "n_evaluations": 24,
+        "feasible_count": 24,
+        "feasibility_rate": 1.0,
+        "mean_cv": 0.0,
+        "mean_z2": 882435.0983,
+        "mean_z2_diff_pct": 287.9197
+      }
+    },
+    "8": {
+      "seed": 8,
+      "saa": {
+        "n_evaluations": 16,
+        "feasible_count": 15,
+        "feasibility_rate": 0.9375,
+        "mean_cv": 0.0,
+        "mean_z2": 330249.1147,
+        "mean_z2_diff_pct": 40.4185
+      },
+      "oos": {
+        "n_evaluations": 16,
+        "feasible_count": 16,
+        "feasibility_rate": 1.0,
+        "mean_cv": 0.0,
+        "mean_z2": 958237.2006,
+        "mean_z2_diff_pct": 303.1485
+      }
+    },
+    "9": {
+      "seed": 9,
+      "saa": {
+        "n_evaluations": 19,
+        "feasible_count": 19,
+        "feasibility_rate": 1.0,
+        "mean_cv": 0.0,
+        "mean_z2": 400403.5718,
+        "mean_z2_diff_pct": 74.9972
+      },
+      "oos": {
+        "n_evaluations": 19,
+        "feasible_count": 18,
+        "feasibility_rate": 0.9474,
+        "mean_cv": 5273.810526,
+        "mean_z2": 11591435.453,
+        "mean_z2_diff_pct": 4801.3597
+      }
+    },
+    "10": {
+      "seed": 10,
+      "saa": {
+        "n_evaluations": 31,
+        "feasible_count": 31,
+        "feasibility_rate": 1.0,
+        "mean_cv": 0.0,
+        "mean_z2": 323166.9554,
+        "mean_z2_diff_pct": 46.8674
+      },
+      "oos": {
+        "n_evaluations": 31,
+        "feasible_count": 29,
+        "feasibility_rate": 0.9355,
+        "mean_cv": 0.0,
+        "mean_z2": 902247.7509,
+        "mean_z2_diff_pct": 310.8713
+      }
+    },
+    "11": {
+      "seed": 11,
+      "saa": {
+        "n_evaluations": 18,
+        "feasible_count": 17,
+        "feasibility_rate": 0.9444,
+        "mean_cv": 0.0,
+        "mean_z2": 339905.4842,
+        "mean_z2_diff_pct": 41.7606
+      },
+      "oos": {
+        "n_evaluations": 18,
+        "feasible_count": 16,
+        "feasibility_rate": 0.8889,
+        "mean_cv": 5455.588333,
+        "mean_z2": 6781390.1168,
+        "mean_z2_diff_pct": 3022.4466
+      }
+    },
+    "12": {
+      "seed": 12,
+      "saa": {
+        "n_evaluations": 30,
+        "feasible_count": 30,
+        "feasibility_rate": 1.0,
+        "mean_cv": 0.0,
+        "mean_z2": 322838.7766,
+        "mean_z2_diff_pct": 47.2311
+      },
+      "oos": {
+        "n_evaluations": 30,
+        "feasible_count": 29,
+        "feasibility_rate": 0.9667,
+        "mean_cv": 0.0,
+        "mean_z2": 993299.3672,
+        "mean_z2_diff_pct": 343.2176
+      }
+    },
+    "13": {
+      "seed": 13,
+      "saa": {
+        "n_evaluations": 35,
+        "feasible_count": 35,
+        "feasibility_rate": 1.0,
+        "mean_cv": 0.0,
+        "mean_z2": 318496.1506,
+        "mean_z2_diff_pct": 45.041
+      },
+      "oos": {
+        "n_evaluations": 35,
+        "feasible_count": 33,
+        "feasibility_rate": 0.9429,
+        "mean_cv": 0.0,
+        "mean_z2": 836984.7148,
+        "mean_z2_diff_pct": 283.2313
+      }
+    },
+    "14": {
+      "seed": 14,
+      "saa": {
+        "n_evaluations": 17,
+        "feasible_count": 17,
+        "feasibility_rate": 1.0,
+        "mean_cv": 0.0,
+        "mean_z2": 348312.3436,
+        "mean_z2_diff_pct": 42.8471
+      },
+      "oos": {
+        "n_evaluations": 17,
+        "feasible_count": 16,
+        "feasibility_rate": 0.9412,
+        "mean_cv": 0.0,
+        "mean_z2": 1029474.6604,
+        "mean_z2_diff_pct": 304.663
+      }
+    },
+    "15": {
+      "seed": 15,
+      "saa": {
+        "n_evaluations": 30,
+        "feasible_count": 30,
+        "feasibility_rate": 1.0,
+        "mean_cv": 0.0,
+        "mean_z2": 333698.8423,
+        "mean_z2_diff_pct": 55.3283
+      },
+      "oos": {
+        "n_evaluations": 30,
+        "feasible_count": 30,
+        "feasibility_rate": 1.0,
+        "mean_cv": 0.0,
+        "mean_z2": 986528.0649,
+        "mean_z2_diff_pct": 358.0812
+      }
+    },
+    "16": {
+      "seed": 16,
+      "saa": {
+        "n_evaluations": 18,
+        "feasible_count": 18,
+        "feasibility_rate": 1.0,
+        "mean_cv": 0.0,
+        "mean_z2": 333740.5458,
+        "mean_z2_diff_pct": 40.588
+      },
+      "oos": {
+        "n_evaluations": 18,
+        "feasible_count": 18,
+        "feasibility_rate": 1.0,
+        "mean_cv": 0.0,
+        "mean_z2": 1203210.9255,
+        "mean_z2_diff_pct": 374.4505
+      }
+    },
+    "17": {
+      "seed": 17,
+      "saa": {
+        "n_evaluations": 33,
+        "feasible_count": 33,
+        "feasibility_rate": 1.0,
+        "mean_cv": 0.0,
+        "mean_z2": 322782.679,
+        "mean_z2_diff_pct": 45.2763
+      },
+      "oos": {
+        "n_evaluations": 33,
+        "feasible_count": 31,
+        "feasibility_rate": 0.9394,
+        "mean_cv": 0.0,
+        "mean_z2": 823780.3174,
+        "mean_z2_diff_pct": 264.0193
+      }
+    },
+    "18": {
+      "seed": 18,
+      "saa": {
+        "n_evaluations": 30,
+        "feasible_count": 30,
+        "feasibility_rate": 1.0,
+        "mean_cv": 0.0,
+        "mean_z2": 330948.4063,
+        "mean_z2_diff_pct": 44.9354
+      },
+      "oos": {
+        "n_evaluations": 30,
+        "feasible_count": 28,
+        "feasibility_rate": 0.9333,
+        "mean_cv": 0.0,
+        "mean_z2": 1005898.3691,
+        "mean_z2_diff_pct": 329.1963
+      }
+    },
+    "19": {
+      "seed": 19,
+      "saa": {
+        "n_evaluations": 24,
+        "feasible_count": 24,
+        "feasibility_rate": 1.0,
+        "mean_cv": 0.0,
+        "mean_z2": 481170.2085,
+        "mean_z2_diff_pct": 141.7835
+      },
+      "oos": {
+        "n_evaluations": 24,
+        "feasible_count": 24,
+        "feasibility_rate": 1.0,
+        "mean_cv": 0.0,
+        "mean_z2": 1259299.8808,
+        "mean_z2_diff_pct": 533.4033
+      }
+    }
+  },
+  "aggregate": {
+    "saa_feasibility_rate": {
+      "mean": 0.983075,
+      "std": 0.034788,
+      "ci95_lo": 0.96711,
+      "ci95_hi": 0.995495,
+      "n": 20
+    },
+    "oos_feasibility_rate": {
+      "mean": 0.93143,
+      "std": 0.117859,
+      "ci95_lo": 0.874595,
+      "ci95_hi": 0.970075,
+      "n": 20
+    },
+    "oos_z2_diff_pct": {
+      "mean": 1770.824205,
+      "std": 4904.188548,
+      "ci95_lo": 333.900805,
+      "ci95_hi": 4163.116185,
+      "n": 20
+    }
+  }
+}

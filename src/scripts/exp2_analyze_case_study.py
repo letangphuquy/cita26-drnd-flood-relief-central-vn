@@ -428,13 +428,19 @@ def _discover_exp1_cv_small_runs(exp1_dir):
     return out
 
 
-def run(results_dir, out_dir, cv_data_dir=None, paper_dir=None):
+def run(results_dir, out_dir, cv_data_dir=None, paper_dir=None, max_seed=None):
     fig_dir  = os.path.join(out_dir, "figures")
     maps_dir = os.path.join(out_dir, "maps")
     os.makedirs(fig_dir,  exist_ok=True)
     os.makedirs(maps_dir, exist_ok=True)
 
     cv_groups = discover_cv_files(results_dir)
+    if max_seed is not None:
+        for grp in cv_groups:
+            for algo in cv_groups[grp]:
+                cv_groups[grp][algo] = [
+                    (s, p) for s, p in cv_groups[grp][algo] if s <= max_seed
+                ]
     if not cv_groups:
         print(f"[Exp2] No CV result files found in {results_dir}")
         return
@@ -698,10 +704,19 @@ def _export_csv_to_paper(src_path, paper_dir):
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
+    import argparse as _ap
+    _ap_parser = _ap.ArgumentParser(description="Exp2 Case Study Analysis", add_help=False)
+    _ap_parser.add_argument("results_dir", nargs="?", default=None)
+    _ap_parser.add_argument("out_dir", nargs="?", default=None)
+    _ap_parser.add_argument("cv_data_dir", nargs="?", default=None)
+    _ap_parser.add_argument("paper_dir", nargs="?", default=None)
+    _ap_parser.add_argument("--max-seed", type=int, default=None,
+                            help="Only include seeds 0..max_seed (inclusive) for matched-budget comparison")
+    _ap_args, _ = _ap_parser.parse_known_args()
     _script_dir  = os.path.dirname(os.path.abspath(__file__))
     _project_dir = os.path.dirname(os.path.dirname(_script_dir))
-    _results_dir = sys.argv[1] if len(sys.argv) > 1 else os.path.join(_project_dir, "results", "exp2")
-    _out_dir     = sys.argv[2] if len(sys.argv) > 2 else _results_dir
-    _cv_data_dir = sys.argv[3] if len(sys.argv) > 3 else None
-    _paper_dir   = sys.argv[4] if len(sys.argv) > 4 else None
-    run(_results_dir, _out_dir, _cv_data_dir, _paper_dir)
+    _results_dir = _ap_args.results_dir or os.path.join(_project_dir, "results", "exp2")
+    _out_dir     = _ap_args.out_dir or _results_dir
+    _cv_data_dir = _ap_args.cv_data_dir
+    _paper_dir   = _ap_args.paper_dir
+    run(_results_dir, _out_dir, _cv_data_dir, _paper_dir, max_seed=_ap_args.max_seed)
