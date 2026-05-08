@@ -109,9 +109,7 @@ Experiments on standard benchmarks and a realistic CV-Small instance validate ne
 \section{Introduction}
 \subsection{Problem}
 
-Natural disasters are becoming increasingly frequent and violent, continuously exposing supply chain weaknesses and causing massive economic losses~\cite{CDP2025}.
-As a highly vulnerable coastal country, Vietnam has witnessed unprecedented extreme weather events.
-In 2025 alone, a relentless sequence of typhoons and record-breaking floods in Central Vietnam resulted in massive fatalities and an estimated 98.7 trillion VND in economic losses~\cite{VOV2025}.
+In 2025, a relentless sequence of typhoons and record-breaking floods in Central Vietnam resulted in massive fatalities and an estimated 98.7 trillion VND in economic losses~\cite{VOV2025}.
 
 Humanitarian operations during this period faced significant challenges.
 Most critically, national logistics infrastructure suffered severe disruption: the North-South Railway was paralyzed by track erosion and submersion, forcing the cancellation of 170 trains, while key arteries such as Vietnam National Route 1 were severed by landslides, isolating communities for days~\cite{VOV2025}.
@@ -135,7 +133,7 @@ Disaster Relief Network Design (DRND) bridges the preparedness and response phas
 
 \subsection{Related Works}
 
-Humanitarian logistics prioritises speed and equity over cost minimisation~\cite{van2006humanitarian}. Under uncertainty, stochastic programming and robust optimisation are the dominant paradigms~\cite{donmez2021humanitarian,boonmee2017facility}, with deprivation cost---an exponential penalty on victim waiting time---capturing social welfare~\cite{holguin2013appropriate}. Hub-and-spoke structures consolidate relief flows efficiently~\cite{campbell1994integer}; for disaster settings, \emph{incomplete} topologies in which infrastructure damage severs inter-hub arcs are more realistic~\cite{alumur2009incomplete}. Sangsawang and Chanta~\cite{sangsawang2020capacitated} established the flood-specific hub-location baseline (single-objective, deterministic, Thailand), and multi-modal extensions further address heterogeneous transport modes~\cite{Li2023}.
+Humanitarian logistics prioritises speed and equity over cost minimisation~\cite{van2006humanitarian}. Under uncertainty, stochastic programming and robust optimisation are the dominant paradigms~\cite{donmez2021humanitarian,boonmee2017facility}, with deprivation cost (an exponential penalty on victim waiting time) capturing social welfare~\cite{holguin2013appropriate}. Hub-and-spoke structures consolidate relief flows efficiently~\cite{campbell1994integer}; for disaster settings, \emph{incomplete} topologies in which infrastructure damage severs inter-hub arcs are more realistic~\cite{alumur2009incomplete}. Sangsawang and Chanta~\cite{sangsawang2020capacitated} established the flood-specific hub-location baseline (single-objective, deterministic, Thailand), and multi-modal extensions further address heterogeneous transport modes~\cite{Li2023}.
 
 Two-stage stochastic programming separates pre-disaster design from post-disaster recourse~\cite{tofighi2016humanitarian}; robust formulations and prepositioning models outperform deterministic baselines under demand and supply uncertainty~\cite{Yahyaei2019,salman2015emergency}. NSGA-II~\cite{deb2002fast} is the standard multi-objective framework in humanitarian logistics, valued for parameter-free Pareto ranking and elitist selection~\cite{Zhou2017,Li2023}.
 
@@ -205,7 +203,7 @@ Two-stage stochastic programming separates pre-disaster design from post-disaste
 % │ stage decisions of the two-stage stochastic program.               │
 % └─────────────────────────────────────────────────────────────────────┘
 To the best of our knowledge, no existing model simultaneously addresses all four of the following: (1)~incomplete hub networks with severed inter-hub arcs, (2)~two-stage stochastic programming under flood uncertainty, (3)~bi-objective optimisation of logistics cost \emph{and} deprivation cost, and (4)~a calibrated flood-disaster case study for Central Vietnam.
-Deterministic models~\cite{sangsawang2020capacitated} are the closest precedent: they assume full network connectivity and optimise a single cost objective, causing them to fail structurally when floods sever road links---the very scenario we target.
+Deterministic models~\cite{sangsawang2020capacitated} are the closest precedent: they assume full network connectivity and optimise a single cost objective, causing them to fail structurally when floods sever road links, the very scenario we target.
 Stochastic models~\cite{tofighi2016humanitarian,Yahyaei2019} capture demand and supply uncertainty but do not model link failures in the hub sub-network, and omit the deprivation cost that captures social equity across victim groups.
 This paper closes all four gaps simultaneously by formulating MO-IHLNDP and solving it via PB-NSGA, a priority-based~\cite{gen2006priority} evolutionary algorithm whose encoder-decoder design efficiently handles the coupled first- and second-stage decisions of the two-stage stochastic program.
 
@@ -286,17 +284,9 @@ The model integrates the deprivation cost~\cite{holguin2013appropriate} for soci
 \textbf{Objective 1: Minimize Total Expected Logistics Cost ($Z_1$)}
 
 \begin{equation} \label{eq:obj1}
-\begin{aligned}
-    \text{Min } Z_1 = & \underbrace{\sum_{k \in \mathcal{H}} F_k x_k + \sum_{k \in \mathcal{H}} c_k q_k}_{\text{Pre-disaster strategic costs}} \\
-    & + \sum_{s \in \mathcal{S}} \pi_s \Bigg[ \underbrace{\sum_{k \in \mathcal{H}} F_{ks}^a y_{ks}}_{\text{Reactive setup}} 
-    + \underbrace{\sum_{j \in \mathcal{J}} \sum_{k \in \mathcal{H}} c_{jks} \cdot O_{js} z_{jks}}_{\text{Origin to Hub supply flow}} \\
-    % + \underbrace{\sum_{j \in \mathcal{J}} \sum_{k \in \mathcal{H}} \left( \min_{m \in \mathcal{M} \mid a_{jkms}=1} C_{jkm} \right) O_{js} z_{jks}}_{\text{Origin to Hub supply flow}} \\
-    % + \underbrace{\sum_{j \in \mathcal{J}} \sum_{k \in \mathcal{H}} \sum_{m \in \mathcal{M}} C_{jkm} O_{js} z_{jks}}_{\text{Origin to Hub supply flow}} \\
-    & + \underbrace{\sum_{k \in \mathcal{H}} \sum_{h \in \mathcal{H}} \sum_{m \in \mathcal{M}} \alpha C_{khm} f_{khms}}_{\text{Inter-hub lateral trans-shipment}} 
-    + \underbrace{\sum_{k \in \mathcal{H}} \sum_{i \in \mathcal{I}} \Theta_{kis} z_{iks}}_{\text{Grid-based Last-Mile CA}} 
-    \Bigg]
-\end{aligned}
+\min \quad Z_1 = \sum_{k} F_k x_k + \sum_{k} c_k q_k + \sum_{s} \pi_s \!\!\left[ \sum_{k} F_{ks}^a y_{ks} + \sum_{j,k} c_{jks} O_{js} z_{jks} + \sum_{k,h,m} \alpha C_{khm} f_{khms} + \sum_{k,i} \Theta_{kis} z_{iks} \right]
 \end{equation}
+The first-stage terms are pre-disaster strategic costs (hub establishment and inventory holding); the scenario-weighted second-stage terms cover, in order, reactive hub setup, origin-to-hub supply flow, discounted inter-hub lateral transshipment, and grid-based last-mile CA routing.
 
 % ══ ORIGINAL Z1 EXPLANATION (swap-ready) ═════════════════════════════════
 % Objective $Z_1$ minimizes total expected logistics cost. Using the
@@ -319,7 +309,7 @@ where $\Theta_{kis}$ is the pre-computed Daganzo CA routing cost~\cite{daganzo20
 % \end{equation}
 
 \begin{equation} \label{eq:obj2}
-    \text{Min } Z_2 = \sum_{s \in \mathcal{S}} \pi_s \left( \max_{i \in \mathcal{I}} \left[ D_{is} \cdot \left( e^{\lambda_{is} \cdot \Omega_{is}} - 1 \right) \right] \right)
+    \min \quad Z_2 = \sum_{s \in \mathcal{S}} \pi_s \left( \max_{i \in \mathcal{I}} \left[ D_{is} \cdot \left( e^{\lambda_{is} \cdot \Omega_{is}} - 1 \right) \right] \right)
 \end{equation}
 
 \begin{equation*} \label{eq:waiting_time}
@@ -338,7 +328,7 @@ where $\Theta_{kis}$ is the pre-computed Daganzo CA routing cost~\cite{daganzo20
 % \eqref{eq:single_alloc_demand}. Any demand $i$ is allocated to a single
 % hub $k$. Thus, the deprivation cost $C^{\text{dep}}_{iks}$ is pre-computed:
 % ═════════════════════════════════════════════════════════════════════════
-The exponential penalty~\cite{holguin2013appropriate} on waiting time $\Omega_{is}$ enforces equity; $\lambda_{is}=\lambda_0(1+r_{is})$ up-weights vulnerable populations. Exploiting single-allocation, $C^{\text{dep}}_{iks}$ is pre-computed and $Z_2$ linearized via $W_s\ge C^{\text{dep}}_{iks}\cdot z_{iks}$:
+To enforce equity, Equation~\eqref{eq:obj2} applies an exponential penalty to waiting time $\Omega_{is}$, scaled by vulnerability $\lambda_{is}=\lambda_0(1+r_{is})$. Because Constraint~\eqref{eq:single_alloc_demand} enforces single-allocation, the non-linear deprivation cost reduces to a static parameter $C^{\text{dep}}_{iks}$ for each valid $(i,k)$ pair, allowing exact linearization via the auxiliary bounding variable $W_s \ge C^{\text{dep}}_{iks} \cdot z_{iks}$:
 
 \begin{equation} \label{eq:deprivation_cost}
     C^{\text{dep}}_{iks} = D_{is} \cdot \left(e^{\lambda_{is} \cdot \left(\tau_{ks} + 2 \cdot \min_{m \in \mathcal{M} \mid a_{ikms}=1} \tau_{kim}\right)} - 1\right)
@@ -418,7 +408,7 @@ Constraints~\eqref{eq:hub_type}--\eqref{eq:hub_safety} govern hub establishment 
 The MO-IHLNDP is NP-hard, as its single-objective, single-scenario relaxation subsumes the uncapacitated facility location problem~\cite{mirchandani1990discrete}. 
 We therefore propose \textbf{PB-NSGA} (Priority-Based Nondominated Sorting Genetic Algorithm), which embeds the NSGA-II framework~\cite{deb2002fast} with a custom heuristic decoder.
 The decoder is algorithm-agnostic: the same reconstruction and evaluation core is also embedded in GWO-HD and VNS-TS, so cross-algorithm differences later reflect search behavior rather than different recourse logic.
-We embed NSGA-II~\cite{deb2002fast} rather than MOEA/D~\cite{zhang2007moead}: MOEA/D requires pre-specified decomposition weight vectors, presupposing the Pareto front geometry a priori; NSGA-II's crowding-distance selection preserves spread across the full $Z_1$--$Z_2$ spectrum without weight tuning; and the encoder-decoder design is algorithm-agnostic---the \emph{decoder} is the contribution, and NSGA-II is the dominant operator in the humanitarian logistics MOEA literature~\cite{Zhou2017,Li2023}, enabling direct comparison.
+We embed NSGA-II~\cite{deb2002fast} rather than MOEA/D~\cite{zhang2007moead}: MOEA/D requires pre-specified decomposition weight vectors, presupposing the Pareto front geometry a priori; NSGA-II's crowding-distance selection preserves spread across the full $Z_1$--$Z_2$ spectrum without weight tuning; and the encoder-decoder design is algorithm-agnostic. The \emph{decoder} is the contribution, and NSGA-II is the dominant operator in the humanitarian logistics MOEA literature~\cite{Zhou2017,Li2023}, enabling direct comparison.
 % ┌─────────────────────────────────────────────────────────────────────┐
 % │ CAMERA-READY [R1.3]  ·  Algorithm Justification: NSGA-II vs MOEA/D│
 % ├─────────────────────────────────────────────────────────────────────┤
@@ -521,27 +511,21 @@ The decoder is invoked once per chromosome per scenario $s \in \mathcal{S}$, rec
 \label{alg:decoder}
 \small
 \begin{algorithmic}[1]
-\State Activate $\mathcal{H}_{\text{act}}\leftarrow\{k:X_k\!=\!1,\;r_{ks}\!\le\!\chi\}$; set $q_k\!\leftarrow\!R_k\kappa_k$
-\If{$\mathcal{H}_{\text{act}}=\emptyset$} \State Force-activate $\arg\min_k r_{ks}$ among $\{k:X_k\!=\!1\}$ \EndIf
-\State Score demands by urgency, isolation, and proximity; sort descending
-\For{each demand $i$ (in priority order)}
-    \State $K\leftarrow\max(1,\lceil w_5|\mathcal{H}|\rceil)$; trial order $\leftarrow\pi_{A_i}$
-    \State \textit{Pass~1:} $k^*\leftarrow\arg\max\,\text{HubScore}(k)$ over first $K$ active, reachable hubs with residual~$>0$
-    \If{Pass~1 succeeds}
-        \State Assign $i\!\to\!k^*$; deduct demand from residual inventory of $k^*$
-    \ElsIf{any active reachable hub remains}
-        \State \textit{Pass~2:} assign $i$ to first such hub (capacity violation allowed)
-    \Else
-        \State \textit{Reactive fallback:} open nearest safe inactive hub; add $F^a_{ks}$; $\text{CV}^s\!\mathrel{+}=\!1$
+\State $\mathcal{H}_{\text{act}}\!\leftarrow\!\{k:X_k\!=\!1,r_{ks}\!\le\!\chi\}$; $q_k\!\leftarrow\!R_k\kappa_k$; if empty, force-activate $\arg\min_k r_{ks}$
+\State Score demands by urgency, isolation, proximity; sort descending
+\For{each demand $i$ (priority order)}
+    \State $K\!\leftarrow\!\max(1,\lceil w_5|\mathcal{H}|\rceil)$, trial $\leftarrow\pi_{A_i}$;\, \textit{Pass 1}: $k^*\!\leftarrow\!\arg\max\text{HubScore}(k)$ over first $K$ active reachable hubs with residual $>0$
+    \If{Pass 1 succeeds} assign $i\!\to\!k^*$; deduct residual
+    \ElsIf{any active reachable hub} \textit{Pass 2}: assign to first such hub (CV permitted)
+    \Else{} \textit{Reactive}: open nearest safe inactive hub; add $F^a_{ks}$; $\text{CV}^s\!\mathrel{+}=\!1$
     \EndIf
 \EndFor
-\State Route supply from origins to hubs and redistribute surplus via MCF on the hub sub-network.
-\State Accumulate $Z_1^s$, $Z_2^s$
-\State \Return $(Z_1^s,\,Z_2^s,\,\text{CV}^s)$
+\State Route origin-to-hub supply and redistribute surplus via MCF on the hub sub-network; accumulate $Z_1^s,Z_2^s$
+\State \Return $(Z_1^s,Z_2^s,\text{CV}^s)$
 \end{algorithmic}
 \end{algorithm}
 
-With hub activations and demand assignments fixed by Steps~1--3, the supply routing in Step~4 reduces to a \textbf{minimum cost flow (MCF)} sub-problem: origins are sources, under-supplied hubs are sinks, and surplus inventory is redistributed via lateral transshipment arcs. Solving MCF exactly per scenario ensures that $Z_1$ is minimised to near-optimality for any decoded hub configuration, and is a key driver of PB-NSGA's solution quality.
+Steps~1--3 enforce single-allocation and arc-availability feasibility (Constraints \eqref{eq:single_alloc_demand}--\eqref{eq:path_demand}); with these decisions fixed, Step~4 reduces flow-balance \eqref{eq:flow_balance} to a \textbf{minimum cost flow (MCF)} sub-problem (origins as sources, under-supplied hubs as sinks, lateral transshipment arcs as redistribution edges) solved exactly per scenario. The decoder therefore traverses the feasible region of the MILP and minimises $Z_1$ to near-optimality for any decoded hub configuration, a key driver of PB-NSGA's solution quality.
 
 \subsection{Genetic Operators}
 The initial population seeds $\mathbf{X}$ with 1 to $\lfloor 0.6|\mathcal{H}|\rfloor$ open hubs, $\mathbf{R}$ from discrete pre-positioning levels, and $\mathbf{A}$, $\mathbf{W}$ uniformly. Crossover (probability $p_c$) applies Uniform Crossover to $\mathbf{X}$ and $\mathbf{A}$, and SBX (index $\eta_{\mathrm{SBX}}$) to $\mathbf{R}$ and $\mathbf{W}$. Mutation (base rate $p_m$, decaying linearly from $p_m^{\mathrm{high}}$ to $p_m^{\mathrm{low}}$ over $G$ generations) applies bit-flip, random-reset, and polynomial perturbation to the respective segments. Survival follows NSGA-II elitist constrained dominance~\cite{deb2002fast}: feasibility first, then non-dominated rank, then crowding distance with Hamming tiebreaking in $\mathbf{X}$-space. Rank-1 stagnation triggers increased tournament size and $\mathbf{W}$-mutation, following the adaptive elitist strategy of~\cite{liang2011genetic}.
@@ -552,20 +536,11 @@ The initial population seeds $\mathbf{X}$ with 1 to $\lfloor 0.6|\mathcal{H}|\rf
 
 \section{Computational Experiments}
 
-\subsection{Experimental Setup}
+\subsection{Experimental Setup and Datasets}
 \label{sec:exp_setup}
 
-PB-NSGA is implemented in C++17; dataset construction and post-processing are performed in Python~3, on a workstation with an 11th Gen Intel Core i5-1135G7 @ 2.40~GHz and 16~GB RAM. Algorithm parameters are fixed for all runs: $N = 200$, $G = 300$ (CV-Small) / $500$ (CV-Large), $p_c = 0.98$, $p_m^{\mathrm{high}} = 0.40$, $p_m^{\mathrm{low}} = 0.10$ (linear decay), $\eta_{\mathrm{SBX}} = 1.5$, $\eta_{\mathrm{poly}} = 8$. The parameters are chosen via a grid search process. Problem constants are $\chi = 0.7$, $\alpha = 0.6$, $\gamma = 3.0$~kg/person, $\lambda_0 = 0.8$. Each configuration is executed for 20 independent runs, reporting mean~$\pm$~std. We use \textbf{Hypervolume (HV)}~\cite{zitzler1999multiobjective} and \textbf{IGD\textsuperscript{+}}~\cite{ishibuchi2015modified} as performance metrics, computed against the combined non-dominated reference front pooled across all algorithms.
-
-\subsection{Dataset Description}
-\label{sec:datasets}
-
-\textbf{Central Vietnam Dataset.}
-We construct two instances modelling four flood-prone provinces: Da Nang, Quang Nam, Thua Thien-Hue, and Quang Ngai. \textbf{CV-Small} uses district-level demand nodes ($|\mathcal{I}|=20$, $|\mathcal{H}|=5$, $|\mathcal{J}|=2$, $|\mathcal{S}|=3$); \textbf{CV-Large} uses commune-level resolution ($|\mathcal{I}|=100$, $|\mathcal{H}|=20$, $|\mathcal{J}|=12$, $|\mathcal{S}|=3$).
-Node coordinates map to real administrative centroids, confirmed logistics facilities, and vital supply origins. Scenario risks and road disruptions are calibrated using a multi-criteria flood vulnerability score~\cite{nguyen2021flood}. Three transport modes -- trucks, motorboats, and helicopters -- are considered, with helicopter links capped at 15\% of active routing connections per scenario.
-
-\textbf{Scenario generation via SAA~\cite{shapiro2003monte}.}
-To improve coverage of plausible flood conditions, scenarios are drawn from a profile bank spanning mild, severe, and extreme flood regimes with varying epicenter count, intensity, road disruption rate, and circuity coefficient. The CV-Large case study further validates the first-stage decisions $(\hat{x}, \hat{q})$ on an independent out-of-sample (OOS) set of $N'=10$ adversarial scenarios, disjoint from training, to assess generalization under catastrophic conditions. Because this OOS holdout is deliberately extreme-only, we treat feasibility as the primary robustness metric and interpret large OOS increases in $Z_2$ as stress amplification under adversarial conditions rather than ordinary prediction error.
+Algorithms were implemented in C++17 and Python~3 (Intel i5-1135G7, 16~GB RAM), evaluated across 20 independent runs reporting mean~$\pm$~std. Problem constants: $\chi=0.7$, $\alpha=0.6$, $\gamma=3.0$~kg/person, $\lambda_0=0.8$. PB-NSGA parameters, tuned via grid search: $N=200$, $G\in\{300,500\}$ for CV-Small/Large, $p_c=0.98$, linear mutation decay $p_m\in[0.40,0.10]$, $\eta_{\mathrm{SBX}}=1.5$, $\eta_{\mathrm{poly}}=8$. Performance metrics are \textbf{Hypervolume (HV)}~\cite{zitzler1999multiobjective} and \textbf{IGD\textsuperscript{+}}~\cite{ishibuchi2015modified}, computed against the combined non-dominated reference front pooled across all algorithms.
+We construct two CV instances over four flood-prone provinces (Da Nang, Quang Nam, Thua Thien-Hue, Quang Ngai): \textbf{CV-Small} ($|\mathcal{I}|=20$, $|\mathcal{H}|=5$, $|\mathcal{J}|=2$, $|\mathcal{S}|=3$, district resolution) and \textbf{CV-Large} ($|\mathcal{I}|=100$, $|\mathcal{H}|=20$, $|\mathcal{J}|=12$, $|\mathcal{S}|=3$, commune resolution). Node coordinates map to real administrative centroids and confirmed logistics facilities; scenario risks and road disruptions are calibrated via a multi-criteria flood vulnerability score~\cite{nguyen2021flood}; three transport modes (truck, motorboat, helicopter) are modelled, with helicopter links capped at 15\% of active arcs per scenario. Scenarios are drawn via SAA~\cite{shapiro2003monte} from a profile bank spanning mild/severe/extreme flood regimes; CV-Large first-stage decisions $(\hat{x},\hat{q})$ are further validated on an independent out-of-sample (OOS) set of $N'=10$ adversarial extreme scenarios disjoint from training. Because this OOS holdout is deliberately extreme-only, we treat feasibility as the primary robustness metric and interpret large OOS $Z_2$ increases as stress amplification rather than prediction error.
 % ┌─────────────────────────────────────────────────────────────────────┐
 % │ CAMERA-READY [R1.2]  ·  SAA Scenario-Count Sensitivity Analysis   │
 % ├─────────────────────────────────────────────────────────────────────┤
@@ -729,7 +704,7 @@ MILP (Adaptive WS)         & $\mathbf{0.997}$ & $\mathbf{0.005}$ & $4.9$ \\
 \end{tabular}
 \end{table}
 
-Table~\ref{tab:exp1_results} reveals a clear performance hierarchy. The MILP solver defines the reference Pareto front for CV-Small, establishing the quality ceiling at HV\,=\,0.997. The Greedy heuristic runs near-instantly but remains far from the front. VNS-TS and GWO-HD both achieve competitive HV ($\approx$0.78) with VNS-TS requiring 60\,s and GWO-HD only 0.6\,s. PB-NSGA closes the gap to MILP substantially (HV\,=\,0.925, IGD\textsuperscript{+}\,=\,0.039) in 1.1\,s, demonstrating that the priority-based decoder effectively navigates the combinatorial structure of MO-IHLNDP.
+PB-NSGA closes the gap to the MILP reference front (HV~$0.925$ vs.\ $0.997$) in $1.1$\,s, a $4\times$ runtime advantage over MILP and 50$\times$ over VNS-TS at competitive quality, demonstrating that the priority-based decoder effectively navigates the combinatorial structure of MO-IHLNDP.
 
 \subsection{Experiment 2: Case Study on Central Vietnam}
 \label{sec:exp2}
@@ -739,7 +714,7 @@ We apply PB-NSGA, GWO-HD, and VNS-TS to the full-scale \textbf{CV-Large} instanc
 \begin{figure}[ht]
 \centering
 \includegraphics[width=\linewidth]{figures/exp2_pareto_tradeoff.pdf}
-\caption{Combined Pareto fronts for PB-NSGA, GWO-HD, and VNS-TS. \textbf{Left (CV-Small):} all three algorithms compared against the MILP true Pareto front. \textbf{Right (CV-Large, power scale):} combined non-dominated front across 20 matched runs for each algorithm. $Z_1$: expected logistics cost; $Z_2$: expected maximum deprivation cost.}
+\caption{Combined Pareto fronts. \textbf{Left:} CV-Small vs.\ MILP reference. \textbf{Right:} CV-Large (power scale), 20 matched runs per algorithm.}
 \label{fig:pareto_tradeoff}
 \end{figure}
 
@@ -783,16 +758,16 @@ On CV-Large across 20 matched runs per algorithm, PB-NSGA achieves HV\,=\,1.000\
 % │   robustness variance and occasional catastrophic failure.         │
 % └─────────────────────────────────────────────────────────────────────┘
 
-Because all three algorithms share the same decoder, the 100\% SAA-100 feasibility rate across all 20 seeds is attributable to the recourse engine, not the search. On the adversarial OOS set (10 extreme scenarios), PB-NSGA alone maintains perfect feasibility across all seeds; GWO-HD and VNS-TS remain highly feasible at 96.4\% (95\% CI [93.4\%, 98.8\%]) and 97.8\% (95\% CI [96.2\%, 99.2\%]), respectively. The feasibility gap reflects search quality, not recourse privilege.
+While objective-space metrics confirm convergence, the operational viability of these networks depends on their robustness under catastrophic stress. Because all three algorithms share the same decoder, the 100\% SAA-100 feasibility rate across all 20 seeds is attributable to the recourse engine, not the search. On the adversarial OOS set (10 extreme scenarios), PB-NSGA alone maintains perfect feasibility across all seeds; GWO-HD and VNS-TS remain highly feasible at 96.4\% (95\% CI [93.4\%, 98.8\%]) and 97.8\% (95\% CI [96.2\%, 99.2\%]), respectively. The feasibility gap reflects search quality, not recourse privilege.
 
 \begin{figure}[ht]
 \centering
 \includegraphics[width=\linewidth]{figures/CV_large_solution_map.pdf}
-\caption{Strategic relief network for a representative solution on CV-Large ($Z_1=\$4.6$M, $Z_2=43{,}453$) across three probabilistic scenarios: mild ($p=0.60$), severe ($p=0.30$), and extreme ($p=0.10$). Hub inventory fill levels are annotated in brackets. No reactive hub is activated in any scenario. Line styles indicate transport mode: solid gray (truck), blue dashed (water), orange dashed (helicopter).}
+\caption{CV-Large knee-point relief network across the three flood scenarios. Brackets: hub fill levels. Line styles: solid gray (truck), blue dashed (water), orange dashed (helicopter).}
 \label{fig:cv_large_map_detailed}
 \end{figure}
 
-Figure~\ref{fig:cv_large_map_detailed} visualizes the knee-point solution ($Z_1=\$4.6$M, $Z_2=43{,}453$). The eight planned hubs remain active with identical fill levels across all three scenarios; no reactive hub is activated. This is an optimal structural property of dense networks: pre-positioning at eight commune-resolution locations mathematically dominates reactive setup costs (\$51K--\$109K per scenario), while the recourse mechanism (Algorithm~\ref{alg:decoder}, Pass~3) remains available and verifiably triggers on sparser CV-Small instances. Adaptation across severity regimes is modal: helicopter routes displace truck links in the extreme scenario.
+\textbf{Structural insights vs.\ reactive costs.} Figure~\ref{fig:cv_large_map_detailed} visualizes the knee-point solution ($Z_1=\$4.6$M, $Z_2=43{,}453$): eight planned hubs remain active with identical fill levels across all scenarios and no reactive hub is activated. At the CV-Large scale, dense pre-positioning at eight commune-resolution locations mathematically dominates the \$51K--\$109K per-scenario reactive setup cost, demonstrating economic rationality rather than a decoder bias. The recourse mechanism (Algorithm~\ref{alg:decoder}, Pass~3) remains available and verifiably triggers on sparser CV-Small instances under severe and extreme scenarios. Adaptation across severity regimes is modal rather than structural: helicopter routes displace truck links in the extreme scenario.
 % ┌─────────────────────────────────────────────────────────────────────┐
 % │ CAMERA-READY [R1.1]  ·  Defend "No Reactive Hub Opened" Finding   │
 % ├─────────────────────────────────────────────────────────────────────┤
@@ -876,7 +851,7 @@ H16 (91\%) and H15 (89\%) carry the heaviest pre-positioned loads, anchoring cov
 
 As a sensitivity check on training-set size, we compare the calibrated three-scenario design against a tier-balanced $N=10$ training set using 20 PB-NSGA runs each. The calibrated $N=3$ design achieves significantly better OOS feasibility (1.000 vs. 0.931; $\Delta=-0.069$, 95\% CI [$-0.128$, $-0.029$]) at one-third the training burden. By contrast, the mean OOS $\Delta Z_2$ difference is not significant ($\Delta=-437\%$, 95\% CI [$-1865\%$, $+1969\%$]) because the $N=10$ design is highly right-skewed: even after excluding five BIG\_M sentinel evaluations, one seed still exhibits a genuine catastrophic OOS failure (22,037\% mean OOS $\Delta Z_2$). We therefore treat feasibility as the primary robustness conclusion and interpret the $N=10$ result as evidence that uniform-probability random training carries substantially higher robustness variance under adversarial extreme-only stress.
 
-\textbf{Decision support.} Hub selection frequency across all 20 CV-Large runs (128 Pareto solutions) reveals a clear investment hierarchy: Quang Ngai Port (H15) and Phuoc Son Helipad (H16) appear in every solution (100\%), followed by Huong Viet Depot (H14, 82.8\%), Da Nang Airport (H0, 77.3\%), Tam Ky Logistics Hub (H1, 67.2\%), Binh Son Warehouse (H9, 59.4\%), and Dong Giang Station (H3, 57.8\%). H1's risk surges from 0.46 (mild) to 0.94 (severe), exceeding $\chi=0.7$ and forcing deactivation under high-severity scenarios; authorities should treat it as a conditional asset and pre-stage contingency inventory at H14 (risk $\le0.13$ across all scenarios). Under the extreme scenario, road disruption enforces a modal shift to watercraft and helicopter routes; pre-equipping H15 and H16 with marine terminals and maintaining rotary-wing access at H0 delivers asymmetric resilience at lower cost than redundant infrastructure.
+\textbf{Decision support.} Hub selection frequencies across 128 Pareto solutions reveal a rigid investment hierarchy: coastal nodes with multi-modal accessibility (H15 Quang Ngai Port, H16 Phuoc Son Helipad) form an uncompromisable core (100\% activation), while inland depots (H1, H3, H9) act as conditional assets whose contribution to the network depends heavily on the risk threshold $\chi$. H1's risk escalates from 0.46 (mild) to 0.94 (severe), causing the decoder to bypass it under high-severity scenarios (Pass~1 only activates planned hubs with $r_{ks}\le\chi$) and motivating contingency pre-staging at H14 (risk $\le0.13$ across all regimes). Optimising for $Z_2$ alongside $Z_1$ yields measurable equity gains: knee-point solutions hold worst-case deprivation at $43$k while a cost-only ($Z_1$-minimising) extreme of the same Pareto front spikes to $150$k, a $3.5\times$ equity improvement at $<25\%$ logistics-cost premium.
 
 % \begin{figure}[ht]
 % \centering
@@ -889,7 +864,8 @@ As a sensitivity check on training-set size, we compare the calibrated three-sce
 
 \section{Conclusion and Future Work}
 
-This paper makes three contributions to humanitarian logistics under uncertainty. First, we formulate MO-IHLNDP, a two-stage stochastic bi-objective model that jointly captures incomplete hub networks, multi-modal transport, deprivation cost, and pre-positioned inventory for flood disaster relief. Second, we propose PB-NSGA, a priority-based NSGA-II with an MCF-backed decoder that efficiently navigates the coupled first- and second-stage decisions. Because the same decoder and evaluation core is also embedded in GWO-HD and VNS-TS, the matched 20-seed CV-Large study isolates search from reconstruction: all three methods remain highly feasible under adversarial OOS stress, but PB-NSGA alone maintains 100\% OOS feasibility while delivering the best Pareto quality in under 10\,s. Third, applied to four flood-prone provinces in Central Vietnam, the joint framework delivers a practical decision-support tool: a quantified cost-deprivation trade-off, a stable hub investment hierarchy anchored by the Quang Ngai Port Hub and Phuoc Son Helipad, explicit identification of resilience gaps for contingency planning, and evidence that the calibrated three-scenario design is more reliable than a tier-balanced $N=10$ alternative at one-third the training burden.
+For Central Vietnam, the framework converts the abstract incomplete-network formulation into actionable infrastructure guidance. Two coastal multi-modal nodes (H15, H16) emerge as uncompromisable anchors of the regional hub system, while inland depots like H1 are conditional assets whose decoder availability falls when their scenario risk exceeds the safety threshold; contingency inventory should be pre-staged at H14, not stockpiled at H1. The dominance of pre-positioning over reactive activation at this density indicates that, once a network exceeds a critical hub-to-demand ratio, the marginal value of reactive setup investments falls below their cost; planners operating denser networks should redirect reactive-hub capital toward pre-positioning depth and modal diversification (marine and rotary-wing access at coastal anchors).
+Algorithmically, PB-NSGA's matched 20-seed advantage is feasibility-driven, not cost-driven: on the adversarial OOS set its 100\% feasibility rate distinguishes it from GWO-HD and VNS-TS, which share the same priority-based decoder but differ in their search operators. Since recourse logic is held constant, the feasibility gap isolates search efficiency as the operative factor. The principal limit is the variance of $Z_2$ under uniform-probability training; calibrated stratification removes it, but operational deployments with poorly characterised flood frequencies will inherit this variance until field data refine the profile distribution.
 
 \textbf{Limitations and future work.}
 The model is validated on a synthetic instance calibrated from administrative and geographic data; field validation against actual disaster records is necessary before operational deployment. Three directions are prioritised: integrating real-time sensor and satellite feeds into a live decision-support ecosystem; extending the model to explicitly penalize hub processing degradation under high-risk conditions, bridging scenario-based planning and tail-risk management; and scaling PB-NSGA to hour-long runtime budgets with continuous convergence guarantees for large-scale regional deployments.
