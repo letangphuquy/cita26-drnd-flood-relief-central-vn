@@ -1,0 +1,21 @@
+{
+  "note": "Note: positive \u0394 = N=10 higher than N=3. For feasibility rate, \u0394\u22480 confirms N=3 already achieves saturation. For OOS \u0394Z2, higher = larger cost penalty under stress scenarios.",
+  "n10_seeds": 20,
+  "n3_seeds": 20,
+  "metrics": {
+    "oos_feasibility_rate": {
+      "n10_mean": 0.93143,
+      "n3_mean": 1.0,
+      "delta": -0.06857,
+      "ci95_lo": -0.127955,
+      "ci95_hi": -0.029205
+    },
+    "oos_z2_diff_pct": {
+      "n10_mean": 5660.492295,
+      "n3_mean": 2207.999515,
+      "delta": 3452.49278,
+      "ci95_lo": -1720.715305,
+      "ci95_hi": 12853.12601
+    }
+  }
+}
