@@ -83,12 +83,12 @@ done
 
 # ── Step 2: Run VNS-TS baseline (literature comparator) ───────────────────
 echo ""
-echo "[Step 2] Running VNS-TS baseline (5 seeds) on CV-Large..."
+echo "[Step 2] Running VNS-TS baseline (20 seeds) on CV-Large..."
 if [ ! -f "$SOLVER_DIR/vns_ts_baseline" ]; then
     g++ -std=c++17 -O2 -I"$SOLVER_DIR" "$SOLVER_DIR/vns_ts_baseline.cpp" -o "$SOLVER_DIR/vns_ts_baseline"
 fi
 
-for seed in {0..4}
+for seed in {0..19}
 do
     echo "  [VNS Seed $seed] Running..."
     "$SOLVER_DIR/vns_ts_baseline" "$DATA_CV" \
