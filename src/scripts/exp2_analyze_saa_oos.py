@@ -55,25 +55,41 @@ def _bootstrap_ci(values, n_boot=2000, ci=0.95, rng_seed=42):
     return lo, hi
 
 
+BIG_M_THRESHOLD = 5e8  # sentinel values >= this are model upper-bound penalties
+
+
 def _seed_stats(evals):
-    """Compute per-seed statistics from an evaluations list."""
+    """Compute per-seed statistics from an evaluations list.
+
+    BIG_M sentinel values (new_Z2 >= BIG_M_THRESHOLD) are excluded from Z2
+    statistics because they represent infeasible upper-bound penalties, not
+    real deprivation costs.  The count of excluded solutions is reported
+    separately under ``z2_bigm_count``.
+    """
     cv = [sol["new_CV"] for sol in evals]
     feasible = sum(1 for c in cv if c <= 1e-9)
     feasibility_rate = feasible / max(1, len(cv))
-    z2_vals = [sol["new_Z2"] for sol in evals]
-    return {
+
+    z2_bigm_count = sum(1 for sol in evals if sol["new_Z2"] >= BIG_M_THRESHOLD)
+    z2_clean = [sol for sol in evals if sol["new_Z2"] < BIG_M_THRESHOLD]
+    z2_vals = [sol["new_Z2"] for sol in z2_clean]
+
+    result = {
         "n_evaluations": len(evals),
         "feasible_count": feasible,
         "feasibility_rate": round(feasibility_rate, 4),
         "mean_cv": round(_mean(cv), 6),
-        "mean_z2": round(_mean(z2_vals), 4),
+        "mean_z2": round(_mean(z2_vals), 4) if z2_vals else float("nan"),
         "mean_z2_diff_pct": round(
             _mean([
                 (sol["new_Z2"] - sol["orig_Z2"]) / max(1.0, sol["orig_Z2"]) * 100.0
-                for sol in evals
+                for sol in z2_clean
             ]), 4
-        ),
+        ) if z2_clean else float("nan"),
     }
+    if z2_bigm_count:
+        result["z2_bigm_count"] = z2_bigm_count
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -111,11 +127,12 @@ def analyze(saa_path, oos_path, out_json=None):
             "mean_cv": _mean(cv_oos),
             "feasible_count": sum(1 for c in cv_oos if c <= 1e-9),
             "feasibility_rate": sum(1 for c in cv_oos if c <= 1e-9) / max(1, len(cv_oos)),
-            "mean_z2": _mean([sol["new_Z2"] for sol in oos_data]),
+            "mean_z2": _mean([sol["new_Z2"] for sol in oos_data if sol["new_Z2"] < BIG_M_THRESHOLD]),
             "mean_z2_diff_pct": _mean([
                 (sol["new_Z2"] - sol["orig_Z2"]) / max(1.0, sol["orig_Z2"]) * 100.0
-                for sol in oos_data
+                for sol in oos_data if sol["new_Z2"] < BIG_M_THRESHOLD
             ]),
+            "z2_bigm_count": sum(1 for sol in oos_data if sol["new_Z2"] >= BIG_M_THRESHOLD),
         },
     }
 
