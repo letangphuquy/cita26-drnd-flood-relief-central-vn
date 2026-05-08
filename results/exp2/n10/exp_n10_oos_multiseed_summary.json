@@ -15,8 +15,9 @@
         "feasible_count": 7,
         "feasibility_rate": 0.4667,
         "mean_cv": 216243.36,
-        "mean_z2": 253941244.1349,
-        "mean_z2_diff_pct": 89679.5919
+        "mean_z2": 55343665.3486,
+        "mean_z2_diff_pct": 22036.637,
+        "z2_bigm_count": 4
       }
     },
     "1": {
@@ -34,8 +35,9 @@
         "feasible_count": 22,
         "feasibility_rate": 0.9565,
         "mean_cv": 21935.260435,
-        "mean_z2": 27206541.0627,
-        "mean_z2_diff_pct": 10549.2855
+        "mean_z2": 1157304.8588,
+        "mean_z2_diff_pct": 398.8786,
+        "z2_bigm_count": 1
       }
     },
     "2": {
@@ -397,10 +399,10 @@
       "n": 20
     },
     "oos_z2_diff_pct": {
-      "mean": 5660.492295,
-      "std": 19929.88671,
-      "ci95_lo": 526.16577,
-      "ci95_hi": 14964.65099,
+      "mean": 1770.824205,
+      "std": 4904.188548,
+      "ci95_lo": 333.900805,
+      "ci95_hi": 4163.116185,
       "n": 20
     }
   }
