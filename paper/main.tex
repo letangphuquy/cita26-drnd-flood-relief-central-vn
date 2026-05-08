@@ -218,52 +218,69 @@ From a practical standpoint, DRND involves two critical uncertainty factors. Fir
 
 The model integrates the deprivation cost~\cite{holguin2013appropriate} for social equity, and Daganzo's continuous approximation (CA)~\cite{daganzo2005logistics} to tractably estimate last-mile rescue times.
 
-\subsection{Sets and Indices}
+% ┌─────────────────────────────────────────────────────────────────────────┐
+% │  ORIGINAL SECTION 2 — TABULAR FORMAT  (aesthetic, swap-ready)          │
+% │  To restore: uncomment the block below and delete the compact           │
+% │  \subsection{Notation} block that follows it.                          │
+% ├─────────────────────────────────────────────────────────────────────────┤
+% \subsection{Sets and Indices}
+% \noindent
+% \begin{tabular}{l p{0.85\textwidth}}
+% $\mathcal{H}, \mathcal{I}, \mathcal{J}$ & Set of candidate hubs ($k, h$), demand nodes ($i$), and origins ($j$) \\
+% $\mathcal{S}, \mathcal{M}$ & Set of disaster scenarios ($s$) and transportation modes ($m$) \\
+% $\mathcal{V}$ & Set of all nodes ($u,v$), $\mathcal{V} = \mathcal{H} \cup \mathcal{I} \cup \mathcal{J}$ \\
+% \end{tabular}
+%
+% \subsection{Parameters}
+%
+% \noindent \textbf{First-Phase Parameters (Strategic Planning)} \\
+% \begin{tabular}{l p{0.85\textwidth}}
+% $F_k$ & Fixed cost to establish hub $k$ (planned, before the disaster) \\
+% $c_k, \kappa_k$ & Unit holding cost and capacity limit for inventory at hub $k$ \\
+% $\alpha, \chi, M$ & Discount factor for economies of scale, max acceptable risk threshold, and Big-M constant \\
+% $C_{uvm}, \tau_{uvm}$ & Unit transportation cost and travel time from node $u$ to $v$ via mode $m$ \\
+% $C_m, Q_m$ & Unit local routing cost and transportation capacity for vehicle mode $m$ \\
+% $\gamma$ & Conversion factor (average relief items required per evacuated person) \\
+% \end{tabular}
+%
+% \noindent \textbf{Second-Phase Parameters (Disaster Response, Scenario $s$)} \\
+% \begin{tabular}{l p{0.85\textwidth}}
+% $\pi_s$ & Probability of scenario $s$ \\
+% $F_{ks}^{a}$ & Fixed cost to establish hub $k$ of the second type (reactive) in scenario $s$ \\
+% $\tau_{ks}$ & Processing time for each rescue round trip at hub $k$ in scenario $s$ \\
+% $a_{uvms}$ & Accessibility of arc $(u,v)$ via mode $m$ in scenario $s$ (1 if traversable, 0 otherwise) \\
+% $r_{us}, \lambda_{is}$ & Risk index of node $u$, and deprivation sensitivity coefficient for demand $i$ in scenario $s$ \\
+% $D_{is}, O_{js}$ & Demand (number of people to evacuate) at $i$, and relief items provided at origin $j$ in scenario $s$ \\
+% $c_{jks}$ & Pre-computed cheapest transport cost: $c_{jks} = \min_{m \in \mathcal{M} \mid a_{jkms}=1} C_{jkm}$ ($+\infty$ if no mode available) \\
+% $\Theta_{kis}$ & Pre-computed CA routing cost from grid $i$ to hub $k$ in scenario $s$ \\
+% $\Phi, \eta, A_i$ & Daganzo's circuity factor, average group size per distress location, and area of grid $i$ \\
+% \end{tabular}
+%
+% \subsection{Decision Variables}
+% \noindent
+% \begin{tabular}{l p{0.85\textwidth}}
+% $x_{k} \in \{0,1\}$ & 1 if hub $k$ is established as planned (first type), 0 otherwise \\
+% $y_{ks} \in \{0,1\}$ & 1 if hub $k$ is established as reactive (second type) in scenario $s$, 0 otherwise \\
+% $z_{iks} \in \{0,1\}$ & 1 if demand $i$ is assigned to hub $k$ in scenario $s$, 0 otherwise \\
+% $z_{jks} \in \{0,1\}$ & 1 if origin $j$ supplies hub $k$ in scenario $s$, 0 otherwise \\
+% $q_{k}$ & Amount of relief items inventoried at hub $k$ \\
+% $f_{khms}$ & Lateral transshipment flow from hub $k$ to hub $h$ via mode $m$ in scenario $s$ \\
+% \end{tabular}
+% └─────────────────────────────────────────────────────────────────────────┘
+
+% ── COMPACT NOTATION WITH READABILITY (active) ─────────────────────────────
+\subsection{Notation}
 \noindent
-\begin{tabular}{l p{0.85\textwidth}}
-$\mathcal{H}, \mathcal{I}, \mathcal{J}$ & Set of candidate hubs ($k, h$), demand nodes ($i$), and  origins ($j$) \\
-$\mathcal{S}, \mathcal{M}$ & Set of disaster scenarios ($s$) and transportation modes ($m$) \\
-$\mathcal{V}$ & Set of all nodes ($u,v$) representing the area in question, $\mathcal{V} = \mathcal{H} \cup \mathcal{I} \cup \mathcal{J}$ \\
-\end{tabular}
+\textit{Sets:} $\mathcal{H}$, $\mathcal{I}$, $\mathcal{J}$ index candidate hubs ($k,h\in\mathcal{H}$), demand nodes ($i\in\mathcal{I}$), and relief origins ($j\in\mathcal{J}$); $\mathcal{S}$ and $\mathcal{M}$ index disaster scenarios and transport modes; $\mathcal{V}=\mathcal{H}\cup\mathcal{I}\cup\mathcal{J}$ is the full node set.
 
-\subsection{Parameters}
+\smallskip\noindent
+\textit{First-phase parameters} (pre-disaster, strategic): fixed hub establishment cost $F_k$; unit holding cost $c_k$ and inventory capacity $\kappa_k$; inter-hub flow discount $\alpha$; risk acceptability threshold $\chi$; arc transport cost and travel time $C_{uvm}$, $\tau_{uvm}$; local routing cost $C_m$, vehicle capacity $Q_m$ per mode, and relief-items-per-person conversion ratio $\gamma$.
 
-\noindent \textbf{First-Phase Parameters (Strategic Planning)} \\
-\begin{tabular}{l p{0.85\textwidth}}
-$F_k$ & Fixed cost to establish hub $k$ of the first type (before the disaster) \\
-$c_k, \kappa_k$ & Unit holding cost and capacity limit for inventory at hub $k$ \\
-$\alpha, \chi, M$ & Discount factor for economies of scale, max acceptable risk threshold, and Big-M constant \\
-$C_{uvm}, \tau_{uvm}$ & Unit transportation cost and estimated travel time from node $u$ to $v$ via mode $m$ \\
-$C_m, Q_m$ & Unit local routing cost and transportation capacity for vehicle mode $m$ \\
-$\gamma$ & Conversion factor (average amount of relief items required per evacuated person) \\
-\end{tabular}
+\smallskip\noindent
+\textit{Second-phase parameters} (post-disaster, scenario $s$ with probability $\pi_s$): reactive hub activation cost $F_{ks}^a$; hub round-trip processing time $\tau_{ks}$; arc accessibility $a_{uvms}\in\{0,1\}$ (1 if traversable under scenario $s$); node risk index $r_{us}$; deprivation sensitivity $\lambda_{is}=\lambda_0(1+r_{is})$, up-weighting vulnerable populations; demand $D_{is}$ and supply $O_{js}$; pre-computed cheapest transport cost $c_{jks}=\min_{m\mid a_{jkms}=1}C_{jkm}$ and Daganzo CA last-mile routing cost $\Theta_{kis}$ (circuity $\Phi$, group size $\eta$, grid area $A_i$).
 
-% \vspace{0.2cm}
-\noindent \textbf{Second-Phase Parameters (Disaster Response, Scenario $s$)} \\
-\begin{tabular}{l p{0.85\textwidth}}
-$\pi_s$ & Probability of scenario $s$ \\
-$F_{ks}^{a}$ & Fixed cost to establish hub $k$ of the second type (reactive) in scenario $s$ \\
-$\tau_{ks}$ & Processing time for each rescue round trip at hub $k$ in scenario $s$ \\
-$a_{uvms}$ & Accessibility of arc $(u,v)$ via mode $m$ in scenario $s$ (1 if traversable, 0 otherwise) \\
-$r_{us}, \lambda_{is}$ & Risk index of node $u$, and deprivation sensitivity coefficient for demand $i$ in scenario $s$ \\
-$D_{is}, O_{js}$ & Demand (number of people to evacuate) at $i$, and relief items provided at origin $j$ in scenario $s$ \\
-$c_{jks}$             & Pre-computed cheapest transport cost from origin $j$ to hub $k$ in scenario $s$:
-                        $c_{jks} = \min_{m \in \mathcal{M} \mid a_{jkms}=1} C_{jkm}$, ($+\infty$ if no available mode) \\
-$\Theta_{kis}$ & Pre-computed CA routing cost to execute the evacuation from grid $i$ to hub $k$ in scenario $s$ \\
-$\Phi, \eta, A_i$ & Daganzo's circuity factor, average group size per distress location, and area of grid cell $i$ \\
-\end{tabular}
-
-\subsection{Decision Variables}
-\noindent
-\begin{tabular}{l p{0.85\textwidth}}
-$x_{k} \in \{0,1\}$ & 1 if hub $k$ is established as the first type (planned), 0 otherwise \\
-$y_{ks} \in \{0,1\}$ & 1 if hub $k$ is established as the second type (reactive) in scenario $s$, 0 otherwise \\
-$z_{iks} \in \{0,1\}$ & 1 if demand $i$ is assigned to be evacuated to hub $k$ in scenario $s$, 0 otherwise \\
-$z_{jks} \in \{0,1\}$ & 1 if origin $j$ supplies hub $k$ in scenario $s$, 0 otherwise \\
-$q_{k}$ & Amount of relief items inventoried at hub $k$ \\
-$f_{khms}$ & Lateral trans-shipment flow volume from hub $k$ to hub $h$ via mode $m$ in scenario $s$ \\
-% $W_s \ge 0$ & Auxiliary variable capturing the worst-case deprivation cost across all demand nodes in scenario $s$ \\
-\end{tabular}
+\smallskip\noindent
+\textit{Decision variables:} $x_k\in\{0,1\}$ and $y_{ks}\in\{0,1\}$ activate planned and reactive hubs; $z_{iks},z_{jks}\in\{0,1\}$ assign demand nodes and origins to hubs per scenario; $q_k\ge0$ is pre-positioned inventory quantity; $f_{khms}\ge0$ is inter-hub lateral transshipment flow.
 
 \subsection{Objectives}
 \textbf{Objective 1: Minimize Total Expected Logistics Cost ($Z_1$)}
@@ -281,7 +298,14 @@ $f_{khms}$ & Lateral trans-shipment flow volume from hub $k$ to hub $h$ via mode
 \end{aligned}
 \end{equation}
 
-Objective $Z_1$ minimizes total expected logistics cost. Using the previously mentioned CA \cite{daganzo2005logistics}, demands are aggregated on a grid basis to pre-compute the last-mile routing cost $\Theta_{kis}$. The first term is line-haul cost from hub $k$ to demand $i$, and the second term is local detour cost inside area $i$:
+% ══ ORIGINAL Z1 EXPLANATION (swap-ready) ═════════════════════════════════
+% Objective $Z_1$ minimizes total expected logistics cost. Using the
+% previously mentioned CA \cite{daganzo2005logistics}, demands are aggregated
+% on a grid basis to pre-compute the last-mile routing cost $\Theta_{kis}$.
+% The first term is line-haul cost from hub $k$ to demand $i$, and the
+% second term is local detour cost inside area $i$:
+% ═════════════════════════════════════════════════════════════════════════
+where $\Theta_{kis}$ is the pre-computed Daganzo CA routing cost~\cite{daganzo2005logistics} (line-haul plus local detour):
 % Cheapest transportation mode is considered
 \begin{equation*} \label{eq:daganzo_theta}
     \Theta_{kis} = \min_{m \in \mathcal{M}  \mid a_{ikms}=1} \left( 2 \cdot C_{kim} \cdot \lceil D_{is}/Q_m \rceil + C_{m} \cdot \Phi \sqrt{\lceil D_{is}/\eta \rceil \cdot A_i} \right)
@@ -302,39 +326,61 @@ Objective $Z_1$ minimizes total expected logistics cost. Using the previously me
 \Omega_{is} = \sum_{k \in \mathcal{H}} z_{iks} \left( \tau_{ks} + 2 \cdot \min_{m \in \mathcal{M}  \mid a_{ikms}=1} \tau_{kim} \right)
 \end{equation*}
 
-Objective $Z_2$ minimizes the expected value of maximum deprivation cost \cite{holguin2013appropriate}. The exponential function of waiting time $\Omega_{is}$ heavily penalizes the model if it lets a demand node wait slightly longer than the rest, forcing the model to distribute resources evenly. The penalty function is adjusted by $\lambda_{is} = \lambda_0 (1 + r_{is})$ so that highly vulnerable populations are prioritized. 
-
-To linearize $Z_2$, we exploit the single-allocation property \eqref{eq:single_alloc_demand}. Any demand $i$ is allocated to a single hub $k$. Thus, the deprivation cost $C^{\text{dep}}_{iks}$ is pre-computed:
+% ══ ORIGINAL Z2 EXPLANATION + LINEARIZATION (swap-ready) ════════════════
+% Objective $Z_2$ minimizes the expected value of maximum deprivation cost
+% \cite{holguin2013appropriate}. The exponential function of waiting time
+% $\Omega_{is}$ heavily penalizes the model if it lets a demand node wait
+% slightly longer than the rest, forcing the model to distribute resources
+% evenly. The penalty function is adjusted by $\lambda_{is} = \lambda_0
+% (1 + r_{is})$ so that highly vulnerable populations are prioritized.
+%
+% To linearize $Z_2$, we exploit the single-allocation property
+% \eqref{eq:single_alloc_demand}. Any demand $i$ is allocated to a single
+% hub $k$. Thus, the deprivation cost $C^{\text{dep}}_{iks}$ is pre-computed:
+% ═════════════════════════════════════════════════════════════════════════
+The exponential penalty~\cite{holguin2013appropriate} on waiting time $\Omega_{is}$ enforces equity; $\lambda_{is}=\lambda_0(1+r_{is})$ up-weights vulnerable populations. Exploiting single-allocation, $C^{\text{dep}}_{iks}$ is pre-computed and $Z_2$ linearized via $W_s\ge C^{\text{dep}}_{iks}\cdot z_{iks}$:
 
 \begin{equation} \label{eq:deprivation_cost}
     C^{\text{dep}}_{iks} = D_{is} \cdot \left(e^{\lambda_{is} \cdot \left(\tau_{ks} + 2 \cdot \min_{m \in \mathcal{M} \mid a_{ikms}=1} \tau_{kim}\right)} - 1\right)
 \end{equation}
 
-By introducing a continuous auxiliary variable $W_s \ge 0$ and constraint \eqref{eq:deprivation_bound} to capture the worst-case deprivation cost among all demand nodes in a given scenario $s$, we obtain the linearized program:
-
-\begin{align}
-    \text{Minimize } \quad & Z_1, Z_2^{\text{linear}} = \sum_{s \in \mathcal{S}} \pi_s \cdot W_s   \nonumber \\
-    \text{subject to} \quad & \text{Constraints } \eqref{eq:deprivation_bound} - \eqref{eq:nonneg_vars} \nonumber \\
-    W_s & \ge C^{\text{dep}}_{iks} \cdot z_{iks} \quad \forall i \in \mathcal{I}, k \in \mathcal{H}, s \in \mathcal{S} \label{eq:deprivation_bound}
-\end{align}
+% ══ ORIGINAL LINEARIZATION BLOCK + CONSTRAINTS INTRO (swap-ready) ═══════
+% By introducing a continuous auxiliary variable $W_s \ge 0$ and constraint
+% \eqref{eq:deprivation_bound} to capture the worst-case deprivation cost
+% among all demand nodes in a given scenario $s$, we obtain the linearized
+% program:
+%
+% \begin{align}
+%     \text{Minimize } \quad & Z_1, Z_2^{\text{linear}} = \sum_{s \in \mathcal{S}} \pi_s \cdot W_s   \nonumber \\
+%     \text{subject to} \quad & \text{Constraints } \eqref{eq:deprivation_bound} - \eqref{eq:nonneg_vars} \nonumber \\
+%     W_s & \ge C^{\text{dep}}_{iks} \cdot z_{iks} \quad \forall i \in \mathcal{I}, k \in \mathcal{H}, s \in \mathcal{S} \label{eq:deprivation_bound}
+% \end{align}
+%
+% \subsection{Constraints}
+% The original, complete MO-IHLNDP model is formally stated as follows:
+% ═════════════════════════════════════════════════════════════════════════
+The auxiliary variable $W_s\ge C^{\text{dep}}_{iks}\cdot z_{iks}$ linearizes the max; the complete model minimizes $Z_1,Z_2$ subject to:
 
 \subsection{Constraints}
 
-The original, complete MO-IHLNDP model is formally stated as follows:
-
+% ══ ORIGINAL CONSTRAINT EQUATIONS — 6 individual lines (swap-ready) ══════
+% To restore individual equation numbers for (8)-(13), replace the three
+% merged lines below with:
+%     \sum_{k \in \mathcal{H}} z_{iks} & = 1 \quad \forall i \in \mathcal{I}, s \in \mathcal{S} \label{eq:single_alloc_demand} \\
+%     \sum_{k \in \mathcal{H}} z_{jks} & = 1 \quad \forall j \in \mathcal{J}, s \in \mathcal{S} \label{eq:single_alloc_origin} \\
+%     z_{iks} & \le x_k + y_{ks} \quad \forall i \in \mathcal{I}, k \in \mathcal{H}, s \in \mathcal{S} \label{eq:valid_assign_demand} \\
+%     z_{jks} & \le x_k + y_{ks} \quad \forall j \in \mathcal{J}, k \in \mathcal{H}, s \in \mathcal{S} \label{eq:valid_assign_origin} \\
+%     z_{iks} & \le \sum_{m \in \mathcal{M}} a_{ikms} \quad \forall i \in \mathcal{I}, k \in \mathcal{H}, s \in \mathcal{S} \label{eq:path_demand} \\
+%     z_{jks} & \le \sum_{m \in \mathcal{M}} a_{jkms} \quad \forall j \in \mathcal{J}, k \in \mathcal{H}, s \in \mathcal{S} \label{eq:path_origin} \\
+% ═════════════════════════════════════════════════════════════════════════
 \allowdisplaybreaks
 \begin{align}
-    \text{Minimize } \quad & Z_1, Z_2 \nonumber \\
-    \text{subject to} \quad & \text{Constraints } \eqref{eq:hub_type} - \eqref{eq:nonneg_vars} \nonumber \\
     x_k + y_{ks} & \le 1 \quad \forall k \in \mathcal{H}, s \in \mathcal{S} \label{eq:hub_type} \\
     q_k & \le \kappa_k \cdot x_k \quad \forall k \in \mathcal{H} \label{eq:hub_inv_cap} \\
     r_{ks} \cdot (x_k + y_{ks}) & \le \chi \quad \forall k \in \mathcal{H}, s \in \mathcal{S} \label{eq:hub_safety} \\
-    \sum_{k \in \mathcal{H}} z_{iks} & = 1 \quad \forall i \in \mathcal{I}, s \in \mathcal{S} \label{eq:single_alloc_demand} \\
-    \sum_{k \in \mathcal{H}} z_{jks} & = 1 \quad \forall j \in \mathcal{J}, s \in \mathcal{S} \label{eq:single_alloc_origin} \\
-    z_{iks} & \le x_k + y_{ks} \quad \forall i \in \mathcal{I}, k \in \mathcal{H}, s \in \mathcal{S} \label{eq:valid_assign_demand} \\
-    z_{jks} & \le x_k + y_{ks} \quad \forall j \in \mathcal{J}, k \in \mathcal{H}, s \in \mathcal{S} \label{eq:valid_assign_origin} \\
-    z_{iks} & \le \sum_{m \in \mathcal{M}} a_{ikms} \quad \forall i \in \mathcal{I}, k \in \mathcal{H}, s \in \mathcal{S} \label{eq:path_demand} \\
-    z_{jks} & \le \sum_{m \in \mathcal{M}} a_{jkms} \quad \forall j \in \mathcal{J}, k \in \mathcal{H}, s \in \mathcal{S} \label{eq:path_origin} \\
+    \sum_{k \in \mathcal{H}} z_{iks} = 1,\; \sum_{k \in \mathcal{H}} z_{jks} & = 1 \quad \forall i\!\in\!\mathcal{I},\; j\!\in\!\mathcal{J},\; s\!\in\!\mathcal{S} \label{eq:single_alloc_demand} \\
+    z_{iks},\; z_{jks} & \le x_k + y_{ks} \quad \forall i,j,k,s \label{eq:valid_assign_demand} \\
+    z_{iks} \le \textstyle\sum_m a_{ikms},\; z_{jks} & \le \textstyle\sum_m a_{jkms} \quad \forall i,j,k,s \label{eq:path_demand} \\
     f_{khms} & \le M \cdot a_{khms} \quad \forall k, h \in \mathcal{H},\; m \in \mathcal{M},\; s \in \mathcal{S} \label{eq:trans_path} \\
     % \sum_{i \in \mathcal{I}} \gamma D_{is} z_{iks} + \sum_{h \in \mathcal{H}} \sum_{m \in \mathcal{M}} f_{khms} & \le q_k + \sum_{j \in \mathcal{J}} O_{js} z_{jks} + \sum_{h \in \mathcal{H}} \sum_{m \in \mathcal{M}} f_{hkms} \quad \forall k \in \mathcal{H}, s \in \mathcal{S} \label{eq:flow_balance} \\
     \begin{split}
@@ -346,7 +392,22 @@ The original, complete MO-IHLNDP model is formally stated as follows:
     q_k, f_{khms}, W_s & \ge 0 \quad \forall k, h, m, s \label{eq:nonneg_vars}
 \end{align}
 
-Constraints~\eqref{eq:hub_type}--\eqref{eq:hub_safety} govern hub establishment and safe-zone placement; \eqref{eq:single_alloc_demand}--\eqref{eq:path_origin} enforce single-allocation via available arcs; \eqref{eq:trans_path}--\eqref{eq:throughput_cap} maintain flow feasibility and capacity; \eqref{eq:binary_vars}--\eqref{eq:nonneg_vars} define variable domains.
+% ══ ORIGINAL CONSTRAINT DESCRIPTION — verbose (swap-ready) ═══════════════
+% Constraints \eqref{eq:hub_type} define the hub establishment. For planned
+% hubs, inventory is bounded by physical capacity \eqref{eq:hub_inv_cap},
+% while reactive hubs are required to be placed within safe zones
+% \eqref{eq:hub_safety}.
+% Constraints \eqref{eq:single_alloc_demand}-\eqref{eq:path_origin} enforce
+% the single-allocation property to active hubs via available links.
+% Constraint \eqref{eq:trans_path} restricts flow to intact paths.
+% Constraints \eqref{eq:flow_balance} and \eqref{eq:throughput_cap} maintain
+% flow conservation and capacity limits. Specifically, \eqref{eq:flow_balance}
+% ensures that total supply -- comprising inventory ($q_k$), external origins
+% ($O_{js}$), and incoming flows -- satisfies both victim demand (converted by
+% $\gamma$) and outgoing trans-shipments. Variable domains are defined in
+% \eqref{eq:binary_vars}-\eqref{eq:nonneg_vars}.
+% ═════════════════════════════════════════════════════════════════════════
+Constraints~\eqref{eq:hub_type}--\eqref{eq:hub_safety} govern hub establishment and safe-zone placement; \eqref{eq:single_alloc_demand}--\eqref{eq:path_demand} enforce single-allocation via available arcs; \eqref{eq:trans_path}--\eqref{eq:throughput_cap} maintain flow feasibility and capacity; \eqref{eq:binary_vars}--\eqref{eq:nonneg_vars} define variable domains.
 
 % ============================================================
 %  REPLACE YOUR EXISTING \section{Proposed Algorithm: PB-NSGA}
