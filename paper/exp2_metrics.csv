@@ -1,5 +1,5 @@
 instance,algorithm,n_runs,pareto_combined,pareto_mean,pareto_std,HV_mean,HV_std,IGDplus_mean,IGDplus_std,runtime_s_mean,runtime_s_std,cpu_time_s_mean,cpu_time_s_std
-CV_large,GWO-HD,5,8,9.0,1.6,0.977088,0.008251,0.000000,0.000000,4.6294,0.1418,4.6222,0.1353
+CV_large,GWO-HD,20,9,7.5,2.8,0.981968,0.007637,0.000000,0.000000,4.7523,0.3390,4.7036,0.3114
 CV_large,PB-NSGA,20,6,6.4,2.6,0.999959,0.005676,0.000000,0.001433,8.7097,0.3153,8.6837,0.2947
 CV_large,VNS-TS,5,13,12.0,3.2,0.793059,0.044042,0.000000,0.000000,180.3651,0.2265,180.1049,0.2176
 CV_small,GWO-HD,5,8,4.4,2.6,0.948155,0.336966,0.000000,0.001217,3.6799,3.2744,3.6612,3.2640
