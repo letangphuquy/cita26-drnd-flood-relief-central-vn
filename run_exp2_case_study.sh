@@ -104,12 +104,12 @@ done
 
 # ── Step 2b: Run GWO-HD baseline (literature comparator) ──────────────────
 echo ""
-echo "[Step 2b] Running GWO-HD baseline (5 seeds) on CV-Large..."
+echo "[Step 2b] Running GWO-HD baseline (20 seeds) on CV-Large..."
 if [ ! -f "$SOLVER_DIR/gwo_hd_baseline" ]; then
     g++ -O3 -std=c++17 -I"$SOLVER_DIR" "$SOLVER_DIR/gwo_hd_baseline.cpp" -o "$SOLVER_DIR/gwo_hd_baseline"
 fi
 
-for seed in {0..4}
+for seed in {0..19}
 do
     echo "  [GWO Seed $seed] Running..."
     "$SOLVER_DIR/gwo_hd_baseline" "$DATA_CV" \
