@@ -23,6 +23,7 @@ SAA_DATA="$DATA_PREP/cv_large_saa100.json"
 OOS_DATA="$DATA_PREP/cv_large_oos10.json"
 RES2="$PROJECT/results/exp2"
 SOLVER_DIR="$PROJECT/src/solver"
+PAPER_FIG_DIR="$PROJECT/paper/figures"
 
 ANALYZE_ONLY=0
 for arg in "$@"; do
@@ -59,6 +60,16 @@ fi
 
 mkdir -p "$RES2"
 mkdir -p "$DATA_PREP"
+mkdir -p "$PAPER_FIG_DIR"
+
+sync_paper_figure() {
+    local src="$1"
+    local dst_name="$2"
+    if [ -f "$src" ] && [ -d "$PAPER_FIG_DIR" ]; then
+        cp "$src" "$PAPER_FIG_DIR/$dst_name"
+        echo "  [Export] $PAPER_FIG_DIR/$dst_name"
+    fi
+}
 
 # ── Skip solver/data stages if --analyze-only ─────────────────────────────
 if [ "$ANALYZE_ONLY" -eq 0 ]; then
@@ -137,6 +148,7 @@ echo "[Step 3] Building Pareto trade-off outputs..."
     --results-exp2 "$RES2" \
     --results-exp1 "$PROJECT/results/exp1" \
     --out-dir "$RES2"
+sync_paper_figure "$RES2/exp2_pareto_tradeoff.pdf" "exp2_pareto_tradeoff.pdf"
 
 # ── Step 4: Statistical Analysis & Sensitivity ────────────────────────────
 echo ""
@@ -152,6 +164,7 @@ echo "[Step 5] Generating 1x3 Composite Network Map..."
     --instance "$DATA_CV" \
     --result "$RES2/cv_large_seed0.json" \
     --out "$PROJECT/figures/cv_large_map_detailed.pdf"
+sync_paper_figure "$PROJECT/figures/cv_large_map_detailed.pdf" "CV_large_solution_map.pdf"
 
 # ── Step 6: Generate SAA/OOS datasets (combinatorial protocol) ───────────
 echo ""

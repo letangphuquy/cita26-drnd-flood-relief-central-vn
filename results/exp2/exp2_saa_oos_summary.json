@@ -5,12 +5,17 @@
     "mean_z1_diff_pct": 174.26245974383824,
     "mean_z2_diff_pct": 911.707662991245,
     "mean_cv": 0.0,
-    "feasible_count": 6
+    "feasible_count": 6,
+    "feasibility_rate": 1.0
   },
   "oos": {
     "file": "/Users/quyle/cita26-drnd-flood-relief-central-vn/results/exp2/CV_large_seed0_oos_eval.json",
     "n_evaluations": 6,
     "mean_cv": 0.0,
-    "feasible_count": 6
+    "feasible_count": 6,
+    "feasibility_rate": 1.0,
+    "mean_z2": 973068.8742932017,
+    "mean_z2_diff_pct": 2181.9676674662774,
+    "z2_bigm_count": 0
   }
 }

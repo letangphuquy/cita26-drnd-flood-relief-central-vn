@@ -13,7 +13,7 @@
     "true_milp_points": 4
   },
   "outputs": {
-    "csv": "results/exp2/exp2_tradeoff_pareto.csv",
-    "plot": "results/exp2/exp2_pareto_tradeoff.pdf"
+    "csv": "/Users/quyle/cita26-drnd-flood-relief-central-vn/results/exp2/exp2_tradeoff_pareto.csv",
+    "plot": "/Users/quyle/cita26-drnd-flood-relief-central-vn/results/exp2/exp2_pareto_tradeoff.pdf"
   }
 }
