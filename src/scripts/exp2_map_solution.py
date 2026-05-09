@@ -530,6 +530,18 @@ def draw_scenario(ax, inst, sol, si, use_mercator=True):
         p = xy(j)
         ax.scatter(p[0], p[1], s=80, c=COL_ORIGIN, marker="D", edgecolors="black", lw=0.6, zorder=5)
 
+    # 5. Tight zoom: set axis limits so nodes fill ~85% of viewport (8% pad each side)
+    all_node_idx = list(hub_idx) + list(dem_idx) + list(ori_idx)
+    all_pts = [xy(idx) for idx in all_node_idx]
+    xs = [p[0] for p in all_pts]
+    ys = [p[1] for p in all_pts]
+    x_min, x_max = min(xs), max(xs)
+    y_min, y_max = min(ys), max(ys)
+    x_pad = (x_max - x_min) * 0.08
+    y_pad = (y_max - y_min) * 0.08
+    ax.set_xlim(x_min - x_pad, x_max + x_pad)
+    ax.set_ylim(y_min - y_pad, y_max + y_pad)
+
     ax.set_title(f"{sc['name']} Scenario (p={sc['probability']:.2f})", fontsize=11, fontweight="bold", pad=12)
     ax.set_axis_off()
 
