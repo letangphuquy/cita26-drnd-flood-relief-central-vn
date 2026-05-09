@@ -1,0 +1,4 @@
+pair,da_hamming,y_hamming,jaccard,modal_diff,ts_vol_diff
+mild-severe,0,3,0.0,66,6536.0
+severe-extrem,0,0,0.0,64,64680.0
+mild-extrem,0,3,0.0,108,58145.0
