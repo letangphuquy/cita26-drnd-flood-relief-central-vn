@@ -67,9 +67,9 @@ ALPHA_LINK = 0.20
 LW_LINK = 0.7
 
 MODE_STYLES = {
-    0: {"ls": "-",  "label": "Road",       "color": "#777777", "alpha": 0.25}, 
-    1: {"ls": "--", "label": "Water",      "color": "#1f77b4", "alpha": 0.40}, 
-    2: {"ls": ":",  "label": "Helicopter", "color": "#ff7f0e", "alpha": 0.50}, 
+    0: {"ls": "-",    "label": "Road",       "color": "#777777", "alpha": 0.25, "lw": LW_LINK},
+    1: {"ls": "--",   "label": "Water",      "color": "#1f77b4", "alpha": 0.40, "lw": LW_LINK},
+    2: {"ls": (0, (4, 2)), "label": "Helicopter", "color": "#ff7f0e", "alpha": 0.80, "lw": 1.6},
 }
 
 def load_json(p):
@@ -234,8 +234,8 @@ def decode_exact(sol, inst, si):
         
         best_ki, best_m, best_t = -1, -1, 1e9
         best_hub_score = -1e18
-        
-        # Pass 1
+
+        # Pass 1 — mirrors C++ best_mode_time: truck/water by min-time; helicopter ONLY fallback
         for j in range(K):
             if j >= len(trial): break
             ki = trial[j]
@@ -243,13 +243,13 @@ def decode_exact(sol, inst, si):
             k = hub_idx[ki]
             b_m, best_c_t = -1, 1e9
             reachable = False
-            for m in [0, 1]:
+            for m in [0, 1]:                # truck (0), water (1) — min time
                 if sc["accessibility"][m][i][k]:
                     reachable = True
                     if inst["transport"]["time"][m][i][k] < best_c_t:
                         best_c_t = inst["transport"]["time"][m][i][k]
                         b_m = m
-            if b_m == -1 and sc["accessibility"][2][i][k]:
+            if b_m == -1 and sc["accessibility"][2][i][k]:   # helicopter fallback only
                 reachable = True
                 best_c_t = inst["transport"]["time"][2][i][k]
                 b_m = 2
@@ -277,7 +277,7 @@ def decode_exact(sol, inst, si):
                 best_t = best_c_t
                 best_m = b_m
         
-        # Pass 2
+        # Pass 2 — same best_mode_time priority
         if best_ki == -1:
             for j in range(K, num_H):
                 if j >= len(trial): break
@@ -301,13 +301,13 @@ def decode_exact(sol, inst, si):
                 best_ki, best_t, best_m = ki, best_c_t, b_m
                 break
         
-        # Pass 3: Forced reactive
+        # Pass 3: Forced reactive — same best_mode_time priority
         if best_ki == -1:
             for ki in range(num_H):
                 if active[ki] or y[ki]: continue
                 k = hub_idx[ki]
                 if sc["risk"][k] > chi: continue
-                
+
                 b_m, best_c_t = -1, 1e9
                 reachable = False
                 for m in [0, 1]:
@@ -334,7 +334,7 @@ def decode_exact(sol, inst, si):
                 y[best_ki] = True
                 inventory[best_ki] = 0.0 # FIXED: Reactive hubs have 0 pre-positioned inventory
 
-    # 4. Origins (Supply to Hubs)
+# 4. Origins (Supply to Hubs)
     net_inv = [inventory[ki] - hub_load[ki] for ki in range(num_H)]
     for jj in range(num_J):
         j = ori_idx[jj]
@@ -430,14 +430,18 @@ def draw_scenario(ax, inst, sol, si, use_mercator=True):
     inventory = dec["inventory"]
     y_open = dec["y"]
 
-    # 1. Routing Links (Modal differentiated)
-    for ii, ki, m in assignments:
-        p_dem = xy(dem_idx[ii])
-        p_hub = xy(hub_idx[ki])
-        style = MODE_STYLES[m]
-        ax.plot([p_dem[0], p_hub[0]], [p_dem[1], p_hub[1]], 
-                color=style["color"], ls=style["ls"], lw=LW_LINK, 
-                alpha=style["alpha"], zorder=3)
+    # 1. Routing Links (Modal differentiated) — helicopter drawn last so it appears on top
+    for m_draw in [0, 1, 2]:
+        for ii, ki, m in assignments:
+            if m != m_draw:
+                continue
+            p_dem = xy(dem_idx[ii])
+            p_hub = xy(hub_idx[ki])
+            style = MODE_STYLES[m]
+            ax.plot([p_dem[0], p_hub[0]], [p_dem[1], p_hub[1]],
+                    color=style["color"], ls=style["ls"],
+                    lw=style.get("lw", LW_LINK),
+                    alpha=style["alpha"], zorder=3 + m)
 
     # 1.5 Transshipment flows
     for src_ki, dst_ki, m, flow in transshipments:
@@ -582,7 +586,7 @@ def main():
         Line2D([0], [0], color=plt.cm.RdYlGn_r(0.8), marker="o", ls="", label="Demand (Risky)", markersize=8),
         Line2D([0], [0], color=MODE_STYLES[0]["color"], ls=MODE_STYLES[0]["ls"], label="Truck Mode", lw=1.5),
         Line2D([0], [0], color=MODE_STYLES[1]["color"], ls=MODE_STYLES[1]["ls"], label="Water Mode", lw=1.5),
-        Line2D([0], [0], color=MODE_STYLES[2]["color"], ls=MODE_STYLES[2]["ls"], label="Air Mode (Heli)", lw=1.5),
+        Line2D([0], [0], color=MODE_STYLES[2]["color"], ls=MODE_STYLES[2]["ls"], label="Air Mode (Heli)", lw=2.0),
         Line2D([0], [0], color="#555555", ls="-", lw=2.0, marker=">", label="Lateral Flow", markersize=6),
     ]
     fig.legend(handles=legend_elements, loc="lower center", ncol=4, fontsize=9, 
