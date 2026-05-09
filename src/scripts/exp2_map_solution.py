@@ -67,9 +67,12 @@ ALPHA_LINK = 0.20
 LW_LINK = 0.7
 
 MODE_STYLES = {
-    0: {"ls": "-",    "label": "Road",       "color": "#777777", "alpha": 0.25, "lw": LW_LINK},
-    1: {"ls": "--",   "label": "Water",      "color": "#1f77b4", "alpha": 0.40, "lw": LW_LINK},
-    2: {"ls": (0, (4, 2)), "label": "Helicopter", "color": "#ff7f0e", "alpha": 0.80, "lw": 1.6},
+    # Road: thin solid dark-gray — minimal visual weight, print-distinguishable by absence of dash
+    0: {"ls": "-",           "label": "Road",       "color": "#333333", "alpha": 0.35, "lw": 0.9},
+    # Water: thick blue dashed (long-dash) — clearly different from road in B&W prints
+    1: {"ls": (0, (6, 2)),   "label": "Water",      "color": "#1f77b4", "alpha": 0.70, "lw": 1.8},
+    # Helicopter: orange dotted (short dot-dash) — rare links, high contrast
+    2: {"ls": (0, (2, 2)),   "label": "Helicopter", "color": "#ff7f0e", "alpha": 0.90, "lw": 2.2},
 }
 
 def load_json(p):
@@ -577,16 +580,15 @@ def main():
     # Elegant Legend
     legend_elements = [
         Line2D([0], [0], color=COL_HUB_OPEN, marker="s", ls="", label="Planned Hub (Safe)", markersize=8),
-        Line2D([0], [0], color=COL_HUB_RISKY, marker="s", ls="", label="Planned Hub (Risky)", markersize=8),
         Line2D([0], [0], color=COL_HUB_RISKY, marker="X", ls="", label="Planned Hub (Closed by Risk)", markersize=8),
         Line2D([0], [0], color=COL_HUB_REACT, marker="H", ls="", label="Reactive Hub", markersize=8),
         Line2D([0], [0], color="black", marker="s", ls="", markerfacecolor="gray", fillstyle="bottom", label="Inv. Fill %", markersize=8),
         Line2D([0], [0], color=COL_ORIGIN, marker="D", ls="", label="Supply Origin", markersize=8),
         Line2D([0], [0], color=plt.cm.RdYlGn_r(0.2), marker="o", ls="", label="Demand (Safe)", markersize=6),
         Line2D([0], [0], color=plt.cm.RdYlGn_r(0.8), marker="o", ls="", label="Demand (Risky)", markersize=8),
-        Line2D([0], [0], color=MODE_STYLES[0]["color"], ls=MODE_STYLES[0]["ls"], label="Truck Mode", lw=1.5),
-        Line2D([0], [0], color=MODE_STYLES[1]["color"], ls=MODE_STYLES[1]["ls"], label="Water Mode", lw=1.5),
-        Line2D([0], [0], color=MODE_STYLES[2]["color"], ls=MODE_STYLES[2]["ls"], label="Air Mode (Heli)", lw=2.0),
+        Line2D([0], [0], color=MODE_STYLES[0]["color"], ls=MODE_STYLES[0]["ls"], label="Road Mode", lw=1.5),
+        Line2D([0], [0], color=MODE_STYLES[1]["color"], ls=MODE_STYLES[1]["ls"], label="Water Mode", lw=2.0),
+        Line2D([0], [0], color=MODE_STYLES[2]["color"], ls=MODE_STYLES[2]["ls"], label="Air Mode (Heli)", lw=2.2),
         Line2D([0], [0], color="#555555", ls="-", lw=2.0, marker=">", label="Lateral Flow", markersize=6),
     ]
     fig.legend(handles=legend_elements, loc="lower center", ncol=4, fontsize=9, 
