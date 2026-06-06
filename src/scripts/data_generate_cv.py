@@ -367,10 +367,16 @@ def risk_interval(r_aux):
 # PLANAR GRAPH HELPERS  (Delaunay topology + BFS reachability + Dijkstra)
 # ============================================================================
 
+MAX_EDGE_KM = 80.0   # Delaunay edges longer than this are not plausible direct links
+
 def _delaunay_edges(coords):
     """
-    Undirected edge set from Delaunay triangulation of node coordinates.
-    Yields ~3N edges — a sparse, geographically plausible planar network.
+    Undirected edge set from Delaunay triangulation, filtered to MAX_EDGE_KM.
+
+    Delaunay naturally produces convex-hull 'belt' edges connecting distant
+    nodes that have no close triangulation neighbours.  Dropping edges longer
+    than MAX_EDGE_KM removes these artefacts while keeping all realistic
+    direct road/waterway connections.
     """
     pts = np.array([[c[0], c[1]] for c in coords])
     tri = _Delaunay(pts)
@@ -379,7 +385,9 @@ def _delaunay_edges(coords):
         for i in range(3):
             for j in range(i + 1, 3):
                 u, v = int(simplex[i]), int(simplex[j])
-                edges.add((min(u, v), max(u, v)))
+                if haversine(coords[u][0], coords[u][1],
+                             coords[v][0], coords[v][1]) <= MAX_EDGE_KM:
+                    edges.add((min(u, v), max(u, v)))
     return edges
 
 
@@ -589,7 +597,10 @@ def generate_scenarios(coords, aux_risk, r_intervals,
                             visited.add(v)
                             queue.append(v)
                 for dst in visited:
-                    if dst != src:
+                    # Only extend to non-adjacent pairs so that direct-edge
+                    # disruption values (0 = blocked) are NOT overwritten.
+                    # The visualiser reads these direct values to colour edges.
+                    if dst != src and (min(src, dst), max(src, dst)) not in _edges:
                         a[m][src][dst] = 1
 
         # -- Demand D_{is}: risk-driven fraction of base population
