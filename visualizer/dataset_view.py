@@ -11,6 +11,7 @@ Four toggleable layers:
 from __future__ import annotations
 
 import colorsys
+import math
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Set, Tuple
@@ -18,6 +19,17 @@ from typing import Any, Dict, List, Set, Tuple
 import folium
 import numpy as np
 from scipy.spatial import Delaunay
+
+MAX_EDGE_KM = 80.0   # must match data_generate_cv.py — excludes belt edges
+
+
+def _haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    R = 6371.0
+    p = math.pi / 180
+    a = (math.sin((lat2 - lat1) * p / 2) ** 2
+         + math.cos(lat1 * p) * math.cos(lat2 * p)
+         * math.sin((lon2 - lon1) * p / 2) ** 2)
+    return R * 2 * math.asin(math.sqrt(a))
 
 _ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_ROOT / "src" / "visualizer"))
@@ -48,7 +60,11 @@ def _demand_color(norm: float) -> str:
 # ── planar graph construction ─────────────────────────────────────────────────
 
 def _delaunay_edges(coords: List[Tuple[float, float]]) -> Set[Tuple[int, int]]:
-    """Return unique undirected edges from a Delaunay triangulation of coords."""
+    """
+    Undirected Delaunay edges filtered to MAX_EDGE_KM.
+    Matches the threshold used in data_generate_cv.py so the drawn network
+    reflects exactly the arcs that carry accessibility values in the JSON.
+    """
     pts = np.array([[c[0], c[1]] for c in coords])
     tri = Delaunay(pts)
     edges: Set[Tuple[int, int]] = set()
@@ -56,7 +72,9 @@ def _delaunay_edges(coords: List[Tuple[float, float]]) -> Set[Tuple[int, int]]:
         for i in range(3):
             for j in range(i + 1, 3):
                 u, v = int(simplex[i]), int(simplex[j])
-                edges.add((min(u, v), max(u, v)))
+                if _haversine(coords[u][0], coords[u][1],
+                               coords[v][0], coords[v][1]) <= MAX_EDGE_KM:
+                    edges.add((min(u, v), max(u, v)))
     return edges
 
 
