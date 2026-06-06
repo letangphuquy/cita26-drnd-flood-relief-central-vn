@@ -86,9 +86,11 @@ def _load_json(path: Path) -> SolutionFlow:
 
 # ── public API ────────────────────────────────────────────────────────────────
 
-def load_solution_flow(solution_idx: int) -> Optional[SolutionFlow]:
-    """Load pre-generated flow for solution *solution_idx*. Returns None if absent."""
-    candidate = FLOWS_DIR / f"solution_{solution_idx}.json"
+def load_solution_flow(solution_idx: int,
+                       flows_dir: Optional[Path] = None) -> Optional[SolutionFlow]:
+    """Load pre-generated flow for *solution_idx* from *flows_dir* (default FLOWS_DIR)."""
+    d = flows_dir if flows_dir is not None else FLOWS_DIR
+    candidate = d / f"solution_{solution_idx}.json"
     if candidate.exists():
         return _load_json(candidate)
     return None
@@ -101,12 +103,13 @@ def load_fallback_flow() -> Optional[SolutionFlow]:
     return None
 
 
-def flows_available() -> List[int]:
+def flows_available(flows_dir: Optional[Path] = None) -> List[int]:
     """Return sorted list of solution indices that have pre-generated flow files."""
-    if not FLOWS_DIR.exists():
+    d = flows_dir if flows_dir is not None else FLOWS_DIR
+    if not d.exists():
         return []
     return sorted(
         int(p.stem.split("_")[1])
-        for p in FLOWS_DIR.glob("solution_*.json")
+        for p in d.glob("solution_*.json")
         if p.stem.split("_")[1].isdigit()
     )

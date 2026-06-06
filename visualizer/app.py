@@ -33,12 +33,14 @@ from visualizer.flow_loader import (
 # ── preset dataset paths ──────────────────────────────────────────────────────
 _DATASETS = {
     "CV Large (case study)": {
-        "result":   str(_ROOT / "results" / "exp2" / "CV_large_seed0.json"),
-        "instance": str(_ROOT / "data" / "cv" / "cv_large_drnd.json"),
+        "result":    str(_ROOT / "results" / "exp2" / "CV_large_seed0.json"),
+        "instance":  str(_ROOT / "data" / "cv" / "cv_large_drnd.json"),
+        "flows_dir": _ROOT / "results" / "exp2" / "flows",
     },
     "CV Small": {
-        "result":   str(_ROOT / "results" / "exp1" / "cv_small_pb_nsga.json"),
-        "instance": str(_ROOT / "data" / "cv" / "cv_small_drnd.json"),
+        "result":    str(_ROOT / "results" / "exp1" / "cv_small_pb_nsga.json"),
+        "instance":  str(_ROOT / "data" / "cv" / "cv_small_drnd.json"),
+        "flows_dir": _ROOT / "results" / "exp1" / "flows",
     },
 }
 
@@ -70,7 +72,8 @@ def _get_solutions(result: SolverResult, pf_only: bool) -> List[Solution]:
 
 
 def _pick_flow(sol_idx: int, solution: Solution, result: SolverResult,
-               scenario_idx: int, num_hubs: int) -> Optional[Any]:
+               scenario_idx: int, num_hubs: int,
+               flows_dir: Optional[Any] = None) -> Optional[Any]:
     """Return ScenarioFlow for *sol_idx* + *scenario_idx*, or None.
 
     Discards any flow whose hub count doesn't match the current dataset so that
@@ -79,7 +82,7 @@ def _pick_flow(sol_idx: int, solution: Solution, result: SolverResult,
     def _hub_match(sf: Optional[SolutionFlow]) -> bool:
         return sf is not None and len(sf.X) == num_hubs
 
-    sf = load_solution_flow(sol_idx)
+    sf = load_solution_flow(sol_idx, flows_dir=flows_dir)
     if not _hub_match(sf):
         sf = None
     if sf is None and sol_idx == 0:
@@ -139,7 +142,7 @@ def main():
 
         st.divider()
 
-        avail = flows_available()
+        avail = flows_available(flows_dir=paths.get("flows_dir"))
         if avail:
             st.success(f"Flow data: {len(avail)} solution(s) pre-computed")
         else:
@@ -292,7 +295,8 @@ def main():
     st.subheader(f"Geospatial Network Map — Scenario: {sc_label}")
 
     flow_sc = _pick_flow(sel_idx, solution, result, scenario_idx,
-                         num_hubs=len(node_info.hub_indices))
+                         num_hubs=len(node_info.hub_indices),
+                         flows_dir=paths.get("flows_dir"))
     if flow_sc is None:
         st.info(
             "Detailed routing not available for this solution. "
