@@ -34,6 +34,11 @@ import math
 import json
 import random
 import os
+import heapq
+from collections import deque
+
+import numpy as np
+from scipy.spatial import Delaunay as _Delaunay
 
 # ============================================================================
 # CONFIGURATION
@@ -359,15 +364,64 @@ def risk_interval(r_aux):
 
 
 # ============================================================================
+# PLANAR GRAPH HELPERS  (Delaunay topology + BFS reachability + Dijkstra)
+# ============================================================================
+
+def _delaunay_edges(coords):
+    """
+    Undirected edge set from Delaunay triangulation of node coordinates.
+    Yields ~3N edges — a sparse, geographically plausible planar network.
+    """
+    pts = np.array([[c[0], c[1]] for c in coords])
+    tri = _Delaunay(pts)
+    edges = set()
+    for simplex in tri.simplices:
+        for i in range(3):
+            for j in range(i + 1, 3):
+                u, v = int(simplex[i]), int(simplex[j])
+                edges.add((min(u, v), max(u, v)))
+    return edges
+
+
+def _adj_list(edges, n):
+    """Build a symmetric adjacency list from an undirected edge set."""
+    adj = [[] for _ in range(n)]
+    for (u, v) in edges:
+        adj[u].append(v)
+        adj[v].append(u)
+    return adj
+
+
+def _dijkstra(cost_matrix, adj, src, n):
+    """Shortest-path cost from *src* to all nodes using edges in *adj*."""
+    dist = [float('inf')] * n
+    dist[src] = 0.0
+    heap = [(0.0, src)]
+    while heap:
+        d, u = heapq.heappop(heap)
+        if d > dist[u]:
+            continue
+        for v in adj[u]:
+            nd = d + cost_matrix[u][v]
+            if nd < dist[v]:
+                dist[v] = nd
+                heapq.heappush(heap, (nd, v))
+    return dist
+
+
+# ============================================================================
 # TRANSPORT MATRICES
 # ============================================================================
 
 def build_transport(coords):
     """
     C[m][u][v] ($/trip) and T[m][u][v] (hours) for all 3 modes.
-    Road: Haversine × tortuosity × terrain factor.
-    Water: follows waterways, minimal terrain effect.
-    Air: straight-line, mild weather/terrain headwind factor.
+
+    Direct (Delaunay-adjacent) costs: Haversine × mode-specific factors.
+    Non-adjacent pairs (road + water): shortest-path through Delaunay network
+    via Dijkstra, so costs reflect actual detour distances through the planar
+    network rather than a fictitious straight-line arc.
+    Air remains direct Haversine (helicopters fly in a straight line).
     """
     n = len(coords)
     ROAD_TORTUOSITY = 1.35   # Central Vietnam mountain roads ~35% longer
@@ -375,6 +429,7 @@ def build_transport(coords):
     C = [[[0.0]*n for _ in range(n)] for _ in range(NUM_MODES)]
     T = [[[0.0]*n for _ in range(n)] for _ in range(NUM_MODES)]
 
+    # -- Step 1: direct (Haversine-based) costs for all pairs
     for u in range(n):
         for v in range(n):
             if u == v:
@@ -395,10 +450,23 @@ def build_transport(coords):
             C[1][u][v] = d_water * MODE_PARAMS[1]["cost_per_km"] * water_tf
             T[1][u][v] = d_water / MODE_PARAMS[1]["speed"] * water_tf
 
-            # Mode 2 — air (helicopter): straight-line, mild wind/weather factor
+            # Mode 2 — air (helicopter): straight-line; stays direct for all pairs
             air_tf = 1.0 + 0.25 * (tf - 1.0)
             C[2][u][v] = d_hav * MODE_PARAMS[2]["cost_per_km"] * air_tf
             T[2][u][v] = d_hav / MODE_PARAMS[2]["speed"] * air_tf
+
+    # -- Step 2: shortest-path costs for non-adjacent pairs (road + water only)
+    # Delaunay adjacency is the same for both modes (geometry drives connectivity).
+    edges = _delaunay_edges(coords)
+    adj   = _adj_list(edges, n)
+    for m in (0, 1):   # road and water; air keeps direct Haversine
+        for src in range(n):
+            dist_c = _dijkstra(C[m], adj, src, n)
+            dist_t = _dijkstra(T[m], adj, src, n)
+            for dst in range(n):
+                if src != dst and (min(src, dst), max(src, dst)) not in edges:
+                    C[m][src][dst] = dist_c[dst]
+                    T[m][src][dst] = dist_t[dst]
 
     return C, T
 
@@ -448,6 +516,9 @@ def generate_scenarios(coords, aux_risk, r_intervals,
     n = len(coords)
     EPI_SIGMA = 85.0   # km — epicenter influence radius
 
+    # Delaunay planar graph — computed once, reused across all scenarios
+    _edges = _delaunay_edges(coords)
+
     # Probability weights for epicenter sampling
     epi_weights = [aux_risk[i] for i in demand_idx]
 
@@ -480,33 +551,46 @@ def generate_scenarios(coords, aux_risk, r_intervals,
             r_us += random.gauss(0, 0.025)   # small stochastic perturbation
             risk.append(round(max(0.01, min(0.99, r_us)), 4))
 
-        # -- Accessibility a[m][u][v]
-        # Initialise fresh 3D list (NOT by list multiplication — avoids aliasing bug)
-        a = [[[1]*n for _ in range(n)] for _ in range(NUM_MODES)]
-        for u in range(n):
-            for v in range(n):
-                if u == v:
-                    for m in range(NUM_MODES):
-                        a[m][u][v] = 0
-                    continue
-                avg_risk_uv = (risk[u] + risk[v]) / 2.0
-                # Road disruption: higher beta and risk → more links broken
-                p_road = min(0.97, beta * avg_risk_uv)
-                if random.random() < p_road:
-                    a[0][u][v] = 0
-                    a[0][v][u] = 0
-                # Water (m=1): only enabled if there's significant flood risk (flood areas)
-                # Prose: "water mode will be enabled on flood areas"
-                if risk[u] > 0.30 and risk[v] > 0.30:
-                    a[1][u][v] = 1
-                    a[1][v][u] = 1
-                else:
-                    a[1][u][v] = 0
-                    a[1][v][u] = 0
-                    
-                # Air (m=2) remains 1
-                a[2][u][v] = 1
-                a[2][v][u] = 1
+        # -- Accessibility a[m][u][v]: Delaunay planar graph + BFS path-reachability
+        #
+        # Stage 1: apply disruption logic only to direct Delaunay edges (sparse network).
+        #   Default is 0 (blocked); only adjacent pairs get a disruption draw.
+        # Stage 2: BFS-extend accessibility to all transitively reachable pairs so
+        #   the model can route through intermediate nodes when direct arcs are cut.
+        a = [[[0]*n for _ in range(n)] for _ in range(NUM_MODES)]
+        for (u, v) in _edges:
+            avg_risk_uv = (risk[u] + risk[v]) / 2.0
+            # Road (m=0): stochastic disruption proportional to scenario severity
+            p_road = min(0.97, beta * avg_risk_uv)
+            road_ok = 0 if random.random() < p_road else 1
+            a[0][u][v] = a[0][v][u] = road_ok
+            # Water (m=1): enabled only when both endpoints are flood-prone
+            water_ok = 1 if (risk[u] > 0.30 and risk[v] > 0.30) else 0
+            a[1][u][v] = a[1][v][u] = water_ok
+            # Air (m=2): always accessible on direct edges
+            a[2][u][v] = a[2][v][u] = 1
+
+        # BFS on direct-edge subgraph per mode → extend to path-reachable pairs
+        for m in range(NUM_MODES):
+            # Build adjacency from the directly accessible edges for this scenario
+            adj_m = [[] for _ in range(n)]
+            for (u, v) in _edges:
+                if a[m][u][v]:
+                    adj_m[u].append(v)
+                    adj_m[v].append(u)
+            # BFS from every source and mark all reachable destinations
+            for src in range(n):
+                visited = {src}
+                queue = deque([src])
+                while queue:
+                    u = queue.popleft()
+                    for v in adj_m[u]:
+                        if v not in visited:
+                            visited.add(v)
+                            queue.append(v)
+                for dst in visited:
+                    if dst != src:
+                        a[m][src][dst] = 1
 
         # -- Demand D_{is}: risk-driven fraction of base population
         demand = {}
@@ -714,10 +798,12 @@ def build_instance(size="small"):
         "meta": {
             "name":        f"CentralVietnam_{size.upper()}",
             "description": ("MO-IHLNDP flood relief — Vu Gia/Thu Bồn/Huế basin. "
-                            "Multi-criteria auxiliary risk + probabilistic scenarios."),
+                            "Multi-criteria auxiliary risk + Delaunay-planar network topology "
+                            "+ BFS path-reachability accessibility."),
             "seed":         SEED,
             "size":         size,
-            "methodology":  "multi-criteria auxiliary risk + risk-interval scenario model",
+            "methodology":  ("multi-criteria auxiliary risk + risk-interval scenario model "
+                             "+ Delaunay planar graph + BFS path-reachability"),
             "risk_weights": RISK_WEIGHTS,
         },
         "dimensions": {
