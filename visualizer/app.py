@@ -70,11 +70,21 @@ def _get_solutions(result: SolverResult, pf_only: bool) -> List[Solution]:
 
 
 def _pick_flow(sol_idx: int, solution: Solution, result: SolverResult,
-               scenario_idx: int) -> Optional[Any]:
-    """Return ScenarioFlow for *sol_idx* + *scenario_idx*, or None."""
+               scenario_idx: int, num_hubs: int) -> Optional[Any]:
+    """Return ScenarioFlow for *sol_idx* + *scenario_idx*, or None.
+
+    Discards any flow whose hub count doesn't match the current dataset so that
+    CV_large pre-generated flows are never used for CV_small (and vice versa).
+    """
+    def _hub_match(sf: Optional[SolutionFlow]) -> bool:
+        return sf is not None and len(sf.X) == num_hubs
+
     sf = load_solution_flow(sol_idx)
+    if not _hub_match(sf):
+        sf = None
     if sf is None and sol_idx == 0:
-        sf = load_fallback_flow()
+        fb = load_fallback_flow()
+        sf = fb if _hub_match(fb) else None
     if sf and scenario_idx < len(sf.scenarios):
         return sf.scenarios[scenario_idx]
     return None
@@ -281,7 +291,8 @@ def main():
     st.divider()
     st.subheader(f"Geospatial Network Map — Scenario: {sc_label}")
 
-    flow_sc = _pick_flow(sel_idx, solution, result, scenario_idx)
+    flow_sc = _pick_flow(sel_idx, solution, result, scenario_idx,
+                         num_hubs=len(node_info.hub_indices))
     if flow_sc is None:
         st.info(
             "Detailed routing not available for this solution. "

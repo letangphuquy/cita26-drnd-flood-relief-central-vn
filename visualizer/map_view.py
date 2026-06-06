@@ -134,7 +134,7 @@ def build_map(
         active_hubs = {
             node_info.hub_indices[k]
             for k, active in enumerate(scenario_flow.y_ks)
-            if active
+            if active and k < len(node_info.hub_indices)
         }
     else:
         # Fallback: nearest open hub, use A vector for mode
