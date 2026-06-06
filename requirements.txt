@@ -8,3 +8,9 @@ geopandas
 pyproj
 contextily
 pymoo
+
+# visualizer
+streamlit>=1.35
+folium>=0.16
+streamlit-folium>=0.20
+plotly>=5.20
