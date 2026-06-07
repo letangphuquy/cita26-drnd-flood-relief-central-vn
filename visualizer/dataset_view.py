@@ -300,19 +300,9 @@ def build_dataset_map(
                     locations=[coords[u], coords[v]],
                     color=mode_colour,
                     weight=2,
-                    opacity=0.55,
+                    opacity=0.6,
                     tooltip=f"{names[u] if u<len(names) else u} ↔ "
-                            f"{names[v] if v<len(names) else v} [{mode_name}] ✓",
-                ).add_to(fg)
-            else:
-                folium.PolyLine(
-                    locations=[coords[u], coords[v]],
-                    color="#9E9E9E",
-                    weight=1,
-                    opacity=0.30,
-                    dash_array="4 6",
-                    tooltip=f"{names[u] if u<len(names) else u} ↔ "
-                            f"{names[v] if v<len(names) else v} [{mode_name}] ✗ blocked",
+                            f"{names[v] if v<len(names) else v} [{mode_name}]",
                 ).add_to(fg)
 
     # ── Add all groups + layer control ────────────────────────────────────────
@@ -328,10 +318,10 @@ def build_dataset_map(
                 background:white;padding:10px 14px;border-radius:8px;
                 border:1px solid #ccc;font-size:12px;box-shadow:2px 2px 6px rgba(0,0,0,.15)">
       <b>Scenario: {sc_label}</b><br>
-      <span style="color:#2E7D32">─</span> Road accessible &nbsp;
+      <span style="color:#2E7D32">─</span> Road &nbsp;
       <span style="color:#0277BD">─</span> Water &nbsp;
       <span style="color:#6A1B9A">─</span> Air<br>
-      <span style="color:#9E9E9E">- -</span> Route blocked<br>
+      (lines shown for accessible direct links only)<br>
       <span style="color:#C62828">⚡</span> Flood epicentre<br>
       <span style="background:linear-gradient(to right,#2e7d32,#f9a825,#c62828);
                    display:inline-block;width:80px;height:10px;vertical-align:middle"></span>
