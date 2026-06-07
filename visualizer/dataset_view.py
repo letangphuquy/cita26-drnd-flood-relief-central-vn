@@ -146,8 +146,15 @@ def build_dataset_map(
     m = folium.Map(location=centre, zoom_start=9, tiles="OpenStreetMap",
                    control_scale=True)
 
-    # ── Delaunay edges (needed for accessibility layer) ───────────────────────
-    edges = _delaunay_edges(coords) if (show_road or show_water or show_air) else set()
+    # ── Edge sets per mode ────────────────────────────────────────────────────
+    # Road: prefer OSRM-validated edges stored in the JSON; fall back to Delaunay.
+    # Water / Air: always use Delaunay geometry (flood / helicopter – not road-bound).
+    _geom_edges = _delaunay_edges(coords) if (show_water or show_air or show_road) else set()
+    _graph = instance_data.get("graph", {})
+    if _graph.get("road_edges"):
+        road_edge_set = {(int(e[0]), int(e[1])) for e in _graph["road_edges"]}
+    else:
+        road_edge_set = _geom_edges   # legacy fallback
 
     # ── Feature groups ────────────────────────────────────────────────────────
     fg_risk = folium.FeatureGroup(name="Risk index", show=show_risk)
@@ -284,17 +291,17 @@ def build_dataset_map(
     # Layer 4: Accessibility planar graph (Delaunay edges per mode)
     # ─────────────────────────────────────────────────────────────────────────
     _MODE_META = [
-        (0, "Road",  "#2E7D32", fg_road,  show_road),
-        (1, "Water", "#0277BD", fg_water, show_water),
-        (2, "Air",   "#6A1B9A", fg_air,   show_air),
+        (0, "Road",  "#2E7D32", fg_road,  show_road,  road_edge_set),
+        (1, "Water", "#0277BD", fg_water, show_water, _geom_edges),
+        (2, "Air",   "#6A1B9A", fg_air,   show_air,   _geom_edges),
     ]
 
-    for mode_idx, mode_name, mode_colour, fg, show_flag in _MODE_META:
+    for mode_idx, mode_name, mode_colour, fg, show_flag, mode_edges in _MODE_META:
         if not show_flag or not accessibility or mode_idx >= len(accessibility):
             continue
         ac_matrix = accessibility[mode_idx]
         n = len(coords)
-        for (u, v) in edges:
+        for (u, v) in mode_edges:
             if u >= n or v >= n:
                 continue
             try:
