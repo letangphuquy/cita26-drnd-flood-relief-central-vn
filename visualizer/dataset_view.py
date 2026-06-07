@@ -20,7 +20,14 @@ import folium
 import numpy as np
 from scipy.spatial import Delaunay
 
-MAX_EDGE_KM = 80.0   # must match data_generate_cv.py — excludes belt edges
+# Display threshold for road/water edges on the map.
+# The model graph uses 80 km (data_generate_cv.MAX_EDGE_KM) for routing
+# reachability, but drawing all 339 Delaunay edges ≤80 km still produces
+# a triangulation mesh (266 edges accessible in Severe = visually indistinct
+# from the full graph).  Using a short display threshold (~commune-level
+# road segment length) shows only the most local, direct connections and
+# makes disruption clearly visible as the network thins across scenarios.
+DISPLAY_EDGE_KM = 12.0
 
 
 def _haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -73,7 +80,7 @@ def _delaunay_edges(coords: List[Tuple[float, float]]) -> Set[Tuple[int, int]]:
             for j in range(i + 1, 3):
                 u, v = int(simplex[i]), int(simplex[j])
                 if _haversine(coords[u][0], coords[u][1],
-                               coords[v][0], coords[v][1]) <= MAX_EDGE_KM:
+                               coords[v][0], coords[v][1]) <= DISPLAY_EDGE_KM:
                     edges.add((min(u, v), max(u, v)))
     return edges
 
