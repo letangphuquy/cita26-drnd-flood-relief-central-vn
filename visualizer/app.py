@@ -397,8 +397,10 @@ def main():
             show_air=ds_air,
         )
 
+        _dmap_key = (f"dmap_{dataset_name}_{scenario_idx}"
+                     f"_{ds_risk}_{ds_dem}_{ds_epi}_{ds_road}_{ds_water}_{ds_air}")
         st_folium(dmap, width="100%", height=640, returned_objects=[],
-                  key=f"dmap_{dataset_name}_{scenario_idx}")
+                  key=_dmap_key)
 
         dmap_html = dmap._repr_html_()  # type: ignore[attr-defined]
         st.download_button(
