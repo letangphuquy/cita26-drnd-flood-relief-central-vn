@@ -35,6 +35,9 @@ import json
 import random
 import os
 import heapq
+import time
+import urllib.request
+import urllib.error
 from collections import deque
 
 import numpy as np
@@ -418,26 +421,144 @@ def _dijkstra(cost_matrix, adj, src, n):
 
 
 # ============================================================================
+# OSRM ROAD GRAPH  (replaces pure-Delaunay adjacency for road mode)
+# ============================================================================
+
+_OSRM_BASE    = "http://router.project-osrm.org/route/v1/driving"
+_OSRM_TIMEOUT = 8       # seconds per request
+_OSRM_DELAY   = 0.12    # polite inter-request delay (seconds)
+_DETOUR_MIN   = 0.9     # OSRM_km / Haversine_km — route shorter than this is a ferry/sea shortcut
+_DETOUR_MAX   = 1.8     # OSRM_km / Haversine_km — higher = more winding allowed
+_OSRM_KM_MAX  = MAX_EDGE_KM   # absolute road-distance cap (same as Delaunay cutoff)
+
+
+def _osrm_route(lat1: float, lon1: float,
+                lat2: float, lon2: float):
+    """
+    Query OSRM public API for the driving distance between two points.
+    OSRM coordinate order is  lon,lat.
+
+    Returns (dist_km, time_hr) or (None, None) when no route exists
+    (e.g. island with no road access, water body barrier).
+    """
+    url = (f"{_OSRM_BASE}/{lon1},{lat1};{lon2},{lat2}"
+           "?overview=false&annotations=false")
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "cita26-drnd/1.0"})
+        with urllib.request.urlopen(req, timeout=_OSRM_TIMEOUT) as resp:
+            data = json.loads(resp.read())
+        if data.get("code") != "Ok" or not data.get("routes"):
+            return None, None
+        r = data["routes"][0]
+        return r["distance"] / 1000.0, r["duration"] / 3600.0
+    except Exception:
+        return None, None
+
+
+def _build_road_graph(coords, cache_path: str = ""):
+    """
+    Build the road adjacency graph for *coords* using OSRM validation.
+
+    Algorithm
+    ---------
+    1. Start from Delaunay candidate edges (geometric neighbours ≤ MAX_EDGE_KM).
+    2. For each candidate, query OSRM for the actual driving distance.
+    3. Accept the edge only if:
+       - A road route exists (excludes islands, water barriers)
+       - detour ratio  = OSRM_km / Haversine_km  ≤  _DETOUR_MAX
+       - OSRM_km  ≤  _OSRM_KM_MAX
+
+    Results are cached to *cache_path* (JSON) so subsequent runs are instant.
+
+    Returns
+    -------
+    road_edges  : set of (u,v) tuples  (u < v)
+    osrm_dist   : dict (u,v) and (v,u) → OSRM road distance in km
+    osrm_time   : dict (u,v) and (v,u) → OSRM travel time in hours
+    """
+    # ── Load cache ────────────────────────────────────────────────────────────
+    if cache_path and os.path.exists(cache_path):
+        print("      Loading road graph from cache ...")
+        with open(cache_path, encoding="utf-8") as f:
+            cached = json.load(f)
+        road_edges = {(int(e[0]), int(e[1])) for e in cached["road_edges"]}
+        osrm_dist  = {(int(k.split(",")[0]), int(k.split(",")[1])): v
+                      for k, v in cached["osrm_dist"].items()}
+        osrm_time  = {(int(k.split(",")[0]), int(k.split(",")[1])): v
+                      for k, v in cached["osrm_time"].items()}
+        print(f"      Road graph: {len(road_edges)} edges (from cache)")
+        return road_edges, osrm_dist, osrm_time
+
+    # ── Query OSRM ────────────────────────────────────────────────────────────
+    candidates = _delaunay_edges(coords)
+    print(f"      Querying OSRM for {len(candidates)} Delaunay candidate edges ...")
+
+    road_edges: set = set()
+    osrm_dist:  dict = {}
+    osrm_time:  dict = {}
+    n_no_route = 0
+
+    for i, (u, v) in enumerate(sorted(candidates)):
+        lat1, lon1 = coords[u]
+        lat2, lon2 = coords[v]
+        hav_km = haversine(lat1, lon1, lat2, lon2)
+
+        dk, th = _osrm_route(lat1, lon1, lat2, lon2)
+        time.sleep(_OSRM_DELAY)
+
+        if dk is None:
+            n_no_route += 1
+            continue
+
+        detour = dk / max(hav_km, 0.1)
+        # _DETOUR_MIN filters ferry routes: ferries cross water directly so their
+        # OSRM distance is shorter than the straight-line (ratio < 1).
+        if _DETOUR_MIN <= detour <= _DETOUR_MAX and dk <= _OSRM_KM_MAX:
+            road_edges.add((u, v))
+            osrm_dist[(u, v)] = osrm_dist[(v, u)] = round(dk, 3)
+            osrm_time[(u, v)] = osrm_time[(v, u)] = round(th, 5)
+
+        if (i + 1) % 50 == 0 or (i + 1) == len(candidates):
+            print(f"        {i+1}/{len(candidates)} — "
+                  f"{len(road_edges)} valid, {n_no_route} no-route")
+
+    print(f"      Road graph: {len(road_edges)} edges  "
+          f"({n_no_route} pairs had no drivable route)")
+
+    # ── Save cache ────────────────────────────────────────────────────────────
+    if cache_path:
+        os.makedirs(os.path.dirname(os.path.abspath(cache_path)), exist_ok=True)
+        with open(cache_path, "w", encoding="utf-8") as f:
+            json.dump({
+                "road_edges": [[u, v] for u, v in sorted(road_edges)],
+                "osrm_dist":  {f"{k[0]},{k[1]}": v for k, v in osrm_dist.items()},
+                "osrm_time":  {f"{k[0]},{k[1]}": v for k, v in osrm_time.items()},
+            }, f, indent=2)
+        print(f"      Cached → {cache_path}")
+
+    return road_edges, osrm_dist, osrm_time
+
+
+# ============================================================================
 # TRANSPORT MATRICES
 # ============================================================================
 
-def build_transport(coords):
+def build_transport(coords, road_edges=None, osrm_dist=None, osrm_time=None):
     """
     C[m][u][v] ($/trip) and T[m][u][v] (hours) for all 3 modes.
 
-    Direct (Delaunay-adjacent) costs: Haversine × mode-specific factors.
-    Non-adjacent pairs (road + water): shortest-path through Delaunay network
-    via Dijkstra, so costs reflect actual detour distances through the planar
-    network rather than a fictitious straight-line arc.
-    Air remains direct Haversine (helicopters fly in a straight line).
+    Road direct-edge costs come from OSRM when available (actual road km),
+    otherwise fall back to Haversine × tortuosity.  Non-adjacent pairs use
+    Dijkstra shortest-path through the validated road graph.
+    Water and air costs remain Haversine-based throughout.
     """
     n = len(coords)
-    ROAD_TORTUOSITY = 1.35   # Central Vietnam mountain roads ~35% longer
+    ROAD_TORTUOSITY = 1.35
 
     C = [[[0.0]*n for _ in range(n)] for _ in range(NUM_MODES)]
     T = [[[0.0]*n for _ in range(n)] for _ in range(NUM_MODES)]
 
-    # -- Step 1: direct (Haversine-based) costs for all pairs
+    # -- Step 1: compute base costs for all pairs
     for u in range(n):
         for v in range(n):
             if u == v:
@@ -447,34 +568,48 @@ def build_transport(coords):
             d_hav = haversine(la1, lo1, la2, lo2)
             tf    = terrain_factor((lo1 + lo2) / 2.0)
 
-            # Mode 0 — road (truck): tortuosity + terrain
-            d_road = d_hav * ROAD_TORTUOSITY * tf
+            # Road: OSRM distance if available, else Haversine × tortuosity
+            edge_key = (min(u, v), max(u, v))
+            if osrm_dist and edge_key in osrm_dist:
+                d_road = osrm_dist[edge_key] * (1.0 + 0.05 * (tf - 1.0))  # mild terrain adj
+                t_road = osrm_time[edge_key] if osrm_time and edge_key in osrm_time else d_road / MODE_PARAMS[0]["speed"]
+            else:
+                d_road = d_hav * ROAD_TORTUOSITY * tf
+                t_road = d_road / MODE_PARAMS[0]["speed"]
             C[0][u][v] = d_road * MODE_PARAMS[0]["cost_per_km"]
-            T[0][u][v] = d_road / MODE_PARAMS[0]["speed"]
+            T[0][u][v] = t_road
 
-            # Mode 1 — water (motorboat): slight meandering, little terrain effect
+            # Water
             water_tf = 1.0 + 0.12 * (tf - 1.0)
             d_water  = d_hav * 1.15
             C[1][u][v] = d_water * MODE_PARAMS[1]["cost_per_km"] * water_tf
             T[1][u][v] = d_water / MODE_PARAMS[1]["speed"] * water_tf
 
-            # Mode 2 — air (helicopter): straight-line; stays direct for all pairs
+            # Air
             air_tf = 1.0 + 0.25 * (tf - 1.0)
             C[2][u][v] = d_hav * MODE_PARAMS[2]["cost_per_km"] * air_tf
             T[2][u][v] = d_hav / MODE_PARAMS[2]["speed"] * air_tf
 
-    # -- Step 2: shortest-path costs for non-adjacent pairs (road + water only)
-    # Delaunay adjacency is the same for both modes (geometry drives connectivity).
-    edges = _delaunay_edges(coords)
-    adj   = _adj_list(edges, n)
-    for m in (0, 1):   # road and water; air keeps direct Haversine
-        for src in range(n):
-            dist_c = _dijkstra(C[m], adj, src, n)
-            dist_t = _dijkstra(T[m], adj, src, n)
-            for dst in range(n):
-                if src != dst and (min(src, dst), max(src, dst)) not in edges:
-                    C[m][src][dst] = dist_c[dst]
-                    T[m][src][dst] = dist_t[dst]
+    # -- Step 2: shortest-path for non-adjacent pairs
+    r_edges = road_edges if road_edges is not None else _delaunay_edges(coords)
+    d_edges = _delaunay_edges(coords)   # Delaunay for water/air (geometry-based)
+    r_adj = _adj_list(r_edges, n)
+    d_adj = _adj_list(d_edges, n)
+    for src in range(n):
+        # Road: Dijkstra through OSRM-validated edges
+        dc = _dijkstra(C[0], r_adj, src, n)
+        dt = _dijkstra(T[0], r_adj, src, n)
+        for dst in range(n):
+            if src != dst and (min(src, dst), max(src, dst)) not in r_edges:
+                C[0][src][dst] = dc[dst]
+                T[0][src][dst] = dt[dst]
+        # Water: Dijkstra through Delaunay geometry
+        dc = _dijkstra(C[1], d_adj, src, n)
+        dt = _dijkstra(T[1], d_adj, src, n)
+        for dst in range(n):
+            if src != dst and (min(src, dst), max(src, dst)) not in d_edges:
+                C[1][src][dst] = dc[dst]
+                T[1][src][dst] = dt[dst]
 
     return C, T
 
@@ -506,7 +641,8 @@ def _weighted_sample(population, weights, k):
 
 
 def generate_scenarios(coords, aux_risk, r_intervals,
-                       demand_idx, hub_idx, origin_idx, base_pop):
+                       demand_idx, hub_idx, origin_idx, base_pop,
+                       road_edges=None):
     """
     Generate 3 disaster scenarios.
 
@@ -516,15 +652,18 @@ def generate_scenarios(coords, aux_risk, r_intervals,
       - Scenario risk r_{us} ← r_min_u + (r_max_u - r_min_u) × exposure_u
 
     Accessibility:
-      - Road (m=0): stochastically disrupted ∝ beta × avg_risk
-      - Water (m=1) and Air (m=2): always available
+      - Road (m=0): OSRM-validated edges, stochastically disrupted ∝ beta × avg_risk
+      - Water (m=1): Delaunay edges where both endpoints are flood-prone
+      - Air (m=2): Delaunay edges (helicopters can reach any nearby location)
 
     Returns list of scenario dicts compatible with model.hpp.
     """
     n = len(coords)
     EPI_SIGMA = 85.0   # km — epicenter influence radius
 
-    # Delaunay planar graph — computed once, reused across all scenarios
+    # Road edges: OSRM-validated if available, else Delaunay fallback
+    _road_edges = road_edges if road_edges is not None else _delaunay_edges(coords)
+    # Water/air edges: Delaunay geometry (flood-dependent, not road-specific)
     _edges = _delaunay_edges(coords)
 
     # Probability weights for epicenter sampling
@@ -559,34 +698,40 @@ def generate_scenarios(coords, aux_risk, r_intervals,
             r_us += random.gauss(0, 0.025)   # small stochastic perturbation
             risk.append(round(max(0.01, min(0.99, r_us)), 4))
 
-        # -- Accessibility a[m][u][v]: Delaunay planar graph + BFS path-reachability
-        #
-        # Stage 1: apply disruption logic only to direct Delaunay edges (sparse network).
-        #   Default is 0 (blocked); only adjacent pairs get a disruption draw.
-        # Stage 2: BFS-extend accessibility to all transitively reachable pairs so
-        #   the model can route through intermediate nodes when direct arcs are cut.
+        # -- Accessibility a[m][u][v]
+        # Stage 1: direct edges — disruption applied per mode-specific graph.
+        #   Road uses OSRM-validated edges; water/air use Delaunay geometry.
+        #   Default 0 (blocked); only direct-edge pairs get a disruption draw.
+        # Stage 2: BFS extends path-reachability to non-adjacent pairs without
+        #   overwriting direct-edge values (so blocked edges stay 0 in the JSON
+        #   and the visualiser can colour them correctly).
         a = [[[0]*n for _ in range(n)] for _ in range(NUM_MODES)]
-        for (u, v) in _edges:
+
+        # Road (m=0): OSRM-validated edges only
+        for (u, v) in _road_edges:
             avg_risk_uv = (risk[u] + risk[v]) / 2.0
-            # Road (m=0): stochastic disruption proportional to scenario severity
             p_road = min(0.97, beta * avg_risk_uv)
             road_ok = 0 if random.random() < p_road else 1
             a[0][u][v] = a[0][v][u] = road_ok
-            # Water (m=1): enabled only when both endpoints are flood-prone
+
+        # Water (m=1) and Air (m=2): Delaunay geometry edges
+        for (u, v) in _edges:
             water_ok = 1 if (risk[u] > 0.30 and risk[v] > 0.30) else 0
             a[1][u][v] = a[1][v][u] = water_ok
-            # Air (m=2): always accessible on direct edges
             a[2][u][v] = a[2][v][u] = 1
 
-        # BFS on direct-edge subgraph per mode → extend to path-reachable pairs
+        # All-edge sets for BFS bookkeeping
+        _all_direct = {(min(u,v), max(u,v)) for u,v in
+                       list(_road_edges) + list(_edges)}
+
+        # BFS: extend path-reachability to non-direct pairs (preserves direct values)
         for m in range(NUM_MODES):
-            # Build adjacency from the directly accessible edges for this scenario
+            direct_m = _road_edges if m == 0 else _edges
             adj_m = [[] for _ in range(n)]
-            for (u, v) in _edges:
+            for (u, v) in direct_m:
                 if a[m][u][v]:
                     adj_m[u].append(v)
                     adj_m[v].append(u)
-            # BFS from every source and mark all reachable destinations
             for src in range(n):
                 visited = {src}
                 queue = deque([src])
@@ -597,10 +742,7 @@ def generate_scenarios(coords, aux_risk, r_intervals,
                             visited.add(v)
                             queue.append(v)
                 for dst in visited:
-                    # Only extend to non-adjacent pairs so that direct-edge
-                    # disruption values (0 = blocked) are NOT overwritten.
-                    # The visualiser reads these direct values to colour edges.
-                    if dst != src and (min(src, dst), max(src, dst)) not in _edges:
+                    if dst != src and (min(src, dst), max(src, dst)) not in _all_direct:
                         a[m][src][dst] = 1
 
         # -- Demand D_{is}: risk-driven fraction of base population
@@ -752,15 +894,23 @@ def build_instance(size="small"):
         tf = terrain_factor(lon)
         area_km2[str(i)] = round(random.uniform(8.0, 18.0) * tf, 2)
 
-    # ── Step 4: Transport matrices ────────────────────────────────────────────
-    print("  [3] Building transport matrices ...")
-    C_all, T_all = build_transport(coords)
+    # ── Step 4a: OSRM road graph ──────────────────────────────────────────────
+    _cache_dir  = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                               "..", "..", "data", "cache")
+    _cache_path = os.path.join(_cache_dir, f"osrm_road_graph_{size}.json")
+    print("  [3a] Building OSRM-validated road graph ...")
+    road_edges, osrm_dist, osrm_time = _build_road_graph(coords, _cache_path)
+
+    # ── Step 4b: Transport matrices ───────────────────────────────────────────
+    print("  [3b] Building transport matrices ...")
+    C_all, T_all = build_transport(coords, road_edges, osrm_dist, osrm_time)
 
     # ── Step 5: Scenarios ─────────────────────────────────────────────────────
     print("  [4] Generating 3 scenarios ...")
     scenarios = generate_scenarios(
         coords, aux_risk, r_intervals,
-        demand_idx, hub_idx, origin_idx, base_pop
+        demand_idx, hub_idx, origin_idx, base_pop,
+        road_edges=road_edges,
     )
     for sc in scenarios:
         d_risks_s = [sc["risk"][i] for i in demand_idx]
@@ -848,6 +998,10 @@ def build_instance(size="small"):
         "transport": {
             "cost": C_all,
             "time": T_all,
+        },
+        "graph": {
+            "road_edges": sorted([u, v] for u, v in road_edges),
+            "note": "OSRM-validated direct road connections (detour ≤1.8×, dist ≤80km)",
         },
         "scenarios": scenarios,
         "theta":  Theta,
