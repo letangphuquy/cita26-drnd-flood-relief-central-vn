@@ -27,7 +27,7 @@ from scipy.spatial import Delaunay
 # from the full graph).  Using a short display threshold (~commune-level
 # road segment length) shows only the most local, direct connections and
 # makes disruption clearly visible as the network thins across scenarios.
-DISPLAY_EDGE_KM = 12.0
+DISPLAY_EDGE_KM = 40.0   # ~district-to-district road segment; keeps mountain passes connected
 
 
 def _haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
