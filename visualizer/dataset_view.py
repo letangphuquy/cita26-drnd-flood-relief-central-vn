@@ -305,10 +305,9 @@ def build_dataset_map(
                             f"{names[v] if v<len(names) else v} [{mode_name}]",
                 ).add_to(fg)
 
-    # ── Add all groups + layer control ────────────────────────────────────────
+    # ── Add all groups (no Folium LayerControl — Streamlit checkboxes are used) ─
     for fg in (fg_road, fg_water, fg_air, fg_dem, fg_risk, fg_epi):
         fg.add_to(m)
-    folium.LayerControl(collapsed=False).add_to(m)
 
     # ── Colour-scale legend ───────────────────────────────────────────────────
     sc_names = ["Mild", "Severe", "Extreme"]
