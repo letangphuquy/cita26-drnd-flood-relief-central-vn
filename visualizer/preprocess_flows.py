@@ -26,7 +26,8 @@ _DEFAULT_RESULT   = _ROOT / "results" / "exp2" / "CV_large_seed0.json"
 _DEFAULT_INSTANCE = _ROOT / "data" / "cv" / "cv_large_drnd.json"
 _OUT_DIR          = _ROOT / "results" / "exp2" / "flows"
 
-# Hub risk threshold: hubs with risk > this are NOT reactively activated
+# Hub risk threshold: hubs with risk > this are NOT reactively activated.
+# Falls back to this default if global_params.chi is absent from the instance.
 _RISK_THRESHOLD = 0.6
 
 
@@ -44,7 +45,7 @@ def _is_accessible(accessibility: List, mode: int, src: int, dst: int) -> bool:
 def _best_mode(accessibility: List, src: int, dst: int,
                preferred_mode: int) -> Optional[int]:
     """Return preferred_mode if accessible, else try modes in order, else None."""
-    for m in [preferred_mode, 2, 1, 0]:  # air always last resort
+    for m in [preferred_mode, 0, 1, 2]:  # air always last resort
         if _is_accessible(accessibility, m, src, dst):
             return m
     return None
@@ -54,6 +55,7 @@ def _derive_y_ks(
     solution: Solution,
     node_info: NodeInfo,
     scenario: Dict[str, Any],
+    risk_threshold: float = _RISK_THRESHOLD,
 ) -> List[bool]:
     """
     Determine which hubs are reactively activated in this scenario.
@@ -67,7 +69,7 @@ def _derive_y_ks(
     for k, h_global in enumerate(node_info.hub_indices):
         established = solution.X[k] == 1 if k < len(solution.X) else False
         risk = float(hub_risk_raw.get(str(h_global), 0.0))
-        y_ks.append(established and risk < _RISK_THRESHOLD)
+        y_ks.append(established and risk < risk_threshold)
     return y_ks
 
 
@@ -189,10 +191,11 @@ def process_solution(
     """Derive full flow data for one solution across all scenarios."""
     scenarios_raw = instance_raw.get("scenarios", [])
     inventory_held = _derive_inventory_held(solution, node_info, instance_raw)
+    risk_threshold = float(instance_raw.get("global_params", {}).get("chi", _RISK_THRESHOLD))
 
     scenarios_out = []
     for s_idx, sc_raw in enumerate(scenarios_raw):
-        y_ks = _derive_y_ks(solution, node_info, sc_raw)
+        y_ks = _derive_y_ks(solution, node_info, sc_raw, risk_threshold)
         demand_asgn = _derive_demand_assignments(solution, node_info, y_ks, sc_raw)
         origin_asgn = _derive_origin_assignments(node_info, y_ks, sc_raw)
 
