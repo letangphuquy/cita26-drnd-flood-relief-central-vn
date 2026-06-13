@@ -32,16 +32,46 @@ from visualizer.flow_loader import (
 from visualizer.dataset_view import build_dataset_map
 
 # ── preset dataset paths ──────────────────────────────────────────────────────
-_DATASETS = {
-    "CV Large (case study)": {
-        "result":    str(_ROOT / "results" / "exp2" / "CV_large_seed0.json"),
-        "instance":  str(_ROOT / "data" / "cv" / "cv_large_drnd.json"),
-        "flows_dir": _ROOT / "results" / "exp2" / "flows",
+# Two dataset versions per case study:
+#   v1 = canonical dataset (Delaunay road graph) — the dataset every existing
+#        solver result + precomputed flow cache was generated against.
+#   v2 = OSRM-validated dataset (current data/cv/cv_*_drnd.json) — a different
+#        problem instance, not yet solved. v2 "result"/"flows_dir" auto-detect
+#        once a solver output is dropped into results/{exp1,exp2}/v2/.
+# See data/cv/README.md for details.
+_RESULTS_V2 = {
+    "CV Large": _ROOT / "results" / "exp2" / "v2" / "CV_large_seed0.json",
+    "CV Small": _ROOT / "results" / "exp1" / "v2" / "cv_small_pb_nsga.json",
+}
+_FLOWS_V2 = {
+    "CV Large": _ROOT / "results" / "exp2" / "v2" / "flows",
+    "CV Small": _ROOT / "results" / "exp1" / "v2" / "flows",
+}
+
+_DATASET_VERSIONS = {
+    "CV Large": {
+        "v1": {
+            "result":    str(_ROOT / "results" / "exp2" / "CV_large_seed0.json"),
+            "instance":  str(_ROOT / "data" / "cv" / "v1" / "cv_large_drnd.json"),
+            "flows_dir": _ROOT / "results" / "exp2" / "flows",
+        },
+        "v2": {
+            "result":    str(_RESULTS_V2["CV Large"]) if _RESULTS_V2["CV Large"].exists() else None,
+            "instance":  str(_ROOT / "data" / "cv" / "v2" / "cv_large_drnd.json"),
+            "flows_dir": _FLOWS_V2["CV Large"],
+        },
     },
     "CV Small": {
-        "result":    str(_ROOT / "results" / "exp1" / "cv_small_pb_nsga.json"),
-        "instance":  str(_ROOT / "data" / "cv" / "cv_small_drnd.json"),
-        "flows_dir": _ROOT / "results" / "exp1" / "flows",
+        "v1": {
+            "result":    str(_ROOT / "results" / "exp1" / "cv_small_pb_nsga.json"),
+            "instance":  str(_ROOT / "data" / "cv" / "v1" / "cv_small_drnd.json"),
+            "flows_dir": _ROOT / "results" / "exp1" / "flows",
+        },
+        "v2": {
+            "result":    str(_RESULTS_V2["CV Small"]) if _RESULTS_V2["CV Small"].exists() else None,
+            "instance":  str(_ROOT / "data" / "cv" / "v2" / "cv_small_drnd.json"),
+            "flows_dir": _FLOWS_V2["CV Small"],
+        },
     },
 }
 
@@ -108,7 +138,9 @@ def main():
     if "selected_idx" not in st.session_state:
         st.session_state["selected_idx"] = 0
     if "dataset" not in st.session_state:
-        st.session_state["dataset"] = list(_DATASETS.keys())[0]
+        st.session_state["dataset"] = list(_DATASET_VERSIONS.keys())[0]
+    if "dataset_version" not in st.session_state:
+        st.session_state["dataset_version"] = "v1"
 
     # ── Sidebar ───────────────────────────────────────────────────────────────
     with st.sidebar:
@@ -117,12 +149,26 @@ def main():
         st.divider()
 
         dataset_name = st.radio(
-            "Dataset", list(_DATASETS.keys()),
-            index=list(_DATASETS.keys()).index(st.session_state["dataset"]),
+            "Dataset", list(_DATASET_VERSIONS.keys()),
+            index=list(_DATASET_VERSIONS.keys()).index(st.session_state["dataset"]),
             key="dataset_radio",
         )
         st.session_state["dataset"] = dataset_name
-        paths = _DATASETS[dataset_name]
+
+        version_options = list(_DATASET_VERSIONS[dataset_name].keys())
+        if st.session_state["dataset_version"] not in version_options:
+            st.session_state["dataset_version"] = version_options[0]
+        version_name = st.radio(
+            "Dataset version",
+            version_options,
+            index=version_options.index(st.session_state["dataset_version"]),
+            format_func=lambda v: "v1 — canonical" if v == "v1" else "v2 — OSRM-validated",
+            horizontal=True,
+            key="dataset_version_radio",
+        )
+        st.session_state["dataset_version"] = version_name
+        paths = _DATASET_VERSIONS[dataset_name][version_name]
+        dataset_label = f"{dataset_name} ({version_name})"
 
         st.divider()
 
@@ -143,28 +189,34 @@ def main():
 
         st.divider()
 
-        avail = flows_available(flows_dir=paths.get("flows_dir"))
-        if avail:
-            st.success(f"Flow data: {len(avail)} solution(s) pre-computed")
+        if paths.get("result"):
+            avail = flows_available(flows_dir=paths.get("flows_dir"))
+            if avail:
+                st.success(f"Flow data: {len(avail)} solution(s) pre-computed")
+            else:
+                st.info("No per-solution flows found.\n\nRun to generate:\n```\npython visualizer/preprocess_flows.py\n```")
         else:
-            st.info("No per-solution flows found.\n\nRun to generate:\n```\npython visualizer/preprocess_flows.py\n```")
+            st.info(f"No solver output for **{dataset_label}** yet.\n\nSolution Explorer is disabled — see the Input Dataset tab.")
 
     # ── Load data ─────────────────────────────────────────────────────────────
     try:
-        result    = _load_result(paths["result"])
+        result    = _load_result(paths["result"]) if paths.get("result") else None
         node_info = _load_instance(paths["instance"])
         inst_raw  = _load_instance_raw(paths["instance"])
     except Exception as e:
         st.error(f"Failed to load data: {e}")
         st.stop()
 
-    solutions = _get_solutions(result, pf_only)
-    if not solutions:
-        st.warning("No feasible solutions loaded.")
-        st.stop()
-
-    sel_idx = min(st.session_state["selected_idx"], len(solutions) - 1)
-    solution = solutions[sel_idx]
+    solutions: List[Solution] = []
+    sel_idx = 0
+    solution: Optional[Solution] = None
+    if result is not None:
+        solutions = _get_solutions(result, pf_only)
+        if not solutions:
+            st.warning("No feasible solutions loaded.")
+            st.stop()
+        sel_idx = min(st.session_state["selected_idx"], len(solutions) - 1)
+        solution = solutions[sel_idx]
 
     # ── Header + tabs ─────────────────────────────────────────────────────────
     st.title("Disaster Relief Network — Decision Support System")
@@ -176,158 +228,167 @@ def main():
     # TAB 1 — Solution Explorer
     # ════════════════════════════════════════════════════════════════════════
     with tab1:
-        st.caption(
-            f"Dataset: **{dataset_name}** · Solver: **{result.solver}** · "
-            f"Scenario: **{sc_label}** · "
-            f"Solution {sel_idx + 1} / {len(solutions)}"
-        )
-
-        # ── Row 1: Pareto scatter + KPI ───────────────────────────────────
-        col_pareto, col_kpi = st.columns([3, 2], gap="large")
-
-        with col_pareto:
-            st.subheader("Pareto Front")
-            fig = build_pareto_fig(solutions, selected_idx=sel_idx, title="")
-            event = st.plotly_chart(fig, on_select="rerun", key="pareto_chart",
-                                    use_container_width=True)
-
-            try:
-                pts = event.selection.points  # type: ignore[union-attr]
-                if pts:
-                    clicked_idx = int(pts[0].customdata[0])  # type: ignore[index]
-                    if clicked_idx != sel_idx:
-                        st.session_state["selected_idx"] = clicked_idx
-                        st.rerun()
-            except (AttributeError, TypeError, IndexError):
-                pass
-
-            nav_cols = st.columns([1, 2, 1])
-            with nav_cols[0]:
-                if st.button("◀ Prev", use_container_width=True):
-                    st.session_state["selected_idx"] = (sel_idx - 1) % len(solutions)
-                    st.rerun()
-            with nav_cols[1]:
-                jump = st.number_input(
-                    "Jump to solution", min_value=1, max_value=len(solutions),
-                    value=sel_idx + 1, step=1, label_visibility="collapsed",
-                )
-                if jump - 1 != sel_idx:
-                    st.session_state["selected_idx"] = jump - 1
-                    st.rerun()
-            with nav_cols[2]:
-                if st.button("Next ▶", use_container_width=True):
-                    st.session_state["selected_idx"] = (sel_idx + 1) % len(solutions)
-                    st.rerun()
-
-        with col_kpi:
-            st.subheader("KPI Dashboard")
-
-            best_z1 = min(s.Z1 for s in solutions)
-            best_z2 = min(s.Z2 for s in solutions)
-            max_hubs = len(node_info.hub_indices)
-
-            k1, k2, k3 = st.columns(3)
-            k1.metric(
-                "Z1 — Logistics Cost",
-                f"{solution.Z1 / 1e6:.2f} M",
-                delta=f"{(solution.Z1 - best_z1) / 1e6:+.2f} M vs best",
-                delta_color="inverse",
-                help="Expected total logistics cost (lower is better)",
-            )
-            k2.metric(
-                "Z2 — Deprivation Cost",
-                f"{solution.Z2 / 1e6:.2f} M",
-                delta=f"{(solution.Z2 - best_z2) / 1e6:+.2f} M vs best",
-                delta_color="inverse",
-                help="Expected max deprivation cost (lower is better)",
-            )
-            k3.metric(
-                "Open Hubs",
-                f"{solution.num_open_hubs} / {max_hubs}",
-                help="Number of established relief hubs",
-            )
-
-            st.divider()
-
-            modes = [a for a in solution.A if a in (0, 1, 2)]
-            if modes:
-                mode_counts = {0: modes.count(0), 1: modes.count(1), 2: modes.count(2)}
-                st.write("**Transport modes (demand assignments)**")
-                mc1, mc2, mc3 = st.columns(3)
-                mc1.metric("🚚 Road", mode_counts[0])
-                mc2.metric("🚤 Water", mode_counts[1])
-                mc3.metric("🚁 Air", mode_counts[2])
-
-            st.divider()
-
-            with st.expander("Solution details"):
-                open_hub_names = [
-                    node_info.names[node_info.hub_indices[k]]
-                    if node_info.hub_indices[k] < len(node_info.names)
-                    else f"Hub {k}"
-                    for k in solution.open_hubs
-                ]
-                st.write(f"**Open hubs ({solution.num_open_hubs}):**")
-                for name in open_hub_names:
-                    st.write(f"  • {name}")
-                st.write(f"**Rank:** {solution.rank} &nbsp; **CV:** {solution.CV:.4f}")
-                st.write(f"**Crowding distance:** {solution.crowding:.3f}")
-
-            st.write("**Quick-jump:**")
-            qj1, qj2, qj3 = st.columns(3)
-            if qj1.button("Best Z1", use_container_width=True):
-                best_idx = min(range(len(solutions)), key=lambda i: solutions[i].Z1)
-                st.session_state["selected_idx"] = best_idx
-                st.rerun()
-            if qj2.button("Best Z2", use_container_width=True):
-                best_idx = min(range(len(solutions)), key=lambda i: solutions[i].Z2)
-                st.session_state["selected_idx"] = best_idx
-                st.rerun()
-            if qj3.button("Compromise", use_container_width=True):
-                z1s = [s.Z1 for s in solutions]; z2s = [s.Z2 for s in solutions]
-                z1r = max(z1s) - min(z1s) or 1.0; z2r = max(z2s) - min(z2s) or 1.0
-                z1m = min(z1s); z2m = min(z2s)
-                idx = min(range(len(solutions)),
-                          key=lambda i: ((solutions[i].Z1-z1m)/z1r)**2 + ((solutions[i].Z2-z2m)/z2r)**2)
-                st.session_state["selected_idx"] = idx
-                st.rerun()
-
-        # ── Row 2: Map ────────────────────────────────────────────────────
-        st.divider()
-        st.subheader(f"Geospatial Network Map — Scenario: {sc_label}")
-
-        flow_sc = _pick_flow(sel_idx, solution, result, scenario_idx,
-                             num_hubs=len(node_info.hub_indices),
-                             flows_dir=paths.get("flows_dir"))
-        if flow_sc is None:
+        if result is None or solution is None:
             st.info(
-                "Detailed routing not available for this solution. "
-                "Showing approximate hub placement + A-vector mode assignments. "
-                "Run `python visualizer/preprocess_flows.py` to generate full routing.",
-                icon="ℹ️",
+                f"**{dataset_label}** has no solver output yet — the "
+                "Solution Explorer is unavailable for this dataset "
+                "version.\n\nSwitch to **v1** to explore solutions, or "
+                "use the **Input Dataset** tab to inspect this dataset's "
+                "geography, road graph, risk and accessibility layers."
+            )
+        else:
+            st.caption(
+                f"Dataset: **{dataset_label}** · Solver: **{result.solver}** · "
+                f"Scenario: **{sc_label}** · "
+                f"Solution {sel_idx + 1} / {len(solutions)}"
             )
 
-        fmap = build_map(
-            node_info=node_info,
-            solution=solution,
-            scenario_flow=flow_sc,
-            instance_data=inst_raw,
-            scenario_idx=scenario_idx,
-            show_labels=show_labels,
-            show_alloc=show_alloc,
-            show_transshipment=show_trans,
-        )
+            # ── Row 1: Pareto scatter + KPI ───────────────────────────────────
+            col_pareto, col_kpi = st.columns([3, 2], gap="large")
 
-        st_folium(fmap, width="100%", height=620, returned_objects=[],
-                  key=f"map_{sel_idx}_{scenario_idx}")
+            with col_pareto:
+                st.subheader("Pareto Front")
+                fig = build_pareto_fig(solutions, selected_idx=sel_idx, title="")
+                event = st.plotly_chart(fig, on_select="rerun", key="pareto_chart",
+                                        use_container_width=True)
 
-        map_html = fmap._repr_html_()  # type: ignore[attr-defined]
-        st.download_button(
-            label="Export map as HTML",
-            data=map_html,
-            file_name=f"relief_map_sol{sel_idx+1}_{sc_label.lower()}.html",
-            mime="text/html",
-        )
+                try:
+                    pts = event.selection.points  # type: ignore[union-attr]
+                    if pts:
+                        clicked_idx = int(pts[0].customdata[0])  # type: ignore[index]
+                        if clicked_idx != sel_idx:
+                            st.session_state["selected_idx"] = clicked_idx
+                            st.rerun()
+                except (AttributeError, TypeError, IndexError):
+                    pass
+
+                nav_cols = st.columns([1, 2, 1])
+                with nav_cols[0]:
+                    if st.button("◀ Prev", use_container_width=True):
+                        st.session_state["selected_idx"] = (sel_idx - 1) % len(solutions)
+                        st.rerun()
+                with nav_cols[1]:
+                    jump = st.number_input(
+                        "Jump to solution", min_value=1, max_value=len(solutions),
+                        value=sel_idx + 1, step=1, label_visibility="collapsed",
+                    )
+                    if jump - 1 != sel_idx:
+                        st.session_state["selected_idx"] = jump - 1
+                        st.rerun()
+                with nav_cols[2]:
+                    if st.button("Next ▶", use_container_width=True):
+                        st.session_state["selected_idx"] = (sel_idx + 1) % len(solutions)
+                        st.rerun()
+
+            with col_kpi:
+                st.subheader("KPI Dashboard")
+
+                best_z1 = min(s.Z1 for s in solutions)
+                best_z2 = min(s.Z2 for s in solutions)
+                max_hubs = len(node_info.hub_indices)
+
+                k1, k2, k3 = st.columns(3)
+                k1.metric(
+                    "Z1 — Logistics Cost",
+                    f"{solution.Z1 / 1e6:.2f} M",
+                    delta=f"{(solution.Z1 - best_z1) / 1e6:+.2f} M vs best",
+                    delta_color="inverse",
+                    help="Expected total logistics cost (lower is better)",
+                )
+                k2.metric(
+                    "Z2 — Deprivation Cost",
+                    f"{solution.Z2 / 1e6:.2f} M",
+                    delta=f"{(solution.Z2 - best_z2) / 1e6:+.2f} M vs best",
+                    delta_color="inverse",
+                    help="Expected max deprivation cost (lower is better)",
+                )
+                k3.metric(
+                    "Open Hubs",
+                    f"{solution.num_open_hubs} / {max_hubs}",
+                    help="Number of established relief hubs",
+                )
+
+                st.divider()
+
+                modes = [a for a in solution.A if a in (0, 1, 2)]
+                if modes:
+                    mode_counts = {0: modes.count(0), 1: modes.count(1), 2: modes.count(2)}
+                    st.write("**Transport modes (demand assignments)**")
+                    mc1, mc2, mc3 = st.columns(3)
+                    mc1.metric("🚚 Road", mode_counts[0])
+                    mc2.metric("🚤 Water", mode_counts[1])
+                    mc3.metric("🚁 Air", mode_counts[2])
+
+                st.divider()
+
+                with st.expander("Solution details"):
+                    open_hub_names = [
+                        node_info.names[node_info.hub_indices[k]]
+                        if node_info.hub_indices[k] < len(node_info.names)
+                        else f"Hub {k}"
+                        for k in solution.open_hubs
+                    ]
+                    st.write(f"**Open hubs ({solution.num_open_hubs}):**")
+                    for name in open_hub_names:
+                        st.write(f"  • {name}")
+                    st.write(f"**Rank:** {solution.rank} &nbsp; **CV:** {solution.CV:.4f}")
+                    st.write(f"**Crowding distance:** {solution.crowding:.3f}")
+
+                st.write("**Quick-jump:**")
+                qj1, qj2, qj3 = st.columns(3)
+                if qj1.button("Best Z1", use_container_width=True):
+                    best_idx = min(range(len(solutions)), key=lambda i: solutions[i].Z1)
+                    st.session_state["selected_idx"] = best_idx
+                    st.rerun()
+                if qj2.button("Best Z2", use_container_width=True):
+                    best_idx = min(range(len(solutions)), key=lambda i: solutions[i].Z2)
+                    st.session_state["selected_idx"] = best_idx
+                    st.rerun()
+                if qj3.button("Compromise", use_container_width=True):
+                    z1s = [s.Z1 for s in solutions]; z2s = [s.Z2 for s in solutions]
+                    z1r = max(z1s) - min(z1s) or 1.0; z2r = max(z2s) - min(z2s) or 1.0
+                    z1m = min(z1s); z2m = min(z2s)
+                    idx = min(range(len(solutions)),
+                              key=lambda i: ((solutions[i].Z1-z1m)/z1r)**2 + ((solutions[i].Z2-z2m)/z2r)**2)
+                    st.session_state["selected_idx"] = idx
+                    st.rerun()
+
+            # ── Row 2: Map ────────────────────────────────────────────────────
+            st.divider()
+            st.subheader(f"Geospatial Network Map — Scenario: {sc_label}")
+
+            flow_sc = _pick_flow(sel_idx, solution, result, scenario_idx,
+                                 num_hubs=len(node_info.hub_indices),
+                                 flows_dir=paths.get("flows_dir"))
+            if flow_sc is None:
+                st.info(
+                    "Detailed routing not available for this solution. "
+                    "Showing approximate hub placement + A-vector mode assignments. "
+                    "Run `python visualizer/preprocess_flows.py` to generate full routing.",
+                    icon="ℹ️",
+                )
+
+            fmap = build_map(
+                node_info=node_info,
+                solution=solution,
+                scenario_flow=flow_sc,
+                instance_data=inst_raw,
+                scenario_idx=scenario_idx,
+                show_labels=show_labels,
+                show_alloc=show_alloc,
+                show_transshipment=show_trans,
+            )
+
+            st_folium(fmap, width="100%", height=620, returned_objects=[],
+                      key=f"map_{sel_idx}_{scenario_idx}")
+
+            map_html = fmap._repr_html_()  # type: ignore[attr-defined]
+            st.download_button(
+                label="Export map as HTML",
+                data=map_html,
+                file_name=f"relief_map_sol{sel_idx+1}_{sc_label.lower()}.html",
+                mime="text/html",
+            )
 
     # ════════════════════════════════════════════════════════════════════════
     # TAB 2 — Input Dataset Explorer
@@ -338,7 +399,7 @@ def main():
         mild_sc = sc_raw[0] if sc_raw else {}
         num_I   = inst_raw.get("dimensions", {}).get("num_I", len(node_info.demand_indices))
 
-        st.caption(f"Dataset: **{dataset_name}** · Scenario: **{sc_label}**")
+        st.caption(f"Dataset: **{dataset_label}** · Scenario: **{sc_label}**")
 
         # ── Scenario KPI summary ─────────────────────────────────────────
         demand_vals = {int(k): float(v) for k, v in sc_data.get("demand", {}).items()}
@@ -397,7 +458,7 @@ def main():
             show_air=ds_air,
         )
 
-        _dmap_key = (f"dmap_{dataset_name}_{scenario_idx}"
+        _dmap_key = (f"dmap_{dataset_name}_{version_name}_{scenario_idx}"
                      f"_{ds_risk}_{ds_dem}_{ds_epi}_{ds_road}_{ds_water}_{ds_air}")
         st_folium(dmap, width="100%", height=640, returned_objects=[],
                   key=_dmap_key)
@@ -406,7 +467,7 @@ def main():
         st.download_button(
             label="Export dataset map as HTML",
             data=dmap_html,
-            file_name=f"dataset_{dataset_name.lower().replace(' ','_')}_{sc_label.lower()}.html",
+            file_name=f"dataset_{dataset_name.lower().replace(' ','_')}_{version_name}_{sc_label.lower()}.html",
             mime="text/html",
         )
 
