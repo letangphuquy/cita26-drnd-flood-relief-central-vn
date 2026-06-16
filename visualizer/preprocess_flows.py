@@ -43,12 +43,25 @@ def _is_accessible(accessibility: List, mode: int, src: int, dst: int) -> bool:
 
 
 def _best_mode(accessibility: List, src: int, dst: int,
-               preferred_mode: int) -> Optional[int]:
-    """Return preferred_mode if accessible, else try modes in order, else None."""
-    for m in [preferred_mode, 0, 1, 2]:  # air always last resort
+               c_time: Optional[List] = None) -> Optional[int]:
+    """Mirror the decoder's best_mode_time: fastest of road/water; air as last resort.
+
+    Tries modes 0 (road) and 1 (water) and returns the one with lower C_time
+    if both are accessible, or whichever is accessible if only one is.
+    Falls back to mode 2 (air) only when neither road nor water is reachable.
+    Returns None if the pair is unreachable by any mode.
+    """
+    best_mode = -1
+    best_time = float("inf")
+    for m in (0, 1):
         if _is_accessible(accessibility, m, src, dst):
-            return m
-    return None
+            t = float(c_time[m][src][dst]) if c_time else float(m)
+            if t < best_time:
+                best_time = t
+                best_mode = m
+    if best_mode == -1 and _is_accessible(accessibility, 2, src, dst):
+        best_mode = 2
+    return best_mode if best_mode != -1 else None
 
 
 def _derive_y_ks(
@@ -78,12 +91,16 @@ def _derive_demand_assignments(
     node_info: NodeInfo,
     y_ks: List[bool],
     scenario: Dict[str, Any],
+    c_time: Optional[List] = None,
 ) -> List[Dict[str, Any]]:
     """
-    Assign each demand node to an active hub using the A-vector mode.
+    Assign each demand node to the fastest-reachable active hub, mirroring
+    the decoder's best_mode_time logic: fastest of road/water (by C_time);
+    air only as last resort when no road/water hub is reachable.
 
-    Falls back to next accessible mode if the preferred one is blocked.
-    Falls back to nearest hub regardless of accessibility if no better option.
+    Hub selection uses minimum C_time (not geometric distance) so that a
+    farther road-accessible hub is preferred over a nearer air-only hub —
+    matching the decoder's cost-based priority.
     """
     coords = node_info.coords
     accessibility = scenario.get("accessibility", [])
@@ -93,37 +110,52 @@ def _derive_demand_assignments(
         if active
     ]
 
-    assignments = []
-    for local_i, d_idx in enumerate(node_info.demand_indices):
-        preferred_mode = int(solution.A[local_i]) if local_i < len(solution.A) else 0
-        preferred_mode = preferred_mode if preferred_mode in (0, 1, 2) else 0
+    BIG_M = 1e8  # C_time sentinel for unreachable pairs
 
+    assignments = []
+    for d_idx in node_info.demand_indices:
         if not active_hubs_global:
-            assignments.append({"demand_idx": d_idx, "hub_idx": -1, "mode": preferred_mode})
+            assignments.append({"demand_idx": d_idx, "hub_idx": -1, "mode": 0})
             continue
 
-        # Try to find nearest active hub with an accessible route
-        best_hub = -1
-        best_mode = preferred_mode
-        best_dist = float("inf")
-
+        # Pass 1: best road or water hub by minimum C_time (preferred over air)
+        best_rw_hub = -1
+        best_rw_mode = 0
+        best_rw_time = float("inf")
         for h_global in active_hubs_global:
-            m = _best_mode(accessibility, d_idx, h_global, preferred_mode)
-            if m is None:
+            for m in (0, 1):
+                if not _is_accessible(accessibility, m, d_idx, h_global):
+                    continue
+                t = float(c_time[m][d_idx][h_global]) if c_time else float(m)
+                if t < best_rw_time and t < BIG_M:
+                    best_rw_time = t
+                    best_rw_hub = h_global
+                    best_rw_mode = m
+
+        if best_rw_hub >= 0:
+            assignments.append({"demand_idx": d_idx, "hub_idx": best_rw_hub, "mode": best_rw_mode})
+            continue
+
+        # Pass 2: air fallback — fastest air-accessible hub by C_time
+        best_air_hub = -1
+        best_air_time = float("inf")
+        for h_global in active_hubs_global:
+            if not _is_accessible(accessibility, 2, d_idx, h_global):
                 continue
-            d = _dist(coords[d_idx], coords[h_global])
-            if d < best_dist:
-                best_dist = d
-                best_hub = h_global
-                best_mode = m
+            t = float(c_time[2][d_idx][h_global]) if c_time else 0.0
+            if t < best_air_time and t < BIG_M:
+                best_air_time = t
+                best_air_hub = h_global
 
-        # If no accessible hub found, fall back to nearest regardless
-        if best_hub < 0:
-            best_hub = min(active_hubs_global,
-                           key=lambda h: _dist(coords[d_idx], coords[h]))
-            best_mode = preferred_mode
+        if best_air_hub >= 0:
+            assignments.append({"demand_idx": d_idx, "hub_idx": best_air_hub, "mode": 2})
+            continue
 
-        assignments.append({"demand_idx": d_idx, "hub_idx": best_hub, "mode": best_mode})
+        # Complete fallback: nearest hub by geometry (should rarely trigger)
+        best_hub = min(active_hubs_global,
+                       key=lambda h: _dist(coords[d_idx], coords[h]))
+        assignments.append({"demand_idx": d_idx, "hub_idx": best_hub, "mode": 0})
+
     return assignments
 
 
@@ -131,8 +163,9 @@ def _derive_origin_assignments(
     node_info: NodeInfo,
     y_ks: List[bool],
     scenario: Dict[str, Any],
+    c_time: Optional[List] = None,
 ) -> List[Dict[str, Any]]:
-    """Assign each origin to nearest active hub."""
+    """Assign each origin to the fastest active hub using decoder mode logic."""
     coords = node_info.coords
     accessibility = scenario.get("accessibility", [])
     active_hubs_global = [
@@ -144,25 +177,45 @@ def _derive_origin_assignments(
         return [{"origin_idx": o, "hub_idx": -1, "mode": 0}
                 for o in node_info.origin_indices]
 
+    BIG_M = 1e8
+
     assignments = []
     for o_idx in node_info.origin_indices:
-        best_hub = -1
-        best_mode = 0
-        best_dist = float("inf")
+        best_rw_hub = -1
+        best_rw_mode = 0
+        best_rw_time = float("inf")
         for h_global in active_hubs_global:
-            for mode in (0, 1, 2):
-                if _is_accessible(accessibility, mode, o_idx, h_global):
-                    d = _dist(coords[o_idx], coords[h_global])
-                    if d < best_dist:
-                        best_dist = d
-                        best_hub = h_global
-                        best_mode = mode
-                    break
+            for m in (0, 1):
+                if not _is_accessible(accessibility, m, o_idx, h_global):
+                    continue
+                t = float(c_time[m][o_idx][h_global]) if c_time else float(m)
+                if t < best_rw_time and t < BIG_M:
+                    best_rw_time = t
+                    best_rw_hub = h_global
+                    best_rw_mode = m
 
-        if best_hub < 0:
-            best_hub = min(active_hubs_global,
-                           key=lambda h: _dist(coords[o_idx], coords[h]))
-        assignments.append({"origin_idx": o_idx, "hub_idx": best_hub, "mode": best_mode})
+        if best_rw_hub >= 0:
+            assignments.append({"origin_idx": o_idx, "hub_idx": best_rw_hub, "mode": best_rw_mode})
+            continue
+
+        best_air_hub = -1
+        best_air_time = float("inf")
+        for h_global in active_hubs_global:
+            if not _is_accessible(accessibility, 2, o_idx, h_global):
+                continue
+            t = float(c_time[2][o_idx][h_global]) if c_time else 0.0
+            if t < best_air_time and t < BIG_M:
+                best_air_time = t
+                best_air_hub = h_global
+
+        if best_air_hub >= 0:
+            assignments.append({"origin_idx": o_idx, "hub_idx": best_air_hub, "mode": 2})
+            continue
+
+        best_hub = min(active_hubs_global,
+                       key=lambda h: _dist(coords[o_idx], coords[h]))
+        assignments.append({"origin_idx": o_idx, "hub_idx": best_hub, "mode": 0})
+
     return assignments
 
 
@@ -192,12 +245,13 @@ def process_solution(
     scenarios_raw = instance_raw.get("scenarios", [])
     inventory_held = _derive_inventory_held(solution, node_info, instance_raw)
     risk_threshold = float(instance_raw.get("global_params", {}).get("chi", _RISK_THRESHOLD))
+    c_time = instance_raw.get("transport", {}).get("time", None)
 
     scenarios_out = []
     for s_idx, sc_raw in enumerate(scenarios_raw):
         y_ks = _derive_y_ks(solution, node_info, sc_raw, risk_threshold)
-        demand_asgn = _derive_demand_assignments(solution, node_info, y_ks, sc_raw)
-        origin_asgn = _derive_origin_assignments(node_info, y_ks, sc_raw)
+        demand_asgn = _derive_demand_assignments(solution, node_info, y_ks, sc_raw, c_time)
+        origin_asgn = _derive_origin_assignments(node_info, y_ks, sc_raw, c_time)
 
         scenarios_out.append({
             "scenario": s_idx,

@@ -7,9 +7,12 @@ Run from project root:
 from __future__ import annotations
 
 import json
+import math
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import streamlit as st
 from streamlit_folium import st_folium
@@ -47,6 +50,15 @@ _FLOWS_V2 = {
     "CV Large": _ROOT / "results" / "exp2" / "v2" / "flows",
     "CV Small": _ROOT / "results" / "exp1" / "v2" / "flows",
 }
+
+# ── solver invocation ──────────────────────────────────────────────────────
+_SOLVER_BIN = _ROOT / "src" / "solver" / ("solver.exe" if sys.platform.startswith("win") else "solver")
+_DEFAULT_GEN = {"CV Large": 500, "CV Small": 300}  # README Exp2/Exp1 conventions
+
+# v2 instances encode unreachable transport edges as JSON `Infinity`, which
+# Python's json module accepts but the solver's strict nlohmann::json parser
+# rejects. Sanitized copies replace these with a large finite cost/time.
+_INF_SENTINEL = 1e9
 
 _DATASET_VERSIONS = {
     "CV Large": {
@@ -124,6 +136,94 @@ def _pick_flow(sol_idx: int, solution: Solution, result: SolverResult,
     return None
 
 
+# ── solver pipeline ────────────────────────────────────────────────────────
+
+def _solver_targets(dataset_name: str, version_name: str, paths: Dict[str, Any]) -> Tuple[Path, Path]:
+    """Return (result_path, flows_dir) the solver run should write to."""
+    if version_name == "v1":
+        return Path(paths["result"]), Path(paths["flows_dir"])
+    return _RESULTS_V2[dataset_name], _FLOWS_V2[dataset_name]
+
+
+def _sanitize_instance_for_solver(instance_path: str) -> Tuple[str, Optional[Path]]:
+    """Return a JSON path safe to pass to the (strict) solver binary.
+
+    If *instance_path* contains non-finite floats (`Infinity`/`-Infinity`/
+    `NaN` — used by v2 instances to mark unreachable transport edges), write
+    a sanitized copy with those replaced by ±`_INF_SENTINEL` to a temp file
+    and return its path alongside the temp Path (for later cleanup).
+    Otherwise return *instance_path* unchanged and `None`.
+    """
+    with open(instance_path, encoding="utf-8") as f:
+        data = json.load(f)
+
+    found = False
+
+    def _clean(obj):
+        nonlocal found
+        if isinstance(obj, dict):
+            return {k: _clean(v) for k, v in obj.items()}
+        if isinstance(obj, list):
+            return [_clean(v) for v in obj]
+        if isinstance(obj, float) and not math.isfinite(obj):
+            found = True
+            return math.copysign(_INF_SENTINEL, obj) if obj == obj else _INF_SENTINEL  # NaN -> +sentinel
+        return obj
+
+    cleaned = _clean(data)
+    if not found:
+        return instance_path, None
+
+    tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8")
+    json.dump(cleaned, tmp, allow_nan=False)
+    tmp.close()
+    return tmp.name, Path(tmp.name)
+
+
+def _run_solver_pipeline(instance_path: str, result_path: Path, flows_dir: Path,
+                         pop: int, gen: int, seed: int, algo: str) -> bool:
+    """Run PB-NSGA-II then preprocess_flows.py, reporting progress via st.status().
+
+    Returns True on success; shows st.error() with stderr on failure.
+    """
+    result_path.parent.mkdir(parents=True, exist_ok=True)
+    with st.status("Running solver pipeline…", expanded=True) as status:
+        solver_instance_path, tmp_path = _sanitize_instance_for_solver(instance_path)
+        if tmp_path is not None:
+            st.write("Sanitizing non-finite values (`Infinity`) for the solver's strict JSON parser…")
+        try:
+            st.write(f"PB-NSGA-II: pop={pop}, gen={gen}, seed={seed}, algo={algo}")
+            proc = subprocess.run(
+                [str(_SOLVER_BIN), solver_instance_path, "--pop", str(pop), "--gen", str(gen),
+                 "--seed", str(seed), "--algo", algo, "--out", str(result_path)],
+                cwd=_ROOT, capture_output=True, text=True,
+            )
+        finally:
+            if tmp_path is not None:
+                tmp_path.unlink(missing_ok=True)
+
+        if proc.returncode != 0:
+            status.update(label="Solver failed", state="error")
+            st.error(proc.stderr or "Solver exited with a non-zero status.")
+            return False
+
+        st.write("Generating flow/routing data…")
+        flows_dir.mkdir(parents=True, exist_ok=True)
+        proc2 = subprocess.run(
+            [sys.executable, str(_SELF / "preprocess_flows.py"),
+             "--result", str(result_path), "--instance", instance_path,
+             "--out-dir", str(flows_dir), "--force"],
+            cwd=_ROOT, capture_output=True, text=True,
+        )
+        if proc2.returncode != 0:
+            status.update(label="Flow preprocessing failed", state="error")
+            st.error(proc2.stderr or "preprocess_flows.py exited with a non-zero status.")
+            return False
+
+        status.update(label="Done", state="complete")
+    return True
+
+
 # ── Streamlit layout ──────────────────────────────────────────────────────────
 
 def main():
@@ -198,6 +298,36 @@ def main():
         else:
             st.info(f"No solver output for **{dataset_label}** yet.\n\nSolution Explorer is disabled — see the Input Dataset tab.")
 
+        st.divider()
+        with st.expander("⚙️ Run Solver", expanded=(paths.get("result") is None)):
+            st.caption(f"Runs PB-NSGA-II on **{dataset_label}**, then regenerates flow data.")
+            c1, c2 = st.columns(2)
+            pop  = c1.number_input("--pop",  min_value=10, value=200, step=10)
+            gen  = c2.number_input("--gen",  min_value=10, value=_DEFAULT_GEN[dataset_name], step=10)
+            c3, c4 = st.columns(2)
+            seed = c3.number_input("--seed", min_value=0, value=0, step=1)
+            algo = c4.selectbox("--algo", ["nsga2", "nsma"], index=0)
+
+            overwrite_ok = True
+            if version_name == "v1":
+                st.warning(
+                    "v1 already has a canonical result used by existing figures/flows. "
+                    "Re-running will overwrite it."
+                )
+                overwrite_ok = st.checkbox("Overwrite existing v1 result", value=False)
+
+            if not _SOLVER_BIN.exists():
+                st.error(f"Solver binary not found: `{_SOLVER_BIN.relative_to(_ROOT)}`. "
+                         "Run `./compile.sh` (or `compile.bat`) first.")
+            elif st.button("▶ Run Solver", use_container_width=True,
+                            disabled=(version_name == "v1" and not overwrite_ok)):
+                target_result, target_flows = _solver_targets(dataset_name, version_name, paths)
+                if _run_solver_pipeline(paths["instance"], target_result, target_flows,
+                                         int(pop), int(gen), int(seed), algo):
+                    st.cache_data.clear()
+                    st.session_state["selected_idx"] = 0
+                    st.rerun()
+
     # ── Load data ─────────────────────────────────────────────────────────────
     try:
         result    = _load_result(paths["result"]) if paths.get("result") else None
@@ -210,13 +340,23 @@ def main():
     solutions: List[Solution] = []
     sel_idx = 0
     solution: Optional[Solution] = None
+    no_feasible_msg: Optional[str] = None
     if result is not None:
         solutions = _get_solutions(result, pf_only)
-        if not solutions:
-            st.warning("No feasible solutions loaded.")
-            st.stop()
-        sel_idx = min(st.session_state["selected_idx"], len(solutions) - 1)
-        solution = solutions[sel_idx]
+        if solutions:
+            sel_idx = min(st.session_state["selected_idx"], len(solutions) - 1)
+            solution = solutions[sel_idx]
+        else:
+            all_sols = result.pareto_front or result.all_feasible
+            best_cv = min((s.CV for s in all_sols), default=0.0)
+            no_feasible_msg = (
+                f"**{dataset_label}** solver output has no zero-violation (CV=0) "
+                f"solutions yet — best constraint violation found: **{best_cv:,.2f}**.\n\n"
+                "This means some demand cannot be served under the current "
+                "accessibility/capacity data. Try a different `--seed`/`--algo` "
+                "via **Run Solver**, or use the **Input Dataset** tab to inspect "
+                "this dataset's accessibility layers."
+            )
 
     # ── Header + tabs ─────────────────────────────────────────────────────────
     st.title("Disaster Relief Network — Decision Support System")
@@ -229,13 +369,16 @@ def main():
     # ════════════════════════════════════════════════════════════════════════
     with tab1:
         if result is None or solution is None:
-            st.info(
-                f"**{dataset_label}** has no solver output yet — the "
-                "Solution Explorer is unavailable for this dataset "
-                "version.\n\nSwitch to **v1** to explore solutions, or "
-                "use the **Input Dataset** tab to inspect this dataset's "
-                "geography, road graph, risk and accessibility layers."
-            )
+            if no_feasible_msg:
+                st.warning(no_feasible_msg)
+            else:
+                st.info(
+                    f"**{dataset_label}** has no solver output yet — the "
+                    "Solution Explorer is unavailable for this dataset "
+                    "version.\n\nSwitch to **v1** to explore solutions, or "
+                    "use the **Input Dataset** tab to inspect this dataset's "
+                    "geography, road graph, risk and accessibility layers."
+                )
         else:
             st.caption(
                 f"Dataset: **{dataset_label}** · Solver: **{result.solver}** · "
@@ -244,6 +387,9 @@ def main():
             )
 
             # ── Row 1: Pareto scatter + KPI ───────────────────────────────────
+            flow_sc = _pick_flow(sel_idx, solution, result, scenario_idx,
+                                 num_hubs=len(node_info.hub_indices),
+                                 flows_dir=paths.get("flows_dir"))
             col_pareto, col_kpi = st.columns([3, 2], gap="large")
 
             with col_pareto:
@@ -310,10 +456,10 @@ def main():
 
                 st.divider()
 
-                modes = [a for a in solution.A if a in (0, 1, 2)]
-                if modes:
-                    mode_counts = {0: modes.count(0), 1: modes.count(1), 2: modes.count(2)}
-                    st.write("**Transport modes (demand assignments)**")
+                if flow_sc is not None:
+                    da_modes = [a.mode for a in flow_sc.demand_assignments]
+                    mode_counts = {0: da_modes.count(0), 1: da_modes.count(1), 2: da_modes.count(2)}
+                    st.write(f"**Transport modes — {sc_label}**")
                     mc1, mc2, mc3 = st.columns(3)
                     mc1.metric("🚚 Road", mode_counts[0])
                     mc2.metric("🚤 Water", mode_counts[1])
@@ -357,9 +503,6 @@ def main():
             st.divider()
             st.subheader(f"Geospatial Network Map — Scenario: {sc_label}")
 
-            flow_sc = _pick_flow(sel_idx, solution, result, scenario_idx,
-                                 num_hubs=len(node_info.hub_indices),
-                                 flows_dir=paths.get("flows_dir"))
             if flow_sc is None:
                 st.info(
                     "Detailed routing not available for this solution. "
