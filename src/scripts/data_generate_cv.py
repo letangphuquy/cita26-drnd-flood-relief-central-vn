@@ -102,17 +102,18 @@ RIVERS = {
 # Approximate Central Vietnam coastline waypoints (N→S), used to compute
 # distance-to-coast for epicenter sampling weights.
 COASTLINE = [
-    (16.75, 107.45),  # Cửa Tùng, northern Quảng Trị
-    (16.52, 107.70),  # Cửa Thuận An, Huế
-    (16.35, 107.86),  # Lăng Cô bay
-    (16.22, 108.10),  # Hải Vân pass foothills / coast bend
-    (16.09, 108.24),  # Đà Nẵng Tiên Sa / Sơn Trà
-    (15.88, 108.40),  # Cửa Đại, Hội An
-    (15.70, 108.44),  # Bình Dương coast
-    (15.57, 108.48),  # Cửa Kỳ Hà, Tam Kỳ
-    (15.42, 108.67),  # Dung Quất
-    (15.20, 108.76),  # Sa Kỳ port
-    (14.85, 108.88),  # Sa Huỳnh
+    (17.02, 107.10),  # Cửa Tùng, northern Quảng Trị
+    (16.55, 107.64),  # Cửa Thuận An, Huế
+    (16.25, 108.03),  # Lăng Cô bay
+    (16.19, 108.13),  # Hải Vân pass
+    (16.11, 108.26),  # Đà Nẵng Tiên Sa / Sơn Trà
+    (15.88, 108.38),  # Cửa Đại, Hội An
+    (15.75, 108.45),  # Bình Dương coast (Thăng Bình)
+    (15.57, 108.50),  # Tam Thanh coast, Tam Kỳ
+    (15.48, 108.68),  # Cửa Kỳ Hà, Núi Thành
+    (15.35, 108.82),  # Dung Quất bay
+    (15.22, 108.93),  # Sa Kỳ port
+    (14.67, 109.06),  # Sa Huỳnh
 ]
 
 # ── River delta / lowland accumulation centers (lat, lon, sigma_km) ─────────
@@ -429,7 +430,7 @@ def _adj_list(edges, n):
 
 def _dijkstra(cost_matrix, adj, src, n):
     """Shortest-path cost from *src* to all nodes using edges in *adj*."""
-    dist = [float('inf')] * n
+    dist = [BIG_M] * n
     dist[src] = 0.0
     heap = [(0.0, src)]
     while heap:
@@ -446,12 +447,20 @@ def _dijkstra(cost_matrix, adj, src, n):
 
 _ISLAND_NODES = {"Ly_Son_Island_Supply"}
 
+# Delaunay edges that are geometrically short but cross open water (Da Nang Bay).
+# The actual road route goes through the Hai Van Tunnel on the western slope —
+# no bridge spans the bay between Son Tra and the Hai Van foothills.
+_FORBIDDEN_ROAD_PAIRS = {
+    frozenset(["Tho_Quang_Ward",    "Hai_Van_Pass_North"]),  # 12.6 km across bay
+    frozenset(["Son_Tra_District",  "Hai_Van_Pass_North"]),  # 16.4 km across bay
+}
+
 
 # ============================================================================
 # TRANSPORT MATRICES
 # ============================================================================
 
-def build_transport(coords, road_edges=None, osrm_dist=None, osrm_time=None):
+def build_transport(coords, road_edges=None, geo_edges=None, osrm_dist=None, osrm_time=None):
     """
     C[m][u][v] ($/trip) and T[m][u][v] (hours) for all 3 modes.
 
@@ -500,7 +509,10 @@ def build_transport(coords, road_edges=None, osrm_dist=None, osrm_time=None):
 
     # -- Step 2: shortest-path for non-adjacent pairs
     r_edges = road_edges if road_edges is not None else _delaunay_edges(coords)
-    d_edges = _delaunay_edges(coords)   # Delaunay for water/air (geometry-based)
+    # geo_edges: water/air graph — Delaunay plus any stitch edges passed by caller
+    # (collocated demand/hub pairs have no Delaunay edges; the stitch must be
+    # included here so water Dijkstra can route through them)
+    d_edges = geo_edges if geo_edges is not None else _delaunay_edges(coords)
     r_adj = _adj_list(r_edges, n)
     d_adj = _adj_list(d_edges, n)
     for src in range(n):
@@ -566,7 +578,7 @@ def _coast_proximity_km(lat, lon):
 
 def generate_scenarios(coords, aux_risk, r_intervals,
                        demand_idx, hub_idx, origin_idx, base_pop,
-                       road_edges=None, sea_lane_idx=None):
+                       road_edges=None, geo_edges=None, sea_lane_idx=None):
     """
     Generate 3 disaster scenarios.
 
@@ -582,12 +594,13 @@ def generate_scenarios(coords, aux_risk, r_intervals,
     n = len(coords)
     EPI_SIGMA = 85.0        # km — epicenter Gaussian influence radius
     RIVER_CORRIDOR_KM = 15.0  # static water access within 15 km of a river waypoint
-    INUNDATION_THRESH = 0.50  # dynamic flood water: both nodes must exceed this risk
+    INUNDATION_THRESH = 0.40  # dynamic flood water: both nodes must exceed this risk
 
     # Road edges: OSRM-validated if available, else Delaunay fallback
     _road_edges = road_edges if road_edges is not None else _delaunay_edges(coords)
-    # Water/air edges: Delaunay geometry
-    _edges = _delaunay_edges(coords)
+    # Water/air edges: caller-supplied geo_edges (Delaunay + collocated stitch)
+    # so that collocated demand nodes (no Delaunay edges) are air/water accessible
+    _edges = geo_edges if geo_edges is not None else _delaunay_edges(coords)
 
     # Pre-compute static river proximity (outside scenario loop — does not consume random)
     river_prox = [_river_proximity_km(coords[u][0], coords[u][1]) for u in range(n)]
@@ -854,22 +867,62 @@ def build_instance(size="small"):
 
     # ── Step 4a: Planar road graph (Delaunay, islands excluded) ──────────────
     print("  [3a] Building Delaunay road graph ...")
-    _island_idx = {i for i, nm in enumerate(names) if nm in _ISLAND_NODES}
-    road_edges  = {(u, v) for (u, v) in _delaunay_edges(coords)
-                   if u not in _island_idx and v not in _island_idx}
+    _island_idx  = {i for i, nm in enumerate(names) if nm in _ISLAND_NODES}
+    _name_to_idx = {nm: i for i, nm in enumerate(names)}
+    _forbidden_idx = {
+        frozenset([_name_to_idx[a], _name_to_idx[b]])
+        for pair in _FORBIDDEN_ROAD_PAIRS
+        for a, b in [tuple(sorted(pair))]
+        if a in _name_to_idx and b in _name_to_idx
+    }
+    # Delaunay geometry edges (before exclusions): used as base for water/air graph
+    _geo_delaunay = {(u, v) for (u, v) in _delaunay_edges(coords)
+                     if u not in _island_idx and v not in _island_idx}
+    road_edges  = {(u, v) for (u, v) in _geo_delaunay
+                   if frozenset([u, v]) not in _forbidden_idx}
+    # scipy.spatial.Delaunay is degenerate when two nodes share identical coordinates
+    # (demand node + its collocated hub). Only one of the pair gets Delaunay edges;
+    # the other is stranded. Fix: add explicit zero-distance edges for all collocated
+    # pairs to both road_edges AND geo_edges (water/air graph), so that collocated
+    # demand nodes are accessible by all three modes, not just road.
+    _COLLOCATED_KM = 0.5
+    _collocated_pairs = set()
+    for u in range(n_total):
+        if u in _island_idx:
+            continue
+        for v in range(u + 1, n_total):
+            if v in _island_idx:
+                continue
+            if haversine(coords[u][0], coords[u][1], coords[v][0], coords[v][1]) < _COLLOCATED_KM:
+                _collocated_pairs.add((u, v))
+    _collocated_added = 0
+    for u, v in _collocated_pairs:
+        if (u, v) not in road_edges:
+            road_edges.add((u, v))
+            _collocated_added += 1
+    # geo_edges: Delaunay + collocated stitch (no forbidden-pair exclusion for water/air)
+    geo_edges = _geo_delaunay | _collocated_pairs
     print(f"      Road graph: {len(road_edges)} edges  "
-          f"({len(_island_idx)} island node(s) excluded)")
+          f"({len(_island_idx)} island node(s) excluded, "
+          f"{len(_FORBIDDEN_ROAD_PAIRS)} sea-crossing pair(s) removed, "
+          f"{_collocated_added} collocated pair(s) stitched)")
 
     # ── Step 4b: Transport matrices ───────────────────────────────────────────
     print("  [3b] Building transport matrices ...")
-    C_all, T_all = build_transport(coords, road_edges)
+    C_all, T_all = build_transport(coords, road_edges=road_edges, geo_edges=geo_edges)
 
     # ── Step 5: Scenarios ─────────────────────────────────────────────────────
+    # Reseed before scenario generation so that epicenter sampling, disruption
+    # draws, demand noise and supply allocation are all independent of road
+    # graph topology changes (edge count affects random consumption in the
+    # disruption loop, which would otherwise corrupt everything that follows).
+    random.seed(SEED + 2 if size == "small" else SEED + 3)
     print("  [4] Generating 3 scenarios ...")
     scenarios = generate_scenarios(
         coords, aux_risk, r_intervals,
         demand_idx, hub_idx, origin_idx, base_pop,
         road_edges=road_edges,
+        geo_edges=geo_edges,
         sea_lane_idx=_island_idx,
     )
     for sc in scenarios:
