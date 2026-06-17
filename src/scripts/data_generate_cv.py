@@ -32,12 +32,10 @@ References:
 
 import math
 import json
+import math
 import random
 import os
 import heapq
-import time
-import urllib.request
-import urllib.error
 from collections import deque
 
 import numpy as np
@@ -65,11 +63,21 @@ LON_COAST    = 108.8    # coastal plain (eastern boundary)
 RIVER_SIGMA  = 18.0     # km — Gaussian decay for hydrological risk
 COASTAL_SIGMA = 40.0    # km — Gaussian decay for coastal surge risk
 
+# Road disruption model:
+#   score  = ALPHA_EPI × avg_raw_exp(u,v) + (1−ALPHA_EPI) × avg_aux_risk(u,v)
+#   p_road = 1 − (1 − score)^beta     [complementary-power; naturally in (0,1)]
+# ALPHA_EPI controls how much of the disruption is driven by epicenter proximity
+# vs. intrinsic road fragility.  At 0.7 the epicenter AoE dominates.
+ALPHA_EPI = 0.7
+
 # Scenario: (name, prob, n_epicenters, I_lo, I_hi, sev_mult, beta_road, phi)
+# beta_road is the exponent in the complementary-power disruption formula.
+# Calibrated so that score≈0.91 (edge at epicenter, high-risk terrain) gives:
+#   Mild p≈38%  Severe p≈85%  Extreme p≈94%
 SCENARIO_DEFS = [
-    ("mild",    0.60, 1, 0.30, 0.60, 1.0, 0.25, 0.57),
-    ("severe",  0.30, 2, 0.55, 0.85, 1.8, 0.55, 0.70),
-    ("extreme", 0.10, 3, 0.75, 1.00, 2.8, 0.88, 0.85),
+    ("mild",    0.60, 1, 0.30, 0.60, 1.0, 0.20, 0.57),
+    ("severe",  0.30, 2, 0.55, 0.85, 1.8, 0.80, 0.70),
+    ("extreme", 0.10, 3, 0.75, 1.00, 2.8, 1.20, 0.85),
 ]
 
 MODE_PARAMS = {
@@ -90,6 +98,22 @@ RIVERS = {
     "truong_giang": [(15.70,108.38),(15.63,108.45),(15.58,108.52)],
     "tra_bong": [(15.35,108.20),(15.28,107.98),(15.20,107.82)],
 }
+
+# Approximate Central Vietnam coastline waypoints (N→S), used to compute
+# distance-to-coast for epicenter sampling weights.
+COASTLINE = [
+    (16.75, 107.45),  # Cửa Tùng, northern Quảng Trị
+    (16.52, 107.70),  # Cửa Thuận An, Huế
+    (16.35, 107.86),  # Lăng Cô bay
+    (16.22, 108.10),  # Hải Vân pass foothills / coast bend
+    (16.09, 108.24),  # Đà Nẵng Tiên Sa / Sơn Trà
+    (15.88, 108.40),  # Cửa Đại, Hội An
+    (15.70, 108.44),  # Bình Dương coast
+    (15.57, 108.48),  # Cửa Kỳ Hà, Tam Kỳ
+    (15.42, 108.67),  # Dung Quất
+    (15.20, 108.76),  # Sa Kỳ port
+    (14.85, 108.88),  # Sa Huỳnh
+]
 
 # ── River delta / lowland accumulation centers (lat, lon, sigma_km) ─────────
 DELTA_CENTERS = [
@@ -420,123 +444,7 @@ def _dijkstra(cost_matrix, adj, src, n):
     return dist
 
 
-# ============================================================================
-# OSRM ROAD GRAPH  (replaces pure-Delaunay adjacency for road mode)
-# ============================================================================
-
-_OSRM_BASE    = "http://router.project-osrm.org/route/v1/driving"
-_OSRM_TIMEOUT = 8       # seconds per request
-_OSRM_DELAY   = 0.12    # polite inter-request delay (seconds)
-_DETOUR_MIN   = 0.9     # OSRM_km / Haversine_km — route shorter than this is a ferry/sea shortcut
-_DETOUR_MAX   = 1.8     # OSRM_km / Haversine_km — higher = more winding allowed
-_OSRM_KM_MAX  = MAX_EDGE_KM   # absolute road-distance cap (same as Delaunay cutoff)
-
-
-def _osrm_route(lat1: float, lon1: float,
-                lat2: float, lon2: float):
-    """
-    Query OSRM public API for the driving distance between two points.
-    OSRM coordinate order is  lon,lat.
-
-    Returns (dist_km, time_hr) or (None, None) when no route exists
-    (e.g. island with no road access, water body barrier).
-    """
-    url = (f"{_OSRM_BASE}/{lon1},{lat1};{lon2},{lat2}"
-           "?overview=false&annotations=false")
-    try:
-        req = urllib.request.Request(url, headers={"User-Agent": "cita26-drnd/1.0"})
-        with urllib.request.urlopen(req, timeout=_OSRM_TIMEOUT) as resp:
-            data = json.loads(resp.read())
-        if data.get("code") != "Ok" or not data.get("routes"):
-            return None, None
-        r = data["routes"][0]
-        return r["distance"] / 1000.0, r["duration"] / 3600.0
-    except Exception:
-        return None, None
-
-
-def _build_road_graph(coords, cache_path: str = ""):
-    """
-    Build the road adjacency graph for *coords* using OSRM validation.
-
-    Algorithm
-    ---------
-    1. Start from Delaunay candidate edges (geometric neighbours ≤ MAX_EDGE_KM).
-    2. For each candidate, query OSRM for the actual driving distance.
-    3. Accept the edge only if:
-       - A road route exists (excludes islands, water barriers)
-       - detour ratio  = OSRM_km / Haversine_km  ≤  _DETOUR_MAX
-       - OSRM_km  ≤  _OSRM_KM_MAX
-
-    Results are cached to *cache_path* (JSON) so subsequent runs are instant.
-
-    Returns
-    -------
-    road_edges  : set of (u,v) tuples  (u < v)
-    osrm_dist   : dict (u,v) and (v,u) → OSRM road distance in km
-    osrm_time   : dict (u,v) and (v,u) → OSRM travel time in hours
-    """
-    # ── Load cache ────────────────────────────────────────────────────────────
-    if cache_path and os.path.exists(cache_path):
-        print("      Loading road graph from cache ...")
-        with open(cache_path, encoding="utf-8") as f:
-            cached = json.load(f)
-        road_edges = {(int(e[0]), int(e[1])) for e in cached["road_edges"]}
-        osrm_dist  = {(int(k.split(",")[0]), int(k.split(",")[1])): v
-                      for k, v in cached["osrm_dist"].items()}
-        osrm_time  = {(int(k.split(",")[0]), int(k.split(",")[1])): v
-                      for k, v in cached["osrm_time"].items()}
-        print(f"      Road graph: {len(road_edges)} edges (from cache)")
-        return road_edges, osrm_dist, osrm_time
-
-    # ── Query OSRM ────────────────────────────────────────────────────────────
-    candidates = _delaunay_edges(coords)
-    print(f"      Querying OSRM for {len(candidates)} Delaunay candidate edges ...")
-
-    road_edges: set = set()
-    osrm_dist:  dict = {}
-    osrm_time:  dict = {}
-    n_no_route = 0
-
-    for i, (u, v) in enumerate(sorted(candidates)):
-        lat1, lon1 = coords[u]
-        lat2, lon2 = coords[v]
-        hav_km = haversine(lat1, lon1, lat2, lon2)
-
-        dk, th = _osrm_route(lat1, lon1, lat2, lon2)
-        time.sleep(_OSRM_DELAY)
-
-        if dk is None:
-            n_no_route += 1
-            continue
-
-        detour = dk / max(hav_km, 0.1)
-        # _DETOUR_MIN filters ferry routes: ferries cross water directly so their
-        # OSRM distance is shorter than the straight-line (ratio < 1).
-        if _DETOUR_MIN <= detour <= _DETOUR_MAX and dk <= _OSRM_KM_MAX:
-            road_edges.add((u, v))
-            osrm_dist[(u, v)] = osrm_dist[(v, u)] = round(dk, 3)
-            osrm_time[(u, v)] = osrm_time[(v, u)] = round(th, 5)
-
-        if (i + 1) % 50 == 0 or (i + 1) == len(candidates):
-            print(f"        {i+1}/{len(candidates)} — "
-                  f"{len(road_edges)} valid, {n_no_route} no-route")
-
-    print(f"      Road graph: {len(road_edges)} edges  "
-          f"({n_no_route} pairs had no drivable route)")
-
-    # ── Save cache ────────────────────────────────────────────────────────────
-    if cache_path:
-        os.makedirs(os.path.dirname(os.path.abspath(cache_path)), exist_ok=True)
-        with open(cache_path, "w", encoding="utf-8") as f:
-            json.dump({
-                "road_edges": [[u, v] for u, v in sorted(road_edges)],
-                "osrm_dist":  {f"{k[0]},{k[1]}": v for k, v in osrm_dist.items()},
-                "osrm_time":  {f"{k[0]},{k[1]}": v for k, v in osrm_time.items()},
-            }, f, indent=2)
-        print(f"      Cached → {cache_path}")
-
-    return road_edges, osrm_dist, osrm_time
+_ISLAND_NODES = {"Ly_Son_Island_Supply"}
 
 
 # ============================================================================
@@ -640,46 +548,77 @@ def _weighted_sample(population, weights, k):
     return chosen
 
 
+def _river_proximity_km(lat, lon):
+    """Min Haversine distance in km from (lat,lon) to any RIVERS waypoint."""
+    best = float("inf")
+    for waypoints in RIVERS.values():
+        for rlat, rlon in waypoints:
+            d = haversine(lat, lon, rlat, rlon)
+            if d < best:
+                best = d
+    return best
+
+
+def _coast_proximity_km(lat, lon):
+    """Min Haversine distance in km from (lat,lon) to the COASTLINE polyline."""
+    return min(haversine(lat, lon, clat, clon) for clat, clon in COASTLINE)
+
+
 def generate_scenarios(coords, aux_risk, r_intervals,
                        demand_idx, hub_idx, origin_idx, base_pop,
-                       road_edges=None):
+                       road_edges=None, sea_lane_idx=None):
     """
     Generate 3 disaster scenarios.
 
-    Epicenter strategy (per data-strategy.txt):
-      - Epicenters sampled from demand nodes weighted by r^a_u
-      - Surrounding nodes receive exposure via Gaussian decay
-      - Scenario risk r_{us} ← r_min_u + (r_max_u - r_min_u) × exposure_u
-
-    Accessibility:
-      - Road (m=0): OSRM-validated edges, stochastically disrupted ∝ beta × avg_risk
-      - Water (m=1): Delaunay edges where both endpoints are flood-prone
-      - Air (m=2): Delaunay edges (helicopters can reach any nearby location)
+    Changes vs. original K_N / Delaunay implementation (see audit_agent_plan_data_methodology.md):
+      Change 0 — Epicenters hoisted before disruption loop (fixes random-state divergence
+                  caused by road-edge-count differences between K_N, Delaunay, OSRM runs)
+      Change 1 — aux_risk**2 weights → sharper coastal bias, mountain non-zero
+      Change 2 — Demand driven by raw_exp[i] (epicenter exposure), not risk[i]
+      Change 3 — Water: static river corridor (15 km) OR dynamic inundation (risk > 0.50)
 
     Returns list of scenario dicts compatible with model.hpp.
     """
     n = len(coords)
-    EPI_SIGMA = 85.0   # km — epicenter influence radius
+    EPI_SIGMA = 85.0        # km — epicenter Gaussian influence radius
+    RIVER_CORRIDOR_KM = 15.0  # static water access within 15 km of a river waypoint
+    INUNDATION_THRESH = 0.50  # dynamic flood water: both nodes must exceed this risk
 
     # Road edges: OSRM-validated if available, else Delaunay fallback
     _road_edges = road_edges if road_edges is not None else _delaunay_edges(coords)
-    # Water/air edges: Delaunay geometry (flood-dependent, not road-specific)
+    # Water/air edges: Delaunay geometry
     _edges = _delaunay_edges(coords)
 
-    # Probability weights for epicenter sampling
-    epi_weights = [aux_risk[i] for i in demand_idx]
+    # Pre-compute static river proximity (outside scenario loop — does not consume random)
+    river_prox = [_river_proximity_km(coords[u][0], coords[u][1]) for u in range(n)]
 
-    scenarios = []
-    for name, prob, n_epi, I_lo, I_hi, sev_mult, beta, phi in SCENARIO_DEFS:
+    # Change 1 — coast-proximity weights: aux_risk^2 × exp(−dist_to_coast/σ)
+    # Typhoon intensity decays rapidly over land; a node 30 km inland gets
+    # exp(-1) ≈ 0.37× the weight of a coastal node; 90 km inland gets exp(-3)
+    # ≈ 0.05×.  This is physically motivated and needs no longitude bounds.
+    EPI_COAST_SIGMA = 30.0  # km; e-folding scale for overland intensity decay
+    coast_dist = [_coast_proximity_km(coords[demand_idx[i]][0],
+                                      coords[demand_idx[i]][1])
+                  for i in range(len(demand_idx))]
+    epi_weights = [aux_risk[i]**2 * math.exp(-coast_dist[k] / EPI_COAST_SIGMA)
+                   for k, i in enumerate(demand_idx)]
 
-        # -- Epicenters: sampled demand nodes weighted by r^a_u
+    # Change 0 — hoist ALL epicenter sampling before any disruption draws
+    all_epicenters = []
+    for (_, _, n_epi, I_lo, I_hi, _, _, _) in SCENARIO_DEFS:
         chosen_local = _weighted_sample(demand_idx, epi_weights, n_epi)
-        epicenters = [
+        all_epicenters.append([
             (coords[demand_idx[ci]][0],
              coords[demand_idx[ci]][1],
              random.uniform(I_lo, I_hi))
             for ci in chosen_local
-        ]
+        ])
+
+    scenarios = []
+    for si, (name, prob, n_epi, I_lo, I_hi, sev_mult, beta, phi) in enumerate(SCENARIO_DEFS):
+
+        # Epicenters fixed before any disruption (Change 0)
+        epicenters = all_epicenters[si]
 
         # -- Raw exposure ∈ [0,1] via Gaussian decay from epicenters
         raw_exp = []
@@ -691,34 +630,50 @@ def generate_scenarios(coords, aux_risk, r_intervals,
             raw_exp.append(min(1.0, ex))
 
         # -- Scenario risk r_{us}: sample from node's risk interval
+        # risk[u] retains its original meaning: intrinsic flood susceptibility ×
+        # epicenter exposure → used for infrastructure damage, hub vulnerability,
+        # road disruption.  NOT used for demand (see Change 2).
         risk = []
         for u in range(n):
             r_min, r_max = r_intervals[u]
             r_us = r_min + (r_max - r_min) * raw_exp[u]
-            r_us += random.gauss(0, 0.025)   # small stochastic perturbation
+            r_us += random.gauss(0, 0.025)
             risk.append(round(max(0.01, min(0.99, r_us)), 4))
 
         # -- Accessibility a[m][u][v]
         # Stage 1: direct edges — disruption applied per mode-specific graph.
-        #   Road uses OSRM-validated edges; water/air use Delaunay geometry.
-        #   Default 0 (blocked); only direct-edge pairs get a disruption draw.
         # Stage 2: BFS extends path-reachability to non-adjacent pairs without
-        #   overwriting direct-edge values (so blocked edges stay 0 in the JSON
-        #   and the visualiser can colour them correctly).
+        #   overwriting direct-edge values.
         a = [[[0]*n for _ in range(n)] for _ in range(NUM_MODES)]
 
-        # Road (m=0): OSRM-validated edges only
+        # Road (m=0): complementary-power disruption
+        # score = ALPHA_EPI × epicenter_exposure + (1−ALPHA_EPI) × intrinsic_fragility
+        # p_road = 1 − (1 − score)^beta  →  strongly non-linear near score=1
         for (u, v) in _road_edges:
-            avg_risk_uv = (risk[u] + risk[v]) / 2.0
-            p_road = min(0.97, beta * avg_risk_uv)
+            score = (ALPHA_EPI * (raw_exp[u] + raw_exp[v]) / 2.0
+                     + (1.0 - ALPHA_EPI) * (aux_risk[u] + aux_risk[v]) / 2.0)
+            p_road = 1.0 - (1.0 - score) ** beta
             road_ok = 0 if random.random() < p_road else 1
             a[0][u][v] = a[0][v][u] = road_ok
 
-        # Water (m=1) and Air (m=2): Delaunay geometry edges
+        # Water (m=1): Change 3 — river corridor (static) OR inundation (dynamic)
+        # Air (m=2): Delaunay geometry, always available
         for (u, v) in _edges:
-            water_ok = 1 if (risk[u] > 0.30 and risk[v] > 0.30) else 0
-            a[1][u][v] = a[1][v][u] = water_ok
+            river_ok = (river_prox[u] < RIVER_CORRIDOR_KM and
+                        river_prox[v] < RIVER_CORRIDOR_KM)
+            flood_ok = (risk[u] > INUNDATION_THRESH and
+                        risk[v] > INUNDATION_THRESH)
+            a[1][u][v] = a[1][v][u] = 1 if (river_ok or flood_ok) else 0
             a[2][u][v] = a[2][v][u] = 1
+
+        # Sea lanes: island nodes (no road access) always have water connectivity
+        # to all nodes within MAX_EDGE_KM — independent of flood level.
+        if sea_lane_idx:
+            for u in sea_lane_idx:
+                for v in range(n):
+                    if v != u and haversine(coords[u][0], coords[u][1],
+                                           coords[v][0], coords[v][1]) <= MAX_EDGE_KM:
+                        a[1][u][v] = a[1][v][u] = 1
 
         # All-edge sets for BFS bookkeeping
         _all_direct = {(min(u,v), max(u,v)) for u,v in
@@ -745,14 +700,15 @@ def generate_scenarios(coords, aux_risk, r_intervals,
                     if dst != src and (min(src, dst), max(src, dst)) not in _all_direct:
                         a[m][src][dst] = 1
 
-        # -- Demand D_{is}: risk-driven fraction of base population
+        # -- Demand D_{is}: epicenter-exposure-driven (Change 2)
+        # Uses raw_exp[i] (pure Gaussian decay from epicenters), NOT risk[i].
+        # Decouples relief need (event-specific) from infrastructure damage (node-intrinsic).
         demand = {}
         total_demand_pers = 0.0
         for i in demand_idx:
-            r_is   = risk[i]
-            frac   = 0.05 + 0.85 * r_is        # 5% baseline + risk-driven
+            frac   = 0.05 + 0.95 * raw_exp[i]   # 5% baseline; scales to 100% at epicenter
             d_base = base_pop[i] * frac * sev_mult
-            noise  = random.gauss(0, 0.08 * d_base)
+            noise  = random.gauss(0, 0.06 * d_base)
             d_val  = max(5.0, d_base + noise)
             demand[str(i)] = round(d_val, 2)
             total_demand_pers += d_val
@@ -844,8 +800,10 @@ def compute_theta(C_all, hub_idx, demand_idx, scenarios, area_km2):
 def build_instance(size="small"):
     if size == "small":
         n_I, n_H, n_J = 20, 5, 2
+        random.seed(SEED)
     else:
         n_I, n_H, n_J = 100, 20, 12
+        random.seed(SEED + 1)
 
     print(f"\n{'='*60}")
     print(f"[{size.upper()}]  I={n_I}  H={n_H}  J={n_J}")
@@ -894,16 +852,17 @@ def build_instance(size="small"):
         tf = terrain_factor(lon)
         area_km2[str(i)] = round(random.uniform(8.0, 18.0) * tf, 2)
 
-    # ── Step 4a: OSRM road graph ──────────────────────────────────────────────
-    _cache_dir  = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                               "..", "..", "data", "cache")
-    _cache_path = os.path.join(_cache_dir, f"osrm_road_graph_{size}.json")
-    print("  [3a] Building OSRM-validated road graph ...")
-    road_edges, osrm_dist, osrm_time = _build_road_graph(coords, _cache_path)
+    # ── Step 4a: Planar road graph (Delaunay, islands excluded) ──────────────
+    print("  [3a] Building Delaunay road graph ...")
+    _island_idx = {i for i, nm in enumerate(names) if nm in _ISLAND_NODES}
+    road_edges  = {(u, v) for (u, v) in _delaunay_edges(coords)
+                   if u not in _island_idx and v not in _island_idx}
+    print(f"      Road graph: {len(road_edges)} edges  "
+          f"({len(_island_idx)} island node(s) excluded)")
 
     # ── Step 4b: Transport matrices ───────────────────────────────────────────
     print("  [3b] Building transport matrices ...")
-    C_all, T_all = build_transport(coords, road_edges, osrm_dist, osrm_time)
+    C_all, T_all = build_transport(coords, road_edges)
 
     # ── Step 5: Scenarios ─────────────────────────────────────────────────────
     print("  [4] Generating 3 scenarios ...")
@@ -911,6 +870,7 @@ def build_instance(size="small"):
         coords, aux_risk, r_intervals,
         demand_idx, hub_idx, origin_idx, base_pop,
         road_edges=road_edges,
+        sea_lane_idx=_island_idx,
     )
     for sc in scenarios:
         d_risks_s = [sc["risk"][i] for i in demand_idx]
