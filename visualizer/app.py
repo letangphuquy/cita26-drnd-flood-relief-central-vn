@@ -258,6 +258,8 @@ def main():
         version_options = list(_DATASET_VERSIONS[dataset_name].keys())
         if st.session_state["dataset_version"] not in version_options:
             st.session_state["dataset_version"] = version_options[0]
+        if st.session_state.get("dataset_version_radio") not in version_options:
+            st.session_state["dataset_version_radio"] = st.session_state["dataset_version"]
         version_name = st.radio(
             "Dataset version",
             version_options,
