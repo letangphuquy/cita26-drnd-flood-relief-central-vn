@@ -33,7 +33,7 @@ sys.path.insert(0, str(_ROOT / "src" / "visualizer"))
 from solution_loader import NodeInfo, Solution, load_instance, load_result
 
 _DEFAULT_RESULT   = _ROOT / "results" / "exp2" / "CV_large_seed0.json"
-_DEFAULT_INSTANCE = _ROOT / "data" / "cv" / "cv_large_drnd.json"
+_DEFAULT_INSTANCE = _ROOT / "data" / "cv" / "v1" / "cv_large_drnd.json"
 _OUT_DIR          = _ROOT / "results" / "exp2" / "flows"
 
 _DEFAULT_CHI   = 0.7

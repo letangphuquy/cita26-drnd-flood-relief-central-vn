@@ -36,11 +36,11 @@ from visualizer.dataset_view import build_dataset_map
 
 # ── preset dataset paths ──────────────────────────────────────────────────────
 # Two dataset versions per case study:
-#   v1 = canonical dataset (Delaunay road graph) — the dataset every existing
-#        solver result + precomputed flow cache was generated against.
-#   v2 = OSRM-validated dataset (current data/cv/cv_*_drnd.json) — a different
-#        problem instance, not yet solved. v2 "result"/"flows_dir" auto-detect
-#        once a solver output is dropped into results/{exp1,exp2}/v2/.
+#   v1 = canonical dataset (K_n complete graph) — every existing solver result
+#        and precomputed flow cache was generated against this instance.
+#        The Delaunay edges shown in the Input Visualizer are a UI-rendering
+#        fallback only; the underlying data model is K_n with all 8,646 pairs finite.
+#   v2 = planar dataset (data/cv/v2/, pure Delaunay) — solved; result auto-detected.
 # See data/cv/README.md for details.
 _RESULTS_V2 = {
     "CV Large": _ROOT / "results" / "exp2" / "v2" / "CV_large_seed0.json",
@@ -262,7 +262,7 @@ def main():
             "Dataset version",
             version_options,
             index=version_options.index(st.session_state["dataset_version"]),
-            format_func=lambda v: "v1 — canonical" if v == "v1" else "v2 — OSRM-validated",
+            format_func=lambda v: "v1 — canonical" if v == "v1" else "v2 — planar",
             horizontal=True,
             key="dataset_version_radio",
         )
