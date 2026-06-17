@@ -93,7 +93,7 @@ _SCENARIO_NAMES = ["Mild", "Severe", "Extreme"]
 # ── data loaders (cached) ─────────────────────────────────────────────────────
 
 @st.cache_data(show_spinner="Loading solver results…")
-def _load_result(path: str) -> SolverResult:
+def _load_result(path: str, mtime: float) -> SolverResult:
     return load_result(path)
 
 
@@ -330,7 +330,7 @@ def main():
 
     # ── Load data ─────────────────────────────────────────────────────────────
     try:
-        result    = _load_result(paths["result"]) if paths.get("result") else None
+        result    = _load_result(paths["result"], Path(paths["result"]).stat().st_mtime) if paths.get("result") else None  # mtime busts cache on file update
         node_info = _load_instance(paths["instance"])
         inst_raw  = _load_instance_raw(paths["instance"])
     except Exception as e:
