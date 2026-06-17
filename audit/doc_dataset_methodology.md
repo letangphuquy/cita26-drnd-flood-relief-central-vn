@@ -203,15 +203,23 @@ Z1 range 12.8M–13.0M, Z2 range 79.6k–94.1k, CV=0 for all.
 
 ---
 
-## Relationship to v1
+## Dataset Version History
 
-| Aspect | v1 | v2 |
+Two versions exist. Neither uses OSRM validation.
+
+| Aspect | v1 — canonical | v2 — planar |
 |---|---|---|
-| Road graph | Complete graph K_n (all pairs) → OSRM-validated Delaunay | Pure Delaunay triangulation, island/bay-crossing exclusions |
+| File location | `data/cv/v1/` | `data/cv/v2/` |
+| Road graph | **Complete graph K_n** — all 8,646 unique pairs have finite C_time; 100% pairs accessible | **Pure Delaunay** — ~342 edges after exclusions; non-adjacent pairs have BIG_M road time |
+| Road in UI | Delaunay is a **UI rendering layer only** (`_delaunay_edges(coords)` fallback in `dataset_view.py`); underlying data remains K_n | Pure Delaunay IS the actual graph model (`road_edges` field stored in JSON) |
 | Epicenter weights | `aux_risk` (linear) | `aux_risk² × exp(−d_coast/30km)` |
 | Demand driver | `risk[i]` (conflates intrinsic + event) | `raw_exp[i]` (event exposure only) |
 | Road disruption | `p = min(0.97, beta × avg_risk)` | complementary-power with ALPHA_EPI |
-| Water model | single risk threshold 0.30 | river corridor OR inundation 0.50 |
-| Random seeding | Per-scenario seed shift via K_n loop | Isolated seed at `build_instance()` start |
+| Water model | single risk threshold 0.30 | river corridor OR inundation 0.40 |
+| Script | pre-PR `data_generate_cv.py` (K_n loop) | `src/scripts/data_generate_cv.py` |
+| Solver status | **Solved** — `results/exp2/CV_large_seed0.json` | **Solved** — `results/exp2/v2/CV_large_seed0.json` |
 
-v1 canonical solver results remain immutable ground truth. v2 is the instance set for which new solver runs are performed.
+**Critical note on v1 hub assignments in the UI:**
+Because v1 uses K_n (every hub-demand pair has a direct finite road time), hub selection is based on minimum C_time, not road topology. Assignments can appear geographically inconsistent — a distant hub may have lower C_time than a nearby hub due to haversine × tortuosity. The Delaunay edges drawn in the UI are a cosmetic rendering fallback only and do NOT represent the connectivity model. The colored lines on the Solution Explorer map show demand-to-hub **assignments**, not routing paths — routing is not part of the optimization model.
+
+**v1 canonical solver results remain immutable ground truth.** v2 is the instance set validated for paper reporting.
