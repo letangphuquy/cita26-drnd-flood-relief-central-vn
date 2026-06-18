@@ -340,12 +340,12 @@
         },
         {
           "demand_idx": 7,
-          "hub_idx": 23,
-          "mode": 2
+          "hub_idx": 22,
+          "mode": 0
         },
         {
           "demand_idx": 8,
-          "hub_idx": 22,
+          "hub_idx": 23,
           "mode": 2
         },
         {
