@@ -169,7 +169,6 @@ def _demand_priority_order(
                         t = float(c_time[m][d_global][h_global])
                         if t < min_t:
                             min_t = t
-                    break  # count hub once
             if reachable:
                 n_reach += 1
 

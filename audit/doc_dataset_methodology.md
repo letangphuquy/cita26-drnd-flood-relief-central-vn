@@ -34,7 +34,7 @@ Node coordinates are curated from geographic references and fixed — they do no
 
 Road costs use `ROAD_TORTUOSITY = 1.35 × haversine` with per-edge terrain factor. Non-adjacent node pairs get costs via Dijkstra shortest-path through the road graph.
 
-**Sea-lane override for Ly Son:** after the main water-accessibility model runs, every node within `MAX_EDGE_KM = 80km` of the island gets `a[1][island][v] = 1` unconditionally, regardless of flood model outcome.
+**Sea-lane override for Ly Son:** after the main water-accessibility model runs, every node within `MAX_EDGE_KM = 80km` of the island gets `a[1][island][v] = 1` (water) and `a[2][island][v] = 1` (air) unconditionally, regardless of flood model outcome. Air is included because helicopter access from an island is physically feasible in all scenarios.
 
 ---
 
@@ -195,11 +195,13 @@ Z1 range 12.8M–13.0M, Z2 range 79.6k–94.1k, CV=0 for all.
 | `EPI_SIGMA = 85 km` | Not empirically calibrated; inherited from initial design; not validated against historical flood extent maps |
 | `EPI_COAST_SIGMA = 30 km` | Heuristic; not derived from typhoon track frequency data for Central Vietnam |
 | `RIVER_CORRIDOR_KM = 15 km` | Approximate for Thu Bồn basin; some river-adjacent nodes may be mis-classified if between waypoints |
-| `INUNDATION_THRESH = 0.50` | Physically motivated (significant inundation depth) but not calibrated to flood depth data |
+| `INUNDATION_THRESH = 0.40` | Originally 0.50 (physically motivated); lowered to 0.40 for feasibility — 0.50 left ~25 road-isolated demand nodes in Extreme, exceeding the helicopter cap unconditionally |
 | `base_pop` formula | `500 + 6500 × coast_f` is a crude proxy; real commune-level census data was not available |
 | Temporal dynamics | Scenarios are peak-flood snapshots; flood rise/fall not modelled |
 | Inland epicenter draws | High-aux_risk river-valley nodes (e.g., Đông Giang, ~50km inland) can be drawn as Extreme epicenters due to their inherently high flood susceptibility despite coastal decay |
 | Delaunay topology | Without OSRM validation, some Delaunay edges may still follow unrealistic routes (known cases excluded via `_FORBIDDEN_ROAD_PAIRS`; others may exist) |
+| BFS asymmetry | If two nodes share a direct Delaunay edge that is blocked in a scenario, BFS will NOT restore reachability between them via an alternative multi-hop route, because `_all_direct` guards all pairs with any direct edge from BFS updates. Pairs without a direct edge correctly get multi-hop reachability via BFS. Having a direct edge is therefore strictly worse than not having one when that edge is blocked. This is a known modeling limitation — paper should note it. |
+| Island C_time / accessibility split | Sea-lane override in `generate_scenarios` sets `a[1/2]=1` for island nodes, but `build_transport` Dijkstra overwrites water `C_time` to BIG_M for the same pairs (island excluded from `geo_edges`). Fix applied: haversine water costs are restored for island nodes post-Dijkstra. Without this fix, postprocessor assigns road mode via fallback despite correct accessibility. |
 
 ---
 

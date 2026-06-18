@@ -48,6 +48,8 @@ from scipy.spatial import Delaunay as _Delaunay
 SEED = 2026
 random.seed(SEED)
 
+PHI = (1.0 + math.sqrt(5.0)) / 2.0  # golden ratio ≈ 1.618
+
 EARTH_R    = 6371.0
 NUM_MODES  = 3
 GAMMA      = 3.0    # kg relief per person
@@ -538,8 +540,13 @@ def build_transport(coords, road_edges=None, geo_edges=None, osrm_dist=None, osr
 # SCENARIO GENERATION
 # ============================================================================
 
-def _weighted_sample(population, weights, k):
-    """Sample k distinct indices from population without replacement, weighted."""
+def _weighted_sample(population, weights, k, node_locs=None, repulsion_sigma=0.0):
+    """Sample k distinct indices from population without replacement, weighted.
+
+    If node_locs (list of (lat, lon) parallel to weights) and repulsion_sigma > 0,
+    after each pick the weights of all remaining candidates are multiplied by
+    exp(-d/repulsion_sigma), discouraging the next pick from clustering nearby.
+    """
     chosen = []
     pop = list(range(len(population)))
     wts = list(weights)
@@ -557,6 +564,11 @@ def _weighted_sample(population, weights, k):
                 break
         chosen.append(sel)
         pop.remove(sel)
+        if node_locs is not None and repulsion_sigma > 0.0:
+            slat, slon = node_locs[sel]
+            for i in pop:
+                d = haversine(slat, slon, node_locs[i][0], node_locs[i][1])
+                wts[i] *= 1.0 - math.exp(-d / repulsion_sigma)
     return chosen
 
 
@@ -578,7 +590,8 @@ def _coast_proximity_km(lat, lon):
 
 def generate_scenarios(coords, aux_risk, r_intervals,
                        demand_idx, hub_idx, origin_idx, base_pop,
-                       road_edges=None, geo_edges=None, sea_lane_idx=None):
+                       road_edges=None, geo_edges=None, sea_lane_idx=None,
+                       epi_base_seed=SEED + 3):
     """
     Generate 3 disaster scenarios.
 
@@ -587,7 +600,7 @@ def generate_scenarios(coords, aux_risk, r_intervals,
                   caused by road-edge-count differences between K_N, Delaunay, OSRM runs)
       Change 1 — aux_risk**2 weights → sharper coastal bias, mountain non-zero
       Change 2 — Demand driven by raw_exp[i] (epicenter exposure), not risk[i]
-      Change 3 — Water: static river corridor (15 km) OR dynamic inundation (risk > 0.50)
+      Change 3 — Water: static river corridor (15 km) OR dynamic inundation (risk > 0.40)
 
     Returns list of scenario dicts compatible with model.hpp.
     """
@@ -605,27 +618,40 @@ def generate_scenarios(coords, aux_risk, r_intervals,
     # Pre-compute static river proximity (outside scenario loop — does not consume random)
     river_prox = [_river_proximity_km(coords[u][0], coords[u][1]) for u in range(n)]
 
-    # Change 1 — coast-proximity weights: aux_risk^2 × exp(−dist_to_coast/σ)
-    # Typhoon intensity decays rapidly over land; a node 30 km inland gets
-    # exp(-1) ≈ 0.37× the weight of a coastal node; 90 km inland gets exp(-3)
-    # ≈ 0.05×.  This is physically motivated and needs no longitude bounds.
-    EPI_COAST_SIGMA = 30.0  # km; e-folding scale for overland intensity decay
+    # Epicenter sampling weights: aux_risk^PHI × exp(−dist_to_coast/σ)
+    # PHI (golden ratio ≈ 1.618) gives moderate coastal bias — less concentrated
+    # than squared (2.0), more than linear (1.0).  EPI_COAST_SIGMA=25km suppresses
+    # mountain nodes to <5% of a coastal node's weight at 75km inland.
+    EPI_COAST_SIGMA  = 25.0  # km; tighter than original 30km to compensate for weaker PHI exponent
+    REPULSION_SIGMA  = 30.0  # km; within-scenario spatial repulsion — node 5km away retains ~15% weight, 100km ~96%
     coast_dist = [_coast_proximity_km(coords[demand_idx[i]][0],
                                       coords[demand_idx[i]][1])
                   for i in range(len(demand_idx))]
-    epi_weights = [aux_risk[i]**2 * math.exp(-coast_dist[k] / EPI_COAST_SIGMA)
+    epi_weights = [aux_risk[i]**PHI * math.exp(-coast_dist[k] / EPI_COAST_SIGMA)
                    for k, i in enumerate(demand_idx)]
+    demand_locs = [(coords[demand_idx[i]][0], coords[demand_idx[i]][1])
+                   for i in range(len(demand_idx))]
 
-    # Change 0 — hoist ALL epicenter sampling before any disruption draws
+    # Per-scenario epicenter sampling: each scenario gets its own reproducible
+    # RNG state via a warmup loop (RWS without replacement within each draw).
+    # Different warmup depths → statistically independent draws across scenarios.
+    EPI_BASE_SEED = epi_base_seed
+    EPI_WARMUP    = 100  # random advances per scenario index
     all_epicenters = []
-    for (_, _, n_epi, I_lo, I_hi, _, _, _) in SCENARIO_DEFS:
-        chosen_local = _weighted_sample(demand_idx, epi_weights, n_epi)
+    for si, (_, _, n_epi, I_lo, I_hi, _, _, _) in enumerate(SCENARIO_DEFS):
+        random.seed(EPI_BASE_SEED)
+        for _ in range((si + 1) * EPI_WARMUP):
+            random.random()
+        chosen_local = _weighted_sample(demand_idx, epi_weights, n_epi,
+                                        node_locs=demand_locs,
+                                        repulsion_sigma=REPULSION_SIGMA)
         all_epicenters.append([
             (coords[demand_idx[ci]][0],
              coords[demand_idx[ci]][1],
              random.uniform(I_lo, I_hi))
             for ci in chosen_local
         ])
+    # RNG state after last warmup flows forward into disruption/demand draws.
 
     scenarios = []
     for si, (name, prob, n_epi, I_lo, I_hi, sev_mult, beta, phi) in enumerate(SCENARIO_DEFS):
@@ -679,14 +705,17 @@ def generate_scenarios(coords, aux_risk, r_intervals,
             a[1][u][v] = a[1][v][u] = 1 if (river_ok or flood_ok) else 0
             a[2][u][v] = a[2][v][u] = 1
 
-        # Sea lanes: island nodes (no road access) always have water connectivity
-        # to all nodes within MAX_EDGE_KM — independent of flood level.
+        # Sea lanes: island nodes (no road access) always have water AND air
+        # connectivity to all nodes within MAX_EDGE_KM — independent of flood level.
+        # Water: sea-lane is unconditional (no road bridge).
+        # Air: helicopter access is always physically feasible from an island.
         if sea_lane_idx:
             for u in sea_lane_idx:
                 for v in range(n):
                     if v != u and haversine(coords[u][0], coords[u][1],
                                            coords[v][0], coords[v][1]) <= MAX_EDGE_KM:
                         a[1][u][v] = a[1][v][u] = 1
+                        a[2][u][v] = a[2][v][u] = 1
 
         # All-edge sets for BFS bookkeeping
         _all_direct = {(min(u,v), max(u,v)) for u,v in
@@ -911,6 +940,21 @@ def build_instance(size="small"):
     print("  [3b] Building transport matrices ...")
     C_all, T_all = build_transport(coords, road_edges=road_edges, geo_edges=geo_edges)
 
+    # Sea-lane C_time fix: island nodes are excluded from geo_edges, so Dijkstra
+    # in build_transport overwrites their haversine-based water costs with BIG_M.
+    # Restore the direct haversine water cost for every island→node pair within
+    # MAX_EDGE_KM, matching the sea-lane accessibility set in generate_scenarios.
+    for u in _island_idx:
+        for v in range(n_total):
+            if v == u:
+                continue
+            d_hav = haversine(coords[u][0], coords[u][1], coords[v][0], coords[v][1])
+            if d_hav <= MAX_EDGE_KM:
+                tf = terrain_factor((coords[u][1] + coords[v][1]) / 2.0)
+                water_tf = 1.0 + 0.12 * (tf - 1.0)
+                C_all[1][u][v] = C_all[1][v][u] = d_hav * 1.15 * MODE_PARAMS[1]["cost_per_km"] * water_tf
+                T_all[1][u][v] = T_all[1][v][u] = d_hav * 1.15 / MODE_PARAMS[1]["speed"] * water_tf
+
     # ── Step 5: Scenarios ─────────────────────────────────────────────────────
     # Reseed before scenario generation so that epicenter sampling, disruption
     # draws, demand noise and supply allocation are all independent of road
@@ -924,6 +968,7 @@ def build_instance(size="small"):
         road_edges=road_edges,
         geo_edges=geo_edges,
         sea_lane_idx=_island_idx,
+        epi_base_seed=SEED + 2 if size == "small" else SEED + 3,
     )
     for sc in scenarios:
         d_risks_s = [sc["risk"][i] for i in demand_idx]
@@ -1030,10 +1075,11 @@ def build_instance(size="small"):
 def main():
     import argparse
     parser = argparse.ArgumentParser(description="Generate CV DRND instance files.")
-    parser.add_argument("--outdir", type=str, default=None,
-                        help="Output directory (default: same as script).")
+    # Canonical output: data/cv/v2/
+    parser.add_argument("--outdir", type=str, required=True,
+                        help="Output directory, e.g. data/cv/v2/")
     args = parser.parse_args()
-    out_dir = args.outdir if args.outdir else os.path.dirname(os.path.abspath(__file__))
+    out_dir = args.outdir
     os.makedirs(out_dir, exist_ok=True)
 
     for size in ["small", "large"]:
