@@ -98,12 +98,12 @@ def _load_result(path: str, mtime: float) -> SolverResult:
 
 
 @st.cache_data(show_spinner="Loading instance…")
-def _load_instance(path: str) -> NodeInfo:
+def _load_instance(path: str, mtime: float) -> NodeInfo:
     return load_instance(path)
 
 
 @st.cache_data(show_spinner="Loading instance JSON…")
-def _load_instance_raw(path: str) -> Dict[str, Any]:
+def _load_instance_raw(path: str, mtime: float) -> Dict[str, Any]:
     with open(path, encoding="utf-8") as f:
         return json.load(f)
 
@@ -332,9 +332,10 @@ def main():
 
     # ── Load data ─────────────────────────────────────────────────────────────
     try:
-        result    = _load_result(paths["result"], Path(paths["result"]).stat().st_mtime) if paths.get("result") else None  # mtime busts cache on file update
-        node_info = _load_instance(paths["instance"])
-        inst_raw  = _load_instance_raw(paths["instance"])
+        _inst_mtime = Path(paths["instance"]).stat().st_mtime
+        result    = _load_result(paths["result"], Path(paths["result"]).stat().st_mtime) if paths.get("result") else None
+        node_info = _load_instance(paths["instance"], _inst_mtime)
+        inst_raw  = _load_instance_raw(paths["instance"], _inst_mtime)
     except Exception as e:
         st.error(f"Failed to load data: {e}")
         st.stop()

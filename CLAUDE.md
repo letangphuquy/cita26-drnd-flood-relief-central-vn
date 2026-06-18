@@ -86,7 +86,22 @@ match and regenerate + validate all flow files.
   infeasible flow file used for Figure 4-4, Pareto ratio overstated (1.15×
   actual vs 3.5× claimed).
 
-## 7. Running the solver
+## 7. Working session conduct
+
+- **Investigate fully before acting.** When an error or anomaly is reported,
+  complete all analysis and root-cause investigation independently. Present
+  findings and options to the user.
+- **Always stop before implementation.** Do not write, edit, or regenerate
+  any file until the user has reviewed the diagnosis and explicitly approved
+  an option. "Go ahead" or selecting an option counts; ambiguity does not.
+- **Never push code unprompted.** `git push` (including `--force-with-lease`)
+  requires an explicit "go" from the user in that same message. Auto-mode
+  does not change this rule.
+- **Auto-mode is not a license to be aggressive.** Even when auto-mode is
+  active, do not chain multiple destructive or hard-to-reverse steps without
+  pausing for confirmation at each decision point.
+
+## 8. Running the solver
 
 ```bash
 ./src/solver/solver <instance.json> --pop 200 --gen 500 --seed 0 --out <result.json>

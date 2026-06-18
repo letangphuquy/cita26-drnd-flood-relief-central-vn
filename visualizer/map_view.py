@@ -30,6 +30,7 @@ _COL_ORIGIN     = "#43A047"
 _COL_DEMAND_DEF = "#4C72B0"
 _COL_ALLOC      = "#BBBBBB"
 _COL_BLOCKED    = "#EF5350"
+_MODE_COLOURS_FADED = {0: "#FFCDD2", 1: "#B3E5FC", 2: "#DCEDC8"}  # pale road/water/air for blocked nodes
 
 
 def _dist(a: Tuple[float, float], b: Tuple[float, float]) -> float:
@@ -268,7 +269,7 @@ def build_map(
             color="white",
             weight=1,
             fill=True,
-            fill_color=colour if accessible else _COL_BLOCKED,
+            fill_color=colour if accessible else _MODE_COLOURS_FADED.get(mode, _COL_BLOCKED),
             fill_opacity=0.85 if accessible else 0.5,
             tooltip=f"{name} [{_MODE_NAMES.get(mode,'?')}]",
             popup=folium.Popup(

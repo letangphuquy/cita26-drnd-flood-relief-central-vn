@@ -231,7 +231,7 @@ void decode(Individual &ind, const DRNDInstance &inst,
     normalise_inplace(raw_isolation);
     normalise_inplace(raw_dist);
 
-    // Weighted score + Gaussian noise
+    // Weighted score + deterministic index tiebreaker (DECODER_NOISE_SIGMA defined but unused)
     vector<double> demand_score(num_I);
     for (int ii = 0; ii < num_I; ii++) {
       demand_score[ii] = ind.W[0] * raw_urgency[ii] +
