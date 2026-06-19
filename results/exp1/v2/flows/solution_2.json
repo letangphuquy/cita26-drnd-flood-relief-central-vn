@@ -1,29 +1,29 @@
 {
   "meta": {
-    "Z1": 3644850.17939543,
-    "Z2": 72017.24298750897,
+    "Z1": 10365069.528668048,
+    "Z2": 116209.69743705378,
     "CV": 0.0,
     "X": [
-      0,
-      0,
+      1,
+      1,
       1,
       1,
       1
     ],
     "R": [
-      0.0,
-      5.818258266091282e-10,
-      0.059672406908022266,
-      0.6163903846812776,
-      0.25176803440343665
+      1.0,
+      0.3924511603002291,
+      1.0,
+      1.0,
+      1.0
     ],
     "W": [
-      1.222464073680608e-10,
-      0.0,
-      0.0,
-      4.724942512292828e-10,
-      0.0,
-      0.0
+      0.7751738526162892,
+      1.0,
+      0.9814520040498002,
+      0.9359368597228195,
+      0.9139980418818997,
+      0.2927424693339939
     ],
     "solution_idx": 2,
     "note": "Postprocessor estimate \u2014 mirrors decoder.hpp v3 (anchor-based 3-pass, W-weighted). Transshipment omitted. NOT solver ground truth."
@@ -32,8 +32,8 @@
     {
       "scenario": 0,
       "y_ks": [
-        false,
-        false,
+        true,
+        true,
         true,
         true,
         true
@@ -46,12 +46,12 @@
         },
         {
           "demand_idx": 1,
-          "hub_idx": 24,
+          "hub_idx": 20,
           "mode": 0
         },
         {
           "demand_idx": 2,
-          "hub_idx": 24,
+          "hub_idx": 20,
           "mode": 0
         },
         {
@@ -61,17 +61,17 @@
         },
         {
           "demand_idx": 4,
-          "hub_idx": 23,
-          "mode": 1
+          "hub_idx": 20,
+          "mode": 0
         },
         {
           "demand_idx": 5,
-          "hub_idx": 23,
+          "hub_idx": 20,
           "mode": 0
         },
         {
           "demand_idx": 6,
-          "hub_idx": 23,
+          "hub_idx": 20,
           "mode": 0
         },
         {
@@ -81,13 +81,13 @@
         },
         {
           "demand_idx": 8,
-          "hub_idx": 24,
+          "hub_idx": 23,
           "mode": 0
         },
         {
           "demand_idx": 9,
-          "hub_idx": 23,
-          "mode": 1
+          "hub_idx": 20,
+          "mode": 0
         },
         {
           "demand_idx": 10,
@@ -96,8 +96,8 @@
         },
         {
           "demand_idx": 11,
-          "hub_idx": 24,
-          "mode": 1
+          "hub_idx": 20,
+          "mode": 0
         },
         {
           "demand_idx": 12,
@@ -106,23 +106,23 @@
         },
         {
           "demand_idx": 13,
-          "hub_idx": 24,
+          "hub_idx": 21,
           "mode": 0
         },
         {
           "demand_idx": 14,
-          "hub_idx": 22,
-          "mode": 0
+          "hub_idx": 23,
+          "mode": 1
         },
         {
           "demand_idx": 15,
-          "hub_idx": 23,
-          "mode": 1
+          "hub_idx": 20,
+          "mode": 0
         },
         {
           "demand_idx": 16,
-          "hub_idx": 23,
-          "mode": 1
+          "hub_idx": 20,
+          "mode": 0
         },
         {
           "demand_idx": 17,
@@ -131,41 +131,41 @@
         },
         {
           "demand_idx": 18,
-          "hub_idx": 22,
+          "hub_idx": 23,
           "mode": 0
         },
         {
           "demand_idx": 19,
-          "hub_idx": 23,
-          "mode": 1
+          "hub_idx": 20,
+          "mode": 0
         }
       ],
       "origin_assignments": [
         {
           "origin_idx": 25,
-          "hub_idx": 24,
+          "hub_idx": 20,
           "mode": 0
         },
         {
           "origin_idx": 26,
-          "hub_idx": 24,
+          "hub_idx": 21,
           "mode": 0
         }
       ],
       "transshipment": [],
       "inventory_held": [
-        0.0,
-        0.0,
-        58499.84411227963,
-        826823.5964499271,
-        197289.71181511783
+        162885.0,
+        80475.25002884437,
+        76469.0,
+        107616.0,
+        103585.0
       ]
     },
     {
       "scenario": 1,
       "y_ks": [
-        false,
-        false,
+        true,
+        true,
         true,
         true,
         true
@@ -178,8 +178,8 @@
         },
         {
           "demand_idx": 1,
-          "hub_idx": 24,
-          "mode": 0
+          "hub_idx": 20,
+          "mode": 1
         },
         {
           "demand_idx": 2,
@@ -188,22 +188,22 @@
         },
         {
           "demand_idx": 3,
-          "hub_idx": 24,
+          "hub_idx": 21,
           "mode": 1
         },
         {
           "demand_idx": 4,
-          "hub_idx": 23,
+          "hub_idx": 20,
           "mode": 1
         },
         {
           "demand_idx": 5,
-          "hub_idx": 23,
+          "hub_idx": 20,
           "mode": 1
         },
         {
           "demand_idx": 6,
-          "hub_idx": 23,
+          "hub_idx": 20,
           "mode": 1
         },
         {
@@ -213,17 +213,17 @@
         },
         {
           "demand_idx": 8,
-          "hub_idx": 24,
-          "mode": 0
+          "hub_idx": 23,
+          "mode": 2
         },
         {
           "demand_idx": 9,
-          "hub_idx": 23,
+          "hub_idx": 24,
           "mode": 1
         },
         {
           "demand_idx": 10,
-          "hub_idx": 24,
+          "hub_idx": 21,
           "mode": 2
         },
         {
@@ -233,70 +233,70 @@
         },
         {
           "demand_idx": 12,
-          "hub_idx": 24,
-          "mode": 0
+          "hub_idx": 21,
+          "mode": 1
         },
         {
           "demand_idx": 13,
-          "hub_idx": 24,
-          "mode": 0
+          "hub_idx": 21,
+          "mode": 1
         },
         {
           "demand_idx": 14,
-          "hub_idx": 22,
+          "hub_idx": 23,
           "mode": 1
         },
         {
           "demand_idx": 15,
-          "hub_idx": 23,
+          "hub_idx": 20,
           "mode": 1
         },
         {
           "demand_idx": 16,
-          "hub_idx": 23,
+          "hub_idx": 20,
           "mode": 1
         },
         {
           "demand_idx": 17,
-          "hub_idx": 23,
-          "mode": 1
-        },
-        {
-          "demand_idx": 18,
           "hub_idx": 22,
           "mode": 1
         },
         {
-          "demand_idx": 19,
+          "demand_idx": 18,
           "hub_idx": 23,
+          "mode": 1
+        },
+        {
+          "demand_idx": 19,
+          "hub_idx": 24,
           "mode": 1
         }
       ],
       "origin_assignments": [
         {
           "origin_idx": 25,
-          "hub_idx": 23,
+          "hub_idx": 20,
           "mode": 1
         },
         {
           "origin_idx": 26,
-          "hub_idx": 23,
+          "hub_idx": 21,
           "mode": 2
         }
       ],
       "transshipment": [],
       "inventory_held": [
-        0.0,
-        0.0,
-        58499.84411227963,
-        826823.5964499271,
-        197289.71181511783
+        162885.0,
+        80475.25002884437,
+        76469.0,
+        107616.0,
+        103585.0
       ]
     },
     {
       "scenario": 2,
       "y_ks": [
-        false,
+        true,
         false,
         true,
         true,
@@ -305,43 +305,43 @@
       "demand_assignments": [
         {
           "demand_idx": 0,
-          "hub_idx": 23,
+          "hub_idx": 20,
           "mode": 1
         },
         {
           "demand_idx": 1,
-          "hub_idx": 23,
+          "hub_idx": 20,
           "mode": 1
         },
         {
           "demand_idx": 2,
-          "hub_idx": 23,
+          "hub_idx": 20,
           "mode": 1
         },
         {
           "demand_idx": 3,
-          "hub_idx": 23,
+          "hub_idx": 20,
           "mode": 1
         },
         {
           "demand_idx": 4,
-          "hub_idx": 23,
+          "hub_idx": 20,
           "mode": 1
         },
         {
           "demand_idx": 5,
-          "hub_idx": 23,
+          "hub_idx": 20,
           "mode": 1
         },
         {
           "demand_idx": 6,
-          "hub_idx": 23,
+          "hub_idx": 20,
           "mode": 1
         },
         {
           "demand_idx": 7,
-          "hub_idx": 23,
-          "mode": 1
+          "hub_idx": 22,
+          "mode": 2
         },
         {
           "demand_idx": 8,
@@ -350,27 +350,27 @@
         },
         {
           "demand_idx": 9,
-          "hub_idx": 23,
+          "hub_idx": 20,
           "mode": 1
         },
         {
           "demand_idx": 10,
-          "hub_idx": 23,
+          "hub_idx": 20,
           "mode": 1
         },
         {
           "demand_idx": 11,
-          "hub_idx": 23,
+          "hub_idx": 20,
           "mode": 1
         },
         {
           "demand_idx": 12,
-          "hub_idx": 23,
+          "hub_idx": 20,
           "mode": 1
         },
         {
           "demand_idx": 13,
-          "hub_idx": 23,
+          "hub_idx": 20,
           "mode": 1
         },
         {
@@ -380,12 +380,12 @@
         },
         {
           "demand_idx": 15,
-          "hub_idx": 23,
+          "hub_idx": 20,
           "mode": 1
         },
         {
           "demand_idx": 16,
-          "hub_idx": 23,
+          "hub_idx": 20,
           "mode": 1
         },
         {
@@ -400,7 +400,7 @@
         },
         {
           "demand_idx": 19,
-          "hub_idx": 23,
+          "hub_idx": 20,
           "mode": 1
         }
       ],
@@ -418,10 +418,10 @@
       ],
       "transshipment": [],
       "inventory_held": [
+        162885.0,
         0.0,
-        0.0,
-        58499.84411227963,
-        826823.5964499271,
+        76469.0,
+        107616.0,
         0.0
       ]
     }
