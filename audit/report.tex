@@ -1,0 +1,273 @@
+% Technical Report: Network-Topology Correction for Accessibility Modelling
+% Mirrors the preamble of paper/main.tex (LLNCS format).
+%
+\documentclass{llncs}
+
+% ─── Encoding & Fonts ─────────────────────────────────────────────────────────
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+
+% ─── Mathematics ──────────────────────────────────────────────────────────────
+\usepackage{amsmath}
+\usepackage{amssymb}
+
+% ─── Tables ───────────────────────────────────────────────────────────────────
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{tabularx}
+
+% ─── Algorithms ───────────────────────────────────────────────────────────────
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+
+% ─── Figures & Floats ─────────────────────────────────────────────────────────
+\usepackage{graphicx}
+\usepackage{float}
+
+% ─── Layout & Formatting ──────────────────────────────────────────────────────
+\usepackage{indentfirst}
+
+% ─── References & Links ───────────────────────────────────────────────────────
+\usepackage{cite}
+\usepackage{hyperref}
+
+% ─── Custom commands (from main.tex) ──────────────────────────────────────────
+\newcommand{\quo}[1]{``#1''}
+\newcommand{\mycomment}[1]{}
+
+\begin{document}
+
+\title{Technical Note: Network-Topology-Aware Accessibility Modelling\\
+       for the MO-IHLNDP Synthetic Dataset}
+
+\titlerunning{Network-Topology Correction for MO-IHLNDP Dataset}
+
+\author{
+    Phu-Quy Le-Tang\inst{1} \and
+    Quang-Vu Nguyen\inst{1} \and
+    Sunarin Chanta\inst{2}
+}
+
+\authorrunning{Le Tang Phu Quy et al.}
+
+\institute{
+    The University of Danang -- Vietnam-Korea University of Information and
+    Communication Technology
+    \and
+    King Mongkut's University of Technology North Bangkok \\
+    \email{quyltp.22git@vku.udn.vn, nqvu@vku.udn.vn, sunarin.c@itm.kmutnb.ac.th}
+}
+
+\maketitle
+
+\begin{abstract}
+This technical note documents a methodological correction to the synthetic
+dataset used in the MO-IHLNDP case study for Central Vietnam.
+The original dataset generated arc-accessibility indicators under a
+complete-graph assumption, which conflates link existence with link disruption.
+We replace this with a two-stage model: a Delaunay triangulation defines the
+planar network topology, and BFS path-reachability extends accessibility to
+non-adjacent node pairs.
+Transport costs for non-adjacent pairs are updated to shortest-path distances
+through the planar network.
+This note describes the original methodology, its limitations, the corrective
+model, and the implementation plan.
+\end{abstract}
+
+\keywords{Synthetic dataset \and Accessibility modelling \and Delaunay
+triangulation \and Path reachability \and Humanitarian logistics}
+
+
+% ============================================================================
+\section{Network-Topology Limitation and Planned Correction}
+\label{sec:topology-correction}
+% ============================================================================
+
+\subsection{Current Methodology}
+\label{sec:current}
+
+The synthetic dataset generates the arc-accessibility indicator $a_{uvms}$
+under a \textbf{complete-graph assumption}: for every ordered pair
+$(u,v)\in V\times V$, across all modes $m$ and scenarios $s$, a disruption
+probability is computed as
+%
+\begin{equation}
+  p^{\text{road}}_{uvs}
+    = \min\!\bigl(0.97,\;\beta_s \cdot \bar{r}_{uvs}\bigr),
+  \qquad
+  \bar{r}_{uvs} = \tfrac{r_{us}+r_{vs}}{2},
+\label{eq:p_road}
+\end{equation}
+%
+where $\beta_s \in \{0.25, 0.55, 0.88\}$ scales with scenario severity
+(mild, severe, extreme).
+Water mode is enabled for a pair $(u,v)$ when both endpoints exceed a
+flood-risk threshold ($r_{us} > 0.30$ and $r_{vs} > 0.30$); air remains
+universally accessible.
+Transport costs and travel times are estimated via Haversine distances
+adjusted for mode-specific tortuosity and terrain correction factors,
+computed independently for all $N^2$ pairs.
+
+This formulation is aligned with prior two-stage stochastic relief logistics
+models~\cite{barzinpour2014,tofighi2016humanitarian} that adopt complete-graph
+networks for analytical tractability.
+
+\subsection{Identified Limitation}
+\label{sec:limitation}
+
+The complete-graph assumption conflates \textbf{link existence} with
+\textbf{link disruption}: it assigns a disruption probability to arcs that
+have no corresponding physical road or waterway in Central Vietnam's geography.
+Two consequences arise.
+
+\textit{First}, nodes on the convex boundary of the study region receive
+artificially high connectivity.
+Their pairwise risk average $\bar{r}_{uvs}$ is diluted by distant,
+lower-risk neighbours, so \quo{belt} arcs along the convex hull remain
+accessible even under extreme flooding.
+This contradicts real infrastructure patterns along the narrow coastal
+corridor of the Quang Nam -- Da Nang -- Thua Thien-Hue provinces, where
+coastal roads are typically the first to be inundated or cut~\cite{nguyen2021flood}.
+
+\textit{Second}, transport costs for non-adjacent node pairs underestimate
+true distances: direct Haversine costs ignore mandatory detours through the
+inland mountain passes of the Truong Son range, whose terrain factor
+$\tau(\ell) \in [1.0, 1.8]$ substantially inflates effective travel distance
+for nodes separated by highland terrain.
+
+
+\subsection{Proposed Correction: Two-Stage Topology-Aware Model}
+\label{sec:correction}
+
+We replace the complete-graph with a \textbf{two-stage network-topology-aware
+accessibility model}, implemented in \texttt{data\_generate\_cv.py}.
+
+\begin{enumerate}
+
+\item \textbf{Planar base graph.}
+A Delaunay triangulation of all node coordinates
+defines the set of \emph{directly adjacent} arcs
+$\mathcal{E} \subset V\times V$, yielding
+$|\mathcal{E}| \approx 3N$ edges (346 edges for $N=132$) ---
+a sparse, geographically plausible planar network.
+The triangulation is computed once per instance via
+\texttt{scipy.spatial.Delaunay}.
+
+\item \textbf{Edge-level disruption.}
+The risk-based disruption (Eq.~\ref{eq:p_road}) and water-threshold logic
+are applied exclusively to $\mathcal{E}$, producing a scenario-specific
+accessible subgraph
+$G_s^m = (V,\,\mathcal{E}_s^m)$ for each mode $m$.
+Non-adjacent arcs are initialised to zero (blocked) and are never assigned
+a disruption draw.
+
+\item \textbf{Path-reachability extension.}
+For all non-adjacent pairs $(u,v)$, we set
+$a_{uvms} = 1$ if and only if $v$ is reachable from $u$
+in $G_s^m$ via BFS; otherwise $a_{uvms}$ remains zero.
+This preserves the binary structure of the existing constraint set
+(Constraints~10--11 in the original model) while capturing realistic
+route detours through intermediate nodes.
+
+\item \textbf{Shortest-path transport costs.}
+For road (mode~0) and water (mode~1), the direct Haversine cost is retained
+for Delaunay-adjacent pairs; for non-adjacent pairs the cost matrix entry
+$C_{uvm}$ is overwritten with the Dijkstra shortest-path cost through
+$\mathcal{E}$, so that model decisions correctly reflect the cost of the
+least-expensive multi-hop route.
+Air (mode~2) retains direct Haversine costs, as helicopters fly straight lines.
+
+\end{enumerate}
+
+This correction ensures that under extreme scenarios, isolated coastal nodes
+genuinely lose road access rather than retaining it through spurious direct
+arcs, and that water transport's compensatory role along the Thu Bon and
+Huong rivers is geographically grounded.
+
+\subsection{Quantitative Impact}
+\label{sec:impact}
+
+Table~\ref{tab:access} reports the number of non-Delaunay node pairs that
+carry a road-accessibility value of one (i.e., path-reachable) under the
+corrected model for CV-Large ($N=132$, 8\,300 non-adjacent pairs).
+
+\begin{table}[h]
+\centering
+\caption{Path-reachable non-adjacent node pairs (road mode, CV-Large).}
+\label{tab:access}
+\begin{tabular}{lcc}
+\toprule
+Scenario & Reachable pairs & Fraction \\
+\midrule
+Mild    & 6\,794 & 81.9\% \\
+Severe  & 6\,794 & 81.9\% \\
+Extreme & 6\,016 & 72.5\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Under the original complete-graph model, all $N(N-1)/2 = 8\,646$ non-diagonal
+pairs received independent disruption draws; under the corrected model, only
+the 346 Delaunay edges receive draws, and path-reachability determines the
+rest.
+The extreme scenario shows a meaningful reduction of 778 additional
+unreachable pairs compared with mild/severe, correctly capturing the greater
+network fragmentation caused by large-scale flooding.
+
+
+\subsection{Implementation Plan}
+\label{sec:impl}
+
+Algorithm~\ref{alg:accessibility} summarises the corrected accessibility
+generation procedure, replacing lines 483--577 of
+\texttt{src/scripts/data\_generate\_cv.py}.
+
+\begin{algorithm}[h]
+\caption{Topology-aware accessibility generation (per scenario $s$)}
+\label{alg:accessibility}
+\begin{algorithmic}[1]
+\Require Node coordinates $\text{coords}$, scenario risk vector $\mathbf{r}_s$,
+         disruption parameter $\beta_s$
+\Ensure  Accessibility tensor $a[m][u][v]$ for $m \in \{0,1,2\}$
+
+\State $\mathcal{E} \leftarrow \textsc{DelaunayEdges}(\text{coords})$
+       \Comment{$\approx 3N$ undirected edges}
+\State $a[m][u][v] \leftarrow 0$ for all $m,u,v$
+       \Comment{default: all blocked}
+
+\ForAll{$(u,v) \in \mathcal{E}$}
+  \State $\bar{r} \leftarrow (r_{us} + r_{vs})/2$
+  \State $a[0][u][v] \leftarrow a[0][v][u] \leftarrow
+         \mathbf{1}[\text{Uniform}(0,1) \geq \min(0.97,\,\beta_s \cdot \bar{r})]$
+         \Comment{road}
+  \State $a[1][u][v] \leftarrow a[1][v][u] \leftarrow
+         \mathbf{1}[r_{us} > 0.30 \wedge r_{vs} > 0.30]$
+         \Comment{water}
+  \State $a[2][u][v] \leftarrow a[2][v][u] \leftarrow 1$
+         \Comment{air}
+\EndFor
+
+\ForAll{$m \in \{0,1,2\}$}
+  \State Build adjacency list $\text{adj}_m$ from $\{(u,v)\in\mathcal{E} : a[m][u][v]=1\}$
+  \ForAll{$\text{src} \in V$}
+    \State $\text{visited} \leftarrow \textsc{BFS}(\text{adj}_m, \text{src})$
+    \ForAll{$\text{dst} \in \text{visited},\; \text{dst} \neq \text{src}$}
+      \State $a[m][\text{src}][\text{dst}] \leftarrow 1$
+    \EndFor
+  \EndFor
+\EndFor
+\end{algorithmic}
+\end{algorithm}
+
+Transport costs for non-adjacent pairs are updated by running Dijkstra from
+every source node through $\mathcal{E}$ (road and water modes only),
+replacing the direct Haversine entry with the shortest-path distance.
+The visualiser (\texttt{visualizer/dataset\_view.py}) requires no changes:
+the Delaunay edge display will now correctly reflect the corrected data
+topology once the instance JSON files are regenerated.
+
+
+\bibliographystyle{ieeetr}
+\bibliography{cite-class.bib}
+
+\end{document}

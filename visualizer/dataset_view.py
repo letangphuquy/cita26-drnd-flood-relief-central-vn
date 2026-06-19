@@ -11,6 +11,7 @@ Four toggleable layers:
 from __future__ import annotations
 
 import colorsys
+import math
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Set, Tuple
@@ -18,6 +19,16 @@ from typing import Any, Dict, List, Set, Tuple
 import folium
 import numpy as np
 from scipy.spatial import Delaunay
+
+
+
+def _haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    R = 6371.0
+    p = math.pi / 180
+    a = (math.sin((lat2 - lat1) * p / 2) ** 2
+         + math.cos(lat1 * p) * math.cos(lat2 * p)
+         * math.sin((lon2 - lon1) * p / 2) ** 2)
+    return R * 2 * math.asin(math.sqrt(a))
 
 _ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_ROOT / "src" / "visualizer"))
@@ -48,7 +59,11 @@ def _demand_color(norm: float) -> str:
 # ── planar graph construction ─────────────────────────────────────────────────
 
 def _delaunay_edges(coords: List[Tuple[float, float]]) -> Set[Tuple[int, int]]:
-    """Return unique undirected edges from a Delaunay triangulation of coords."""
+    """
+    Undirected Delaunay edges filtered to MAX_EDGE_KM.
+    Matches the threshold used in data_generate_cv.py so the drawn network
+    reflects exactly the arcs that carry accessibility values in the JSON.
+    """
     pts = np.array([[c[0], c[1]] for c in coords])
     tri = Delaunay(pts)
     edges: Set[Tuple[int, int]] = set()
@@ -121,8 +136,15 @@ def build_dataset_map(
     m = folium.Map(location=centre, zoom_start=9, tiles="OpenStreetMap",
                    control_scale=True)
 
-    # ── Delaunay edges (needed for accessibility layer) ───────────────────────
-    edges = _delaunay_edges(coords) if (show_road or show_water or show_air) else set()
+    # ── Edge sets per mode ────────────────────────────────────────────────────
+    # Road: prefer OSRM-validated edges stored in the JSON; fall back to Delaunay.
+    # Water / Air: always use Delaunay geometry (flood / helicopter – not road-bound).
+    _geom_edges = _delaunay_edges(coords) if (show_water or show_air or show_road) else set()
+    _graph = instance_data.get("graph", {})
+    if _graph.get("road_edges"):
+        road_edge_set = {(int(e[0]), int(e[1])) for e in _graph["road_edges"]}
+    else:
+        road_edge_set = _geom_edges   # legacy fallback
 
     # ── Feature groups ────────────────────────────────────────────────────────
     fg_risk = folium.FeatureGroup(name="Risk index", show=show_risk)
@@ -259,17 +281,17 @@ def build_dataset_map(
     # Layer 4: Accessibility planar graph (Delaunay edges per mode)
     # ─────────────────────────────────────────────────────────────────────────
     _MODE_META = [
-        (0, "Road",  "#2E7D32", fg_road,  show_road),
-        (1, "Water", "#0277BD", fg_water, show_water),
-        (2, "Air",   "#6A1B9A", fg_air,   show_air),
+        (0, "Road",  "#2E7D32", fg_road,  show_road,  road_edge_set),
+        (1, "Water", "#0277BD", fg_water, show_water, _geom_edges),
+        (2, "Air",   "#6A1B9A", fg_air,   show_air,   _geom_edges),
     ]
 
-    for mode_idx, mode_name, mode_colour, fg, show_flag in _MODE_META:
+    for mode_idx, mode_name, mode_colour, fg, show_flag, mode_edges in _MODE_META:
         if not show_flag or not accessibility or mode_idx >= len(accessibility):
             continue
         ac_matrix = accessibility[mode_idx]
         n = len(coords)
-        for (u, v) in edges:
+        for (u, v) in mode_edges:
             if u >= n or v >= n:
                 continue
             try:
@@ -282,25 +304,14 @@ def build_dataset_map(
                     locations=[coords[u], coords[v]],
                     color=mode_colour,
                     weight=2,
-                    opacity=0.55,
+                    opacity=0.6,
                     tooltip=f"{names[u] if u<len(names) else u} ↔ "
-                            f"{names[v] if v<len(names) else v} [{mode_name}] ✓",
-                ).add_to(fg)
-            else:
-                folium.PolyLine(
-                    locations=[coords[u], coords[v]],
-                    color="#9E9E9E",
-                    weight=1,
-                    opacity=0.30,
-                    dash_array="4 6",
-                    tooltip=f"{names[u] if u<len(names) else u} ↔ "
-                            f"{names[v] if v<len(names) else v} [{mode_name}] ✗ blocked",
+                            f"{names[v] if v<len(names) else v} [{mode_name}]",
                 ).add_to(fg)
 
-    # ── Add all groups + layer control ────────────────────────────────────────
+    # ── Add all groups (no Folium LayerControl — Streamlit checkboxes are used) ─
     for fg in (fg_road, fg_water, fg_air, fg_dem, fg_risk, fg_epi):
         fg.add_to(m)
-    folium.LayerControl(collapsed=False).add_to(m)
 
     # ── Colour-scale legend ───────────────────────────────────────────────────
     sc_names = ["Mild", "Severe", "Extreme"]
@@ -310,10 +321,10 @@ def build_dataset_map(
                 background:white;padding:10px 14px;border-radius:8px;
                 border:1px solid #ccc;font-size:12px;box-shadow:2px 2px 6px rgba(0,0,0,.15)">
       <b>Scenario: {sc_label}</b><br>
-      <span style="color:#2E7D32">─</span> Road accessible &nbsp;
+      <span style="color:#2E7D32">─</span> Road &nbsp;
       <span style="color:#0277BD">─</span> Water &nbsp;
       <span style="color:#6A1B9A">─</span> Air<br>
-      <span style="color:#9E9E9E">- -</span> Route blocked<br>
+      (lines shown for accessible direct links only)<br>
       <span style="color:#C62828">⚡</span> Flood epicentre<br>
       <span style="background:linear-gradient(to right,#2e7d32,#f9a825,#c62828);
                    display:inline-block;width:80px;height:10px;vertical-align:middle"></span>

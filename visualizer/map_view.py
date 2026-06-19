@@ -23,22 +23,29 @@ _MODE_COLOURS  = {0: "#E53935", 1: "#039BE5", 2: "#7CB342"}  # road/water/air
 _MODE_NAMES    = {0: "Road", 1: "Water/Boat", 2: "Air/Helicopter"}
 _MODE_DASHES   = {0: None, 1: [8, 4], 2: [2, 4]}              # dash patterns
 
-_COL_HUB_OPEN   = "#FF7043"
-_COL_HUB_CLOSED = "#9E9E9E"
+_COL_HUB_OPEN     = "#FF7043"
+_COL_HUB_INACTIVE = "#FFB74D"  # open this scenario, but not reactive/restocked
+_COL_HUB_CLOSED   = "#9E9E9E"
 _COL_ORIGIN     = "#43A047"
 _COL_DEMAND_DEF = "#4C72B0"
 _COL_ALLOC      = "#BBBBBB"
 _COL_BLOCKED    = "#EF5350"
+_MODE_COLOURS_FADED = {0: "#FFCDD2", 1: "#B3E5FC", 2: "#DCEDC8"}  # pale road/water/air for blocked nodes
 
 
 def _dist(a: Tuple[float, float], b: Tuple[float, float]) -> float:
     return math.hypot(a[0] - b[0], a[1] - b[1])
 
 
-def _hub_icon(open_: bool) -> folium.DivIcon:
-    colour = _COL_HUB_OPEN if open_ else _COL_HUB_CLOSED
-    size   = 18 if open_ else 12
-    border = "2px solid #5D4037" if open_ else "1px solid #555"
+def _hub_icon(state: str) -> folium.DivIcon:
+    """state: 'active' (open + reactive), 'inactive' (open, not reactive
+    this scenario), or 'closed'."""
+    if state == "active":
+        colour, size, border = _COL_HUB_OPEN, 18, "2px solid #5D4037"
+    elif state == "inactive":
+        colour, size, border = _COL_HUB_INACTIVE, 18, "2px dashed #5D4037"
+    else:
+        colour, size, border = _COL_HUB_CLOSED, 12, "1px solid #555"
     return folium.DivIcon(
         html=(
             f'<div style="width:{size}px;height:{size}px;'
@@ -214,9 +221,12 @@ def build_map(
             inv_info = f"<br>Inventory held: {scenario_flow.inventory_held[k]:,.0f}"
 
         label = node_info.names[h_idx] if h_idx < len(node_info.names) else f"Hub {k}"
-        status = ("Open + Active" if open_ and reactive
-                  else "Open (inactive this scenario)" if open_ and not reactive
-                  else "Closed")
+        hub_state = ("active" if open_ and reactive
+                      else "inactive" if open_
+                      else "closed")
+        status = {"active": "Open + Active",
+                  "inactive": "Open (inactive this scenario)",
+                  "closed": "Closed"}[hub_state]
         popup_html = (
             f"<b>{label}</b><br>"
             f"Hub #{k} (global {h_idx})<br>"
@@ -224,7 +234,7 @@ def build_map(
         )
         folium.Marker(
             location=[lat, lon],
-            icon=_hub_icon(open_=open_ and reactive),
+            icon=_hub_icon(hub_state),
             tooltip=f"Hub {k}: {label}",
             popup=folium.Popup(popup_html, max_width=250),
         ).add_to(fg_hubs)
@@ -259,7 +269,7 @@ def build_map(
             color="white",
             weight=1,
             fill=True,
-            fill_color=colour if accessible else _COL_BLOCKED,
+            fill_color=colour if accessible else _MODE_COLOURS_FADED.get(mode, _COL_BLOCKED),
             fill_opacity=0.85 if accessible else 0.5,
             tooltip=f"{name} [{_MODE_NAMES.get(mode,'?')}]",
             popup=folium.Popup(
@@ -293,7 +303,8 @@ def build_map(
                 border:1px solid #ccc;font-size:12px;box-shadow:2px 2px 6px rgba(0,0,0,.15)">
       <b>Scenario: {sc_name}</b><br>
       <span style="color:{_COL_HUB_OPEN}">&#9670;</span> Hub (open+active)&nbsp;
-      <span style="color:{_COL_HUB_CLOSED}">&#9670;</span> Hub (closed/inactive)<br>
+      <span style="color:{_COL_HUB_INACTIVE}">&#9670;</span> Hub (open, inactive)&nbsp;
+      <span style="color:{_COL_HUB_CLOSED}">&#9670;</span> Hub (closed)<br>
       <span style="color:{_COL_ORIGIN}">&#9650;</span> Supply origin<br>
       <span style="color:{_MODE_COLOURS[0]}">&#9679;</span> Demand — Road&nbsp;
       <span style="color:{_MODE_COLOURS[1]}">&#9679;</span> Water&nbsp;
