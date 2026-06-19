@@ -1038,13 +1038,15 @@ def build_instance(size="small"):
               f"supply={total_s:,.0f} kg  "
               f"phi={sc['phi_circuity']}")
 
-    # ── Step 6: Hub capacity (tier-based, demand-scaled) ─────────────────────
+    # ── Step 6: Hub capacity (tier-based, population-anchored) ───────────────
     print("  [5] Calibrating hub capacities ...")
-    max_demand_kg = max(
-        GAMMA * sum(float(v) for v in sc["demand"].values())
-        for sc in scenarios
-    )
-    per_hub_base = max_demand_kg / n_H  # reference unit for multipliers
+    # Anchor to static population × worst-case sev_mult — fully scenario-independent.
+    # Using realized scenario demands as a Stage 1 parameter would leak stochastic
+    # outcomes into the pre-positioning capacity decision (κ is a first-stage constant).
+    max_sev_mult      = max(sd[5] for sd in SCENARIO_DEFS)
+    total_base_pop    = sum(base_pop[i] for i in demand_idx)
+    planning_demand_kg = total_base_pop * GAMMA * max_sev_mult
+    per_hub_base      = planning_demand_kg / n_H  # reference unit for multipliers
 
     hub_capacity   = {}
     hub_fixed_cost = {}
@@ -1060,9 +1062,14 @@ def build_instance(size="small"):
         hub_hold_cost[str(k)]  = round(random.uniform(0.2, 0.8), 4)
 
     total_kappa = sum(hub_capacity.values())
-    print(f"      max_demand={max_demand_kg:,.0f} kg  "
+    actual_max_demand_kg = max(
+        GAMMA * sum(float(v) for v in sc["demand"].values())
+        for sc in scenarios
+    )
+    print(f"      planning_base={planning_demand_kg:,.0f} kg  "
+          f"actual_max={actual_max_demand_kg:,.0f} kg  "
           f"total_kappa={total_kappa:,.0f} kg  "
-          f"ratio={total_kappa/max_demand_kg:.2f}x")
+          f"kappa/actual={total_kappa/actual_max_demand_kg:.2f}x")
 
     # ── Step 7: Daganzo Theta ─────────────────────────────────────────────────
     print("  [6] Pre-computing Daganzo Theta matrix ...")
