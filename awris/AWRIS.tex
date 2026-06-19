@@ -1,0 +1,247 @@
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+
+% ─── Packages ──────────────────────────────────────────────────────────────
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{float}
+\usepackage{hyperref}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+
+\begin{document}
+
+\title{A Geospatial Decision Support System for Humanitarian Logistics Network Design under Flood Disruptions in Central Vietnam}
+
+\author{\IEEEauthorblockN{Le Tang Phu Quy and Nguyen Ngoc Xuan Quynh}
+\IEEEauthorblockA{\textit{Faculty of Computer Science} \\
+\textit{Vietnam-Korea University of Information and Communication Technology}\\
+Da Nang, Vietnam \\
+Email: \{quyltp.22git, quynhnnx.22git\}@vku.udn.vn}
+}
+
+\maketitle
+
+\begin{abstract}
+Conventional disaster relief operations in Central Vietnam are severely hampered by recurrent floods that disrupt critical transportation infrastructure. To address this socio-economic and sustainable development challenge, this research introduces an integrated Geospatial Decision Support System (DSS) for humanitarian logistics. The core engine of the system is powered by a novel Priority-Based Nondominated Sorting Genetic Algorithm (PB-NSGA) designed to solve the Multi-Objective Incomplete Hub Location Network Design Problem (MO-IHLNDP). The algorithm dynamically balances expected logistics costs and maximum deprivation costs under multiple uncertain flood scenarios, explicitly accounting for broken inter-hub links and multi-modal transport recovery.
+
+To bridge the gap between complex mathematical optimization and practical disaster management, the system features a decoupled, interactive geospatial visualization architecture. Experimental results using real-world topology data from Central Coastal Vietnam validate both the algorithmic engine and the software framework. PB-NSGA outperforms standard baselines, achieving a Hypervolume of 1.000 in 8.7 seconds with 100\% out-of-sample adversarial feasibility. Concurrently, the DSS software architecture guarantees sub-500ms UI rendering latencies by separating offline combinatorial decoding from online rendering. This allows policymakers to seamlessly simulate localized flood disruptions, visualize optimal hub activations, and trace real-time lateral transshipment routes, providing a highly intuitive and scalable framework for resilient infrastructure planning.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Decision Support System, Humanitarian Logistics, Sustainable Development, Flood Disruption, Geospatial Visualization, Multi-Objective Optimization
+\end{IEEEkeywords}
+
+\section{Introduction}
+Under the escalating impacts of climate change, Central Vietnam faces an increasingly severe regime of extreme weather events. In 2025, a relentless sequence of typhoons and record-breaking floods resulted in massive fatalities and extensive economic losses across the region \cite{VOV2025}. A critical bottleneck during these humanitarian crises was the vulnerability of the national logistics infrastructure. Key arteries, including the North-South Railway and National Route 1, were repeatedly severed by landslides and deep inundation, effectively paralyzing traditional relief supply chains \cite{HanoiTimes2025}. 
+
+These events underscore a fundamental flaw in conventional Disaster Relief Network Design (DRND) \cite{altay2006or}: the assumption of a fully connected and reliable transportation network. When extreme floods occur, the physical topology becomes ``incomplete,'' characterized by isolated nodes and broken arcs \cite{alumur2009incomplete}. While stochastic models have been proposed to handle demand and supply uncertainties \cite{tofighi2016humanitarian, Yahyaei2019}, they largely fail to address structural link failures in the hub network or lack mechanisms to visualize routing disruptions for policymakers.
+
+To address this critical gap in sustainable disaster preparedness, we propose an integrated Geospatial Decision Support System (DSS). This study shifts the focus from purely theoretical mathematical modeling to practical, software-driven decision support. The primary contributions of this paper are threefold: 
+\begin{enumerate}
+    \item We introduce a novel methodology for synthesizing realistic disaster datasets using Open Source Routing Machine (OSRM) validation and multi-criteria geophysical risk scoring.
+    \item We implement a two-stage stochastic model (MO-IHLNDP) powered by a Priority-Based Nondominated Sorting Genetic Algorithm (PB-NSGA) to robustly balance logistics costs with social equity.
+    \item We engineer a decoupled, interactive web application utilizing Streamlit and Folium, allowing policymakers to visually explore Pareto-optimal strategies and dynamically assess multi-modal routing under varying flood severities.
+\end{enumerate}
+
+\section{Related Work}
+
+\subsection{Optimization Models in Disaster Relief}
+Operations Research (OR) applied to Disaster Relief Network Design (DRND) is a mature field \cite{altay2006or}. To handle the inherent uncertainty of disasters, two-stage stochastic programming has become the dominant paradigm \cite{tofighi2016humanitarian, Yahyaei2019}. Furthermore, evaluating network performance purely on financial metrics is inadequate for humanitarian contexts; hence, incorporating social equity metrics like the deprivation cost \cite{holguin2013appropriate} within multi-objective frameworks \cite{Zhou2017} has become standard practice. However, the overwhelming majority of these studies conclude with abstract Pareto fronts and mathematical tables. They isolate the mathematical optimization from the operational environment, leaving a critical gap in translating these theoretically optimal solutions into actionable policies for field practitioners.
+
+\subsection{Decision Support Systems (DSS) and GIS Integration}
+To bridge the gap between abstract OR models and practical disaster management, researchers have advocated for the development of integrated Decision Support Systems (DSS) \cite{Timperio2017}. Early DSS implementations in humanitarian logistics frequently utilized commercial Geographic Information Systems (GIS) alongside exact mathematical solvers. While these systems provide necessary spatial context, they are often monolithic, computationally constrained, and tied to proprietary software stacks. Critically, they typically fail to provide real-time, interactive exploration of multi-objective trade-offs under dynamic, scenario-specific infrastructure disruptions. 
+
+Recent advancements in software engineering emphasize the need for decoupled architectures where heavy offline computation is separated from interactive visual analytics. Yet, comprehensive systems that seamlessly integrate NP-hard stochastic optimizers with lightweight, open-source geospatial frontends remain scarce in the humanitarian literature. Our framework explicitly targets this void by embedding the PB-NSGA solver within a highly responsive, web-based geospatial DSS. This enables policymakers to visually trace the impact of extreme weather events on incomplete networks and immediately assess the efficacy of adaptive, multi-modal routing.
+
+\section{Proposed Framework}
+To deliver actionable insights, the proposed framework integrates optimization modeling, automated dataset synthesis, and software engineering into a unified architecture.
+
+\subsection{Core Optimization Model (MO-IHLNDP)}
+The mathematical foundation of the optimization engine is the Multi-Objective Incomplete Hub Location Network Design Problem (MO-IHLNDP), modeled as a capacitated, single-allocation two-stage stochastic program as established in our preliminary research \cite{letang2026humanitarian}. 
+
+Let $\mathcal{H}$, $\mathcal{I}$, $\mathcal{J}$ denote the sets of candidate hubs ($k,h \in \mathcal{H}$), demand nodes ($i \in \mathcal{I}$), and relief origins ($j \in \mathcal{J}$), while $\mathcal{S}$ and $\mathcal{M}$ represent disaster scenarios and transport modes. The set of all nodes is $\mathcal{V}=\mathcal{H}\cup\mathcal{I}\cup\mathcal{J}$. Strategic pre-disaster decisions (first-stage) include binary planned-hub establishment ($x_k \in \{0,1\}$) and inventory pre-positioning quantity ($q_k \ge 0$). Reactive post-disaster recourse decisions (second-stage) encompass scenario-dependent dynamic hub activation ($y_{ks} \in \{0,1\}$), assignments ($z_{iks}, z_{jks} \in \{0,1\}$), and lateral transshipment flows ($f_{khms} \ge 0$).
+
+The first objective ($Z_1$) minimizes the expected total logistics cost, encapsulating facility setup, inventory holding, and scenario-weighted distribution expenditures:
+\begin{equation} \label{eq:obj1}
+\begin{split}
+\min \quad Z_1 &= \sum_{k \in \mathcal{H}} F_k x_k + \sum_{k \in \mathcal{H}} c_k q_k \\
+&\quad + \sum_{s \in \mathcal{S}} \pi_s \Bigg[ \sum_{k \in \mathcal{H}} F_{ks}^a y_{ks} + \sum_{j \in \mathcal{J}, k \in \mathcal{H}} c_{jks} O_{js} z_{jks} \\
+&\quad + \sum_{k,h \in \mathcal{H}, m \in \mathcal{M}} \alpha C_{khm} f_{khms} + \sum_{k \in \mathcal{H}, i \in \mathcal{I}} \Theta_{kis} z_{iks} \Bigg]
+\end{split}
+\end{equation}
+where $\Theta_{kis}$ represents the Daganzo Continuous Approximation (CA) last-mile routing cost \cite{daganzo2005logistics}, incorporating line-haul and local detour variables:
+\begin{equation} \label{eq:daganzo_theta}
+\begin{split}
+    \Theta_{kis} = & \min_{m \in \mathcal{M} \mid a_{ikms}=1} \Bigg( 2 \cdot C_{kim} \cdot \lceil D_{is}/Q_m \rceil \\
+    & + C_{m} \cdot \Phi \sqrt{[D_{is}/\eta]\cdot A_i} \Bigg)
+\end{split}
+\end{equation}
+The second objective ($Z_2$) enforces social equity by minimizing the expected maximum deprivation cost, applying an exponential penalty to the victims' total waiting time $\Omega_{is}$ across vulnerable nodes \cite{holguin2013appropriate}:
+\begin{equation} \label{eq:obj2}
+    \min \quad Z_2 = \sum_{s \in \mathcal{S}} \pi_s \left( \max_{i \in \mathcal{I}} \left[ D_{is} \cdot \left( e^{\lambda_{is} \cdot \Omega_{is}} - 1 \right) \right] \right)
+\end{equation}
+\begin{equation*} \label{eq:waiting_time}
+    \Omega_{is} = \sum_{k \in \mathcal{H}} z_{iks} \left( \tau_{ks} + 2 \cdot \min_{m \in \mathcal{M} \mid a_{ikms}=1} \tau_{kim} \right)
+\end{equation*}
+Exploiting single-allocation, $Z_2$ is linearized via an auxiliary bounding variable $W_s \ge C^{\text{dep}}_{iks} \cdot z_{iks}$, where the parameter $C^{\text{dep}}_{iks}$ is pre-calculated from raw node survival periods:
+\begin{equation} \label{eq:deprivation_cost}
+\begin{split}
+    C^{\text{dep}}_{iks} = D_{is} \cdot \Bigg( & \exp\Big(\lambda_{is} \cdot \big(\tau_{ks} \\
+    & + 2 \cdot \min_{m \in \mathcal{M} \mid a_{ikms}=1} \tau_{kim}\big)\Big) - 1 \Bigg)
+\end{split}
+\end{equation}
+The complete MO-IHLNDP model minimizes $Z_1, Z_2$ subject to:
+\allowdisplaybreaks
+\begin{align}
+    x_k + y_{ks} & \le 1 \quad \forall k \in \mathcal{H}, s \in \mathcal{S} \label{eq:hub_type} \\
+    q_k & \le \kappa_k \cdot x_k \quad \forall k \in \mathcal{H} \label{eq:hub_inv_cap} \\
+    r_{ks} \cdot y_{ks} & \le \chi \quad \forall k \in \mathcal{H}, s \in \mathcal{S} \label{eq:hub_safety} \\
+    \sum_k z_{iks} & = 1,\; \sum_k z_{jks} = 1 \quad \forall i, j, s \label{eq:single_alloc_demand} \\
+    z_{iks},\; z_{jks} & \le v_{ks} \cdot x_k + y_{ks} \quad \forall i,j,k,s \label{eq:valid_assign_demand} \\
+    z_{iks} & \le \textstyle\sum_m a_{ikms},\; z_{jks} \le \textstyle\sum_m a_{jkms} \quad \forall i,j,k,s \label{eq:path_demand} \\
+    f_{khms} & \le M \cdot a_{khms} \quad \forall k, h, m, s \label{eq:trans_path} \\
+    \sum_i \gamma D_{is} z_{iks} & + \sum_{h,m} f_{khms} \nonumber \\ 
+    & \le q_k + \sum_j O_{js} z_{jks} + \sum_{h,m} f_{hkms} \quad \forall k, s \label{eq:flow_balance} \\
+    q_k + \sum_j O_{js} z_{jks} & + \sum_{h,m} f_{hkms} \nonumber \\
+    & \le \kappa_k \cdot (x_k + y_{ks}) \quad \forall k, s \label{eq:throughput_cap} \\
+    x_k, y_{ks}, z_{iks}, z_{jks} & \in \{0, 1\} \quad \forall i, j, k, s \label{eq:binary_vars} \\
+    q_k, f_{khms}, W_s & \ge 0 \quad \forall k, h, m, s \label{eq:nonneg_vars}
+\end{align}
+
+\subsection{Core Solver Engine (PB-NSGA)}
+As facility location problems are inherently NP-hard \cite{mirchandani1990discrete}, we utilize the Priority-Based Nondominated Sorting Genetic Algorithm (PB-NSGA) \cite{deb2002fast} as established in \cite{letang2026humanitarian}. The chromosome design $\mathbf{C} = (\mathbf{X}, \mathbf{R}, \mathbf{A}, \mathbf{W})$ isolates first-stage strategic allocations, while a priority-driven heuristic decoder handles complex second-stage parameters per scenario $s \in \mathcal{S}$.
+
+\begin{algorithm}[H]
+\caption{Priority-Based Recourse Decoder (single scenario $s$)}
+\label{alg:decoder}
+\small
+\begin{algorithmic}[1]
+\State $\mathcal{H}_{\text{act}}\!\leftarrow\!\{k:X_k\!=\!1,r_{ks}\!\le\!\chi\}$; $q_k\!\leftarrow\!R_k\kappa_k$; if empty, force-activate $\arg\min_k r_{ks}$
+\State Score demands by urgency, isolation, proximity; sort descending
+\For{each demand $i$ (priority order)}
+    \State $K\!\leftarrow\!\max(1,\lceil w_5|\mathcal{H}|\rceil)$; trial $\leftarrow\pi_{A_i}$; \textit{Pass 1}: $k^*\!\leftarrow\!\arg\max\text{HubScore}(k)$ over first $K$ active reachable hubs with residual $>0$
+    \If{Pass 1 succeeds} assign $i\!\to\!k^*$; deduct residual
+    \ElsIf{any active reachable hub} \textit{Pass 2}: assign to first such hub (CV permitted)
+    \Else{} \textit{Reactive}: open nearest safe inactive hub; add $F^a_{ks}$; $\text{CV}^s\!\mathrel{+}=\!1$
+    \EndIf
+\EndFor
+\State Route origin-to-hub supply and redistribute surplus via MCF on the hub sub-network; accumulate $Z_1^s,Z_2^s$
+\State \Return $(Z_1^s,Z_2^s,\text{CV}^s)$
+\end{algorithmic}
+\end{algorithm}
+This encoder-decoder separation strictly reduces the search-space complexity from $\mathcal{O}(|\mathcal{S}| \times |\mathcal{V}|)$ to $\mathcal{O}(|\mathcal{H}| + |\mathcal{I}|)$, enabling the system to evaluate thousands of candidate network designs rapidly.
+
+\subsection{Dataset Synthesis Methodology}
+To feed the optimization engine, the framework utilizes an automated data synthesis pipeline representing the geographical realities of Central Coastal Vietnam.
+\begin{itemize}
+    \item \textbf{Geographic Space Formulation:} The system instantiates 132 coordinates partitioned into demand centroids ($|\mathcal{I}|=100$), elevated logistics hub candidates ($|\mathcal{H}|=20$), and gateway supply origins ($|\mathcal{J}|=12$). Coordinates are filtered using OpenStreetMap boundaries to prevent invalid placements in water bodies.
+    \item \textbf{Intrinsic Risk Profile ($r_u^a$):} Every node receives a composite flood risk score modeled via multi-criteria evaluation: $r^a_u = 0.25 \cdot C_1 (\text{elevation}) + 0.35 \cdot C_2 (\text{river proximity}) + 0.20 \cdot C_3 (\text{coastal distance}) + 0.20 \cdot C_4 (\text{delta accumulation})$.
+    \item \textbf{Topological Network Validation:} Rather than assuming direct Euclidean pathways, the road network uses a two-stage approach. A baseline Delaunay triangulation graph is generated and cross-checked against the Open Source Routing Machine (OSRM) API. Arcs are retained only under a strict detour ratio constraint $\rho = d_{\text{OSRM}} / d_{\text{hav}} \in [0.9, 1.8]$ and a maximum distance cap of 80 km.
+    \item \textbf{Three-Level Flood Scenario Disruption:} Disruption is modeled across Mild ($p=0.60$), Severe ($p=0.30$), and Extreme ($p=0.10$) regimes. High-intensity epicenters trigger localized infrastructure damage, producing a 3D multi-modal accessibility tensor $a_s[m][u][v] \in \{0,1\}$ where road arcs fail probabilistically, while marine and aerial connections handle fallback allocations.
+\end{itemize}
+
+\subsection{Geospatial DSS Architecture}
+Translating abstract Pareto-optimal chromosomes into actionable policy requires robust software engineering. We developed a decoupled web application using Python, Streamlit, Plotly, and Folium.
+
+\begin{itemize}
+    \item \textbf{Decoupled Processing Pipeline:} To achieve sub-second user interface responsiveness, the DSS decouples processing layers. An offline component (\texttt{preprocess\_flows.py}) handles the $\mathcal{O}(|\mathcal{I}| \times |\mathcal{H}|)$ assignment loops and solves the exact minimum-cost flow models, caching results into static JSON schemas. The live online Streamlit view (\texttt{app.py}) exclusively reads these pre-computed structures, ensuring fast, fluid rendering.
+    \item \textbf{Interactive State Management:} The system maintains user states across runtime cycles via \texttt{st.session\_state} bound to the \texttt{streamlit\_plotly\_events} module. When a user clicks a coordinate point on the Plotly Pareto scatter chart, the event listener captures the unique solution index embedded in the scatter plot's \texttt{customdata} payload. A synchronized \texttt{st.rerun()} then updates all UI indicators and maps simultaneously.
+    \item \textbf{Semantic Map Rendering:} Hubs are rendered via raw HTML/CSS injected into a \texttt{folium.DivIcon}, displaying a diamond shape that alters size and boundary traits to convey strategic readiness (Open+Active, Open+Inactive, Closed). Distribution links are rendered as \texttt{folium.PolyLine} paths color-coded by transport modes (solid red for trucks, dashed blue for boats, dotted green for helicopters) with line weights proportional to cargo volume. Blocked routes dynamically shift to a muted translucent red, providing clear visual alerts of network failure.
+\end{itemize}
+
+\section{Experimental Results \& System Evaluation}
+
+To validate the framework, we assess both the mathematical robustness of the core engine and the practical efficacy of the visual DSS using the synthesized \textbf{CV-Large} and \textbf{CV-Small} instances.
+
+\subsection{Algorithmic Engine Performance}
+The DSS is only as reliable as its underlying optimization engine. We evaluated PB-NSGA against established baselines: a Greedy Heuristic, VNS-TS \cite{sangsawang2020capacitated}, GWO-HD \cite{Li2023}, and an exact MILP solver. Table \ref{tab:exp1_results} summarizes the performance on the CV-Small instance, measuring Hypervolume (HV) and Inverted Generational Distance (IGD$^+$) normalized against the exact Pareto front. 
+
+\begin{table}[htbp]
+\caption{Algorithmic Baseline Comparison (CV-Small Instance)}
+\label{tab:exp1_results}
+\small
+\centering
+\begin{tabularx}{\linewidth}{l X X X}
+\toprule
+\textbf{Algorithm} & \textbf{HV $\uparrow$} & \textbf{IGD$^+$ $\downarrow$} & \textbf{CPU (s) $\downarrow$} \\
+\midrule
+Greedy           & $0.292$ & $0.333$ & $\mathbf{<\!0.1}$ \\
+VNS-TS           & $0.777$ & $0.117$ & $60.0$ \\
+GWO-HD           & $0.780$ & $0.152$ & $0.6$ \\
+MILP (Exact)     & $\mathbf{0.997}$ & $\mathbf{0.005}$ & $4.9$ \\
+\textbf{PB-NSGA} & $0.925$ & $0.039$ & $1.1$ \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+PB-NSGA achieves an HV of $0.925$ in 1.1s, demonstrating a $4\times$ runtime advantage over the MILP solver while maintaining near-optimal quality. On the full-scale CV-Large instance ($|\mathcal{I}|=100, |\mathcal{H}|=20$), exact solvers fail. Here, PB-NSGA dominates, achieving $\text{HV} = 1.000 \pm 0.006$ across 20 matched runs in 8.7 seconds, vastly outperforming VNS-TS ($0.823$ in 180.6s). Crucially, PB-NSGA secures a perfect 100\% out-of-sample (OOS) feasibility rate when subjected to 10 unseen adversarial extreme scenarios, proving the engine is robust enough for life-critical disaster planning.
+
+\subsection{Software Efficiency and Scalability}
+The visualization of combinatorial flows for 132 nodes across 3 scenarios poses a rendering challenge. By utilizing the decoupled architecture, the DSS eliminates $\mathcal{O}(|\mathcal{S}| \times |\mathcal{I}| \times |\mathcal{H}|)$ assignment computations from the online request-response cycle. Consequently, the interactive UI renders the complex Folium mapping and Plotly traces in under 500 ms, ensuring that policymakers experience zero lag when conducting rapid "What-If" scenario analyses.
+% \begin{figure}[htbp]
+% \centering
+% \includegraphics[width=\linewidth]{dss_fig2_solution_map.png}
+% \caption{Geospatial solution map rendered within the DSS, demonstrating structural hub filtering and multi-modal routing adaptation under Extreme flood scenarios.}
+% \label{fig:map_ui}
+% \end{figure}
+
+\subsection{Geospatial Scenario Analysis (Case Study)}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\linewidth]{dss_fig1_kpi.png}
+\caption{The interactive Pareto Front UI and KPI Dashboard showing the trade-off between Expected Logistics Cost ($Z_1$) and Deprivation Cost ($Z_2$).}
+\label{fig:pareto_ui}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{dss_fig2_consistent_solution.png}
+\caption{Geospatial solution map rendered within the DSS for a compromise solution ($Z_1 = \$4.8\text{M}, Z_2 = 41,828$), demonstrating structural hub filtering and multi-modal routing adaptation under Severe flood scenarios.}
+\label{fig:map_ui}
+\end{figure}
+
+Through the interactive map interface (Figures \ref{fig:pareto_ui} and \ref{fig:map_ui}), structural insights emerge clearly. We analyze a specific compromise ``knee-point'' solution selected via the DSS ($Z_1 = \$4.8\text{M}, Z_2 = 41,828$). 
+
+By toggling the UI from Mild to Extreme flood scenarios in Figure \ref{fig:map_ui}, decision-makers can visually trace the system's adaptive recourse. Under the Mild scenario, logistics rely predominantly on standard red truck routes. However, switching to the Extreme scenario reveals extensive terrestrial network failures (highlighted by faded red polylines). In response, the visualization shows lateral transshipment lines dynamically shifting to blue motorboat dashes and green helicopter dots to bypass severed infrastructure.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\linewidth]{CV_large_hub_freq.pdf}
+\caption{Strategic hub selection frequency across the generated Pareto-optimal front for the CV-Large instance, highlighting the primary investment hierarchy.}
+\label{fig:hub_freq}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.85\linewidth]{CV_large_hub_heatmap.pdf}
+\caption{Geophysical risk profile and safety filter ($r_{ks} \le \chi = 0.70$) status of candidate hubs across flood scenarios, explaining dynamic recourse behavior.}
+\label{fig:hub_heatmap}
+\end{figure}
+
+Furthermore, the DSS visually exposes a rigid investment hierarchy. To quantitatively validate this finding, Figure \ref{fig:hub_freq} displays the selection frequency of each candidate hub across the entire Pareto front, while Figure \ref{fig:hub_heatmap} maps their risk profiles across scenarios. Coastal nodes with multi-modal accessibility, specifically H15 and H16, are selected in 100\% of all Pareto-optimal configurations, forming an uncompromisable core. As shown in the risk heatmap (Figure \ref{fig:hub_heatmap}), although their risk index rises from mild ($0.26$, $0.38$) to severe/extreme ($0.59$, $0.63$), they consistently remain below the critical hazard threshold ($\chi = 0.70$), guaranteeing operational continuity.
+
+Conversely, inland depots like H1 act as conditional assets, appearing in only 67\% of solutions. During severe events, H1's risk surges to $0.94$ (violating the safety threshold), causing the decoder to systematically bypass it and render it as an inactive grey diamond (Figure \ref{fig:map_ui}), which reroutes assigned demands to surviving inland hubs like H14. H14 itself exhibits a high selection frequency of over 82\% (Figure \ref{fig:hub_freq}) precisely because it is the safest inland candidate, with a risk profile that remains exceptionally low ($0.05$ to $0.13$) across all hazard regimes (Figure \ref{fig:hub_heatmap}).
+
+\iffalse
+\subsection{Managerial Implications for Central Vietnam}
+For policymakers in Central Vietnam, the DSS converts abstract math into actionable infrastructure guidance. The dominance of pre-positioning at coastal hubs (H15, H16) indicates that regional resilience is best achieved by anchoring operations at multi-modal nodes capable of bypassing severed road networks. Inland depots represent conditional assets whose utility degrades sharply under severe risk thresholds (e.g., H1 reaching $0.94$ risk); thus, reactive-hub capital should be redirected toward pre-positioning depth at low-risk staging nodes like H14, and supporting multi-modal transport diversification (marine/rotary-wing assets) at the coastal anchors. 
+\fi
+
+
+\section{Conclusion}
+This study presented a comprehensive Geospatial Decision Support System designed to address the challenges of disaster relief operations under infrastructure disruptions in Central Vietnam. By moving beyond conventional deterministic approaches to an incomplete-network two-stage stochastic program solved via PB-NSGA, the framework incorporates realistic climate uncertainties. The integration of OSRM-validated road topologies and a decoupled Streamlit/Folium visualization architecture bridges the gap between complex optimization models and emergency management, ensuring that future humanitarian investments remain economically rational and socially equitable.
+
+\bibliographystyle{IEEEtran}
+\bibliography{cite-class.bib}
+
+\end{document}
