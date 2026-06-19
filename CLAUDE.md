@@ -101,7 +101,25 @@ match and regenerate + validate all flow files.
   active, do not chain multiple destructive or hard-to-reverse steps without
   pausing for confirmation at each decision point.
 
-## 8. Running the solver
+## 8. Dataset methodology documentation
+
+`audit/doc_dataset_methodology.md` is the authoritative source document for
+the v2 dataset generation methodology. **Whenever any aspect of
+`src/scripts/data_generate_cv.py` changes — formulas, parameters, constants,
+or structural decisions — update `doc_dataset_methodology.md` in the same
+commit as the code change.** The sections to check:
+
+- Epicenter Sampling — weight formula, repulsion, between-scenario seeding
+- Hub Capacity — tier table, multiplier ranges, anchor formula, terrain_factor split
+- Demand D_{is} — demand formula and totals
+- Road / Water / Air Accessibility — thresholds and logic
+- CV Large v2 Summary — scenario stats and solver results (keep current)
+- Dataset Version History — add a row whenever v2 methodology diverges from v1
+
+The doc must never lag the code. A reviewer reading the doc should be able to
+reproduce the dataset exactly from it.
+
+## 9. Running the solver
 
 ```bash
 ./src/solver/solver <instance.json> --pop 200 --gen 500 --seed 0 --out <result.json>
