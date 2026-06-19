@@ -89,7 +89,7 @@ COASTLINE = [
 
 ## Epicenter Sampling
 
-Epicenters drawn without replacement from all 100 demand nodes. Sampling weights:
+Epicenters drawn without replacement from demand nodes. Initial sampling weights:
 
 ```
 weight[i] = aux_risk[i]² × exp(−d_coast[i] / EPI_COAST_SIGMA)
@@ -97,7 +97,17 @@ weight[i] = aux_risk[i]² × exp(−d_coast[i] / EPI_COAST_SIGMA)
 
 `EPI_COAST_SIGMA = 30 km`. The exponential factor strongly biases toward coastal nodes; squaring `aux_risk` further penalises mountain nodes. High-aux_risk river-valley nodes (e.g. Đông Giang District, ~50km from coast) retain non-negligible weight due to their flood-prone character.
 
-**Random isolation:** `random.seed(SEED)` / `random.seed(SEED+1)` is called at the very top of `build_instance()` before any scenario draws. Road graph changes (different edge counts, future topology revisions) do not shift epicenter selection.
+**Within-scenario spatial repulsion:** After each epicenter is drawn, weights of all remaining candidates are decayed by distance to the chosen epicenter:
+
+```
+weight[i] *= 1 − exp(−d(i, last_epicenter) / REPULSION_SIGMA)
+```
+
+`REPULSION_SIGMA = 30 km`. Nearby candidates (d ≈ 5 km) are suppressed to ~15% of their original weight; candidates at 100 km retain ~96%. This prevents epicenters within a single scenario from clustering in one locality — they spread naturally across the region.
+
+**Between-scenario independence:** Each scenario's draws start from a fresh `random.seed(EPI_BASE_SEED + (si+1)×100)`, so Mild, Severe, and Extreme epicenters are independently sampled.
+
+**Random isolation:** `random.seed(SEED)` / `random.seed(SEED+1)` is called at the very top of `build_instance()` before any scenario draws. Road graph changes do not shift epicenter selection.
 
 ---
 
@@ -127,7 +137,43 @@ d_val  = max(5,  base_pop[i] × frac × sev_mult  +  gauss(0, 0.06 × frac))
 
 Demand is stored per-node as persons; converted to kg in reporting via `GAMMA = 3.0 kg/person`.
 
-**CV Large v2 totals (kg):** Mild ≈ 652k, Severe ≈ 2,354k, Extreme ≈ 4,349k.
+**CV Large v2 totals (kg):** Mild ≈ 340k, Severe ≈ 2,630k, Extreme ≈ 4,325k.
+
+---
+
+## Hub Capacity κ_k
+
+Hub capacities represent the maximum pre-positioned stock at hub k (kg). They are expressed as multipliers of `per_hub_base = max_demand / n_H`, so the scale stays consistent with actual scenario demand regardless of parameter changes.
+
+### Tier system
+
+Each hub is assigned to one of five tiers based on its name/role:
+
+| Tier | Description | Multiplier range | CV Large capacity range |
+|---|---|---|---|
+| 1 | Major port / airport / logistics node | 0.9 – 1.5 × base | 195k – 325k kg |
+| 2 | Provincial city depot or warehouse | 0.7 – 1.1 × base | 152k – 238k kg |
+| 3 | District staging area; road-accessible | 0.5 – 0.9 × base | 108k – 195k kg |
+| 4 | Mountain forward base or rescue station | 0.4 – 0.7 × base | 87k – 152k kg |
+| 5 | Remote helipad / deep-mountain outpost | 0.3 – 0.5 × base | 65k – 108k kg |
+
+Max/min endpoint ratio = 1.5 / 0.3 = **5×**.
+
+### CV Large tier assignments
+
+| Tier | Hubs |
+|---|---|
+| 1 | Da_Nang_Airport_Hub, Quang_Ngai_Port_Hub, Tam_Ky_Logistics_Hub |
+| 2 | Quang_Ngai_Depot, Binh_Son_Warehouse, Son_Ha_Hub, Nui_Thanh_Reserve |
+| 3 | Phu_Loc_Staging_Area, Que_Son_Facility, Lang_Co_Forward_Post, Thang_Binh_Depot, Bac_Tra_My_Depot |
+| 4 | A_Luoi_Relief_Center, Dong_Giang_Rescue_Stn, Nam_Giang_Forward_Base, Phuoc_Son_Helipad |
+| 5 | A_Dot_Mountain_Base, A_Sap_Helipad, Rao_Trang_Base, Huong_Viet_Depot |
+
+### Design rationale
+
+Total kappa across all 20 hubs ≈ **0.73× max_demand** (sub-unity by design). Individual hub deficits are covered by origin supply nodes and hub-to-hub transshipment flows in the MCF balancer (Step 6 of the decoder). The kappa constraint is a *pre-positioning storage limit*, not a throughput ceiling — goods can be relayed through a hub without consuming capacity.
+
+`terrain_factor` (coastal 1.0 → mountain 1.77) is applied to `hub_fixed_cost` and `hub_hold_cost` (mountain operations are more expensive) but deliberately **not** to capacity (mountain hubs are physically smaller, not larger).
 
 ---
 
@@ -174,17 +220,23 @@ The static river corridor is scenario-independent (Thu Bồn, Perfume River exis
 | Road edges (Delaunay after exclusions) | 330 |
 | + Collocated stitch | 12 |
 | = Total road_edges | 342 |
+| Total hub kappa | 3,145k kg (~0.73× max_demand) |
 
 | Scenario | Mild | Severe | Extreme |
 |---|---|---|---|
-| Road survival | ≈89% | ≈30% | ≈19% |
-| Total demand (kg) | 545k | 2,551k | 4,101k |
-| risk_mean (demand nodes) | 0.256 | 0.484 | 0.487 |
 | n_epicenters | 1 | 2 | 3 |
-| Air-only demand nodes | 0 | 4 | 9 |
+| Total demand (kg) | 340k | 2,630k | 4,325k |
+| Total supply (kg) | 875k | 5,236k | 6,895k |
+| risk_mean (demand nodes) | 0.214 | 0.497 | 0.519 |
+| Road survival | ≈92% | ≈35% | ≈14% |
 
-**Solver results (seed 0, pop 200, gen 500):** 5 Pareto solutions, Feas=159/200.
-Z1 range 12.8M–13.0M, Z2 range 79.6k–94.1k, CV=0 for all.
+**Solver results (seed 0, pop 200, gen 500):** 12 Pareto solutions, Feas=143/200 (71.5%).
+Z1 range 38.5M–92.2M, Z2 range 91.4k–111.3k, CV=0 for all.
+
+*Z1 is larger than v1 (~12–16M) for two structural reasons: (1) Delaunay multi-hop
+Dijkstra paths accumulate more transport cost than K_n direct pairs; (2) total kappa
+(0.73× max_demand) requires the MCF to route significant hub-to-hub transshipment,
+adding inter-hub transfer cost.*
 
 ---
 
@@ -214,10 +266,11 @@ Two versions exist. Neither uses OSRM validation.
 | File location | `data/cv/v1/` | `data/cv/v2/` |
 | Road graph | **Complete graph K_n** — all 8,646 unique pairs have finite C_time; 100% pairs accessible | **Pure Delaunay** — ~342 edges after exclusions; non-adjacent pairs have BIG_M road time |
 | Road in UI | Delaunay is a **UI rendering layer only** (`_delaunay_edges(coords)` fallback in `dataset_view.py`); underlying data remains K_n | Pure Delaunay IS the actual graph model (`road_edges` field stored in JSON) |
-| Epicenter weights | `aux_risk` (linear) | `aux_risk² × exp(−d_coast/30km)` |
+| Epicenter weights | `aux_risk` (linear) | `aux_risk² × exp(−d_coast/30km)` with within-scenario spatial repulsion (`REPULSION_SIGMA = 30 km`) |
 | Demand driver | `risk[i]` (conflates intrinsic + event) | `raw_exp[i]` (event exposure only) |
 | Road disruption | `p = min(0.97, beta × avg_risk)` | complementary-power with ALPHA_EPI |
 | Water model | single risk threshold 0.30 | river corridor OR inundation 0.40 |
+| Hub capacity | `uniform(3, 6) × (max_demand/n_H) × terrain_factor` — mountain hubs over-sized | tier-based multipliers × `(max_demand/n_H)`; 5× max/min spread; total ≈ 0.73× max_demand; terrain_factor on cost only |
 | Script | pre-PR `data_generate_cv.py` (K_n loop) | `src/scripts/data_generate_cv.py` |
 | Solver status | **Solved** — `results/exp2/CV_large_seed0.json` | **Solved** — `results/exp2/v2/CV_large_seed0.json` |
 
