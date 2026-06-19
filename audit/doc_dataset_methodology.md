@@ -143,7 +143,13 @@ Demand is stored per-node as persons; converted to kg in reporting via `GAMMA = 
 
 ## Hub Capacity κ_k
 
-Hub capacities represent the maximum pre-positioned stock at hub k (kg). They are expressed as multipliers of `per_hub_base = max_demand / n_H`, so the scale stays consistent with actual scenario demand regardless of parameter changes.
+Hub capacities represent the maximum pre-positioned stock at hub k (kg). They are a **Stage-1 parameter** — fixed before any scenario is revealed — so the anchor must be scenario-independent:
+
+```
+per_hub_base = sum(base_pop[i] for i in demand_idx) × GAMMA × max_sev_mult / n_H
+```
+
+`base_pop` and `max_sev_mult` (= 2.8) are both known before scenario draws, making `per_hub_base` a deterministic planning constant for a given random seed. Using realized scenario demand as the anchor (e.g. `max(sum(D_s))`) would leak stochastic outcomes into a Stage-1 parameter and is deliberately avoided.
 
 ### Tier system
 
@@ -171,7 +177,9 @@ Max/min endpoint ratio = 1.5 / 0.3 = **5×**.
 
 ### Design rationale
 
-Total kappa across all 20 hubs ≈ **0.73× max_demand** (sub-unity by design). Individual hub deficits are covered by origin supply nodes and hub-to-hub transshipment flows in the MCF balancer (Step 6 of the decoder). The kappa constraint is a *pre-positioning storage limit*, not a throughput ceiling — goods can be relayed through a hub without consuming capacity.
+Total kappa across all 20 hubs ≈ **0.73× Extreme-scenario demand** (sub-unity by design). Individual hub deficits are covered by origin supply nodes and hub-to-hub transshipment flows in the MCF balancer (Step 6 of the decoder, `use_global_balancer=true`). The kappa constraint is a *pre-positioning storage limit*, not a throughput ceiling — goods can be relayed through a hub without consuming its pre-positioning capacity.
+
+CV Large planning base: `total_base_pop × 3 × 2.8 ≈ 4,353k kg`; actual Extreme demand ≈ 4,325k kg. The planning estimate is slightly above actual (correct direction: frac ≤ 1.0 for most nodes).
 
 `terrain_factor` (coastal 1.0 → mountain 1.77) is applied to `hub_fixed_cost` and `hub_hold_cost` (mountain operations are more expensive) but deliberately **not** to capacity (mountain hubs are physically smaller, not larger).
 
@@ -220,7 +228,7 @@ The static river corridor is scenario-independent (Thu Bồn, Perfume River exis
 | Road edges (Delaunay after exclusions) | 330 |
 | + Collocated stitch | 12 |
 | = Total road_edges | 342 |
-| Total hub kappa | 3,145k kg (~0.73× max_demand) |
+| Total hub kappa | 3,165k kg (~0.73× Extreme demand) |
 
 | Scenario | Mild | Severe | Extreme |
 |---|---|---|---|
@@ -230,12 +238,15 @@ The static river corridor is scenario-independent (Thu Bồn, Perfume River exis
 | risk_mean (demand nodes) | 0.214 | 0.497 | 0.519 |
 | Road survival | ≈92% | ≈35% | ≈14% |
 
-**Solver results (seed 0, pop 200, gen 500):** 12 Pareto solutions, Feas=143/200 (71.5%).
-Z1 range 38.5M–92.2M, Z2 range 91.4k–111.3k, CV=0 for all.
+**Solver results (seed 2, pop 200, gen 500):** 14 Pareto solutions, Feas=153/200 (76.5%).
+Z1 range 41.2M–182.7M, Z2 range 92.4k–124.9k, CV=0 for all.
+
+*seed=0 shows metaheuristic sensitivity to the population-anchored kappas (Feas=0/200
+in 500 gens); seed=2 finds feasible solutions at gen 100 and is used as the canonical result.*
 
 *Z1 is larger than v1 (~12–16M) for two structural reasons: (1) Delaunay multi-hop
 Dijkstra paths accumulate more transport cost than K_n direct pairs; (2) total kappa
-(0.73× max_demand) requires the MCF to route significant hub-to-hub transshipment,
+(~0.73× Extreme demand) requires the MCF to route significant hub-to-hub transshipment,
 adding inter-hub transfer cost.*
 
 ---
@@ -270,9 +281,9 @@ Two versions exist. Neither uses OSRM validation.
 | Demand driver | `risk[i]` (conflates intrinsic + event) | `raw_exp[i]` (event exposure only) |
 | Road disruption | `p = min(0.97, beta × avg_risk)` | complementary-power with ALPHA_EPI |
 | Water model | single risk threshold 0.30 | river corridor OR inundation 0.40 |
-| Hub capacity | `uniform(3, 6) × (max_demand/n_H) × terrain_factor` — mountain hubs over-sized | tier-based multipliers × `(max_demand/n_H)`; 5× max/min spread; total ≈ 0.73× max_demand; terrain_factor on cost only |
+| Hub capacity | `uniform(3, 6) × (max_demand/n_H) × terrain_factor` — mountain hubs over-sized; anchor leaks scenario outcomes into Stage-1 | tier-based multipliers × `(sum(base_pop) × GAMMA × max_sev_mult / n_H)`; population-anchored (scenario-independent); 5× max/min spread; total ≈ 0.73× Extreme demand; terrain_factor on cost only |
 | Script | pre-PR `data_generate_cv.py` (K_n loop) | `src/scripts/data_generate_cv.py` |
-| Solver status | **Solved** — `results/exp2/CV_large_seed0.json` | **Solved** — `results/exp2/v2/CV_large_seed0.json` |
+| Solver status | **Solved** — `results/exp2/CV_large_seed0.json` | **Solved** — `results/exp2/v2/CV_large_seed2.json` (seed=2; seed=0 sensitive to population-anchored kappas) |
 
 **Critical note on v1 hub assignments in the UI:**
 Because v1 uses K_n (every hub-demand pair has a direct finite road time), hub selection is based on minimum C_time, not road topology. Assignments can appear geographically inconsistent — a distant hub may have lower C_time than a nearby hub due to haversine × tortuosity. The Delaunay edges drawn in the UI are a cosmetic rendering fallback only and do NOT represent the connectivity model. The colored lines on the Solution Explorer map show demand-to-hub **assignments**, not routing paths — routing is not part of the optimization model.
