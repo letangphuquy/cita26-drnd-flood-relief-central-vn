@@ -2,448 +2,553 @@
 **Branch:** `feat/decision-support-system`
 **Author:** Lê Tăng Phú Quý (with Claude Sonnet 4.6)
 **Date:** 2026-06-19
-**Status:** PROPOSAL — pending author approval
+**Status:** APPROVED (decisions locked) — ready for implementation
 
 ---
 
-## 0. Scope Clarification
+## Decisions (locked)
 
-Three concerns in priority order:
-
-1. **DSS dashboard** — the primary deliverable. Make the Streamlit app a
-   genuine decision support tool: a manager facing a flood can load it, pick a
-   plan, and immediately understand *which hubs to open*, *how much stock to
-   pre-position*, *which villages get served by helicopter*, and *what breaks
-   under a severe scenario*. This requires richer metrics, clearer framing, and
-   better layout — not just new features.
-
-2. **Experiment pipeline integration** — lightweight. Existing scripts
-   (`exp1_evaluate_cv_small.py`, `exp2_analyze_case_study.py`, etc.) already
-   do the heavy lifting. The DSS just needs config routing (path inputs, output
-   destination) and a Tab 3 that runs them via buttons and displays their outputs.
-
-3. **Missing experiments** — fill any gaps needed for full thesis coverage.
-   Identified below after auditing what exists.
-
----
-
-## 1. What Already Exists (do not re-implement)
-
-### Experiment scripts (all working, `src/scripts/`)
-
-| Script | Produces |
+| Topic | Decision |
 |---|---|
-| `exp1_evaluate_cv_small.py` | `cv_small_metrics.csv` (HV/IGD+/CPU/LaTeX row) |
-| `exp2_analyze_case_study.py` | `exp2_metrics.csv`, `hub_stability.csv`, pareto PDF, hub_freq PDF, hub_heatmap PDF |
-| `exp2_pareto_tradeoff.py` | `exp2_pareto_tradeoff.pdf` (two-panel CV-Small + CV-Large) |
-| `exp2_map_solution.py` | `cv_large_map_detailed.pdf` (1×3 composite map, OSM tiles) |
-| `exp2_analyze_saa_oos.py` | SAA/OOS diagnostic JSON (single- and multi-seed) |
-| `exp_oos_multiseed.py` | Per-seed `*_saa_eval.json` / `*_oos_eval.json` |
-| `exp_saa_convergence.py` | `saa_convergence.pdf` (N-sensitivity) |
-| `data_generate_saa_oos.py` | 100-scenario SAA set + 10-scenario OOS hold-out |
-
-### Results that exist
-
-- **v1 CV-Large:** 20 PB-NSGA seeds + VNS-TS + GWO-HD + all SAA/OOS eval files
-- **v1 CV-Small:** PB-NSGA, VNS-TS, GWO-HD, Greedy, MILP-AWS, BB
-- **v2 CV-Large:** only `CV_large_seed2.json` (one seed)
-- **v2 CV-Small:** only `CV_small_seed0.json` (one seed)
-- **Generated figures:** `exp2_pareto_tradeoff.pdf`, `cv_large_map_detailed.pdf`,
-  `saa_convergence.pdf`, `*_hub_freq.pdf`, `*_hub_heatmap.pdf`
-
-### Visualizer infrastructure
-
-- `solution_loader.py`: parses X, **R** (pre-positioning ratio, already works),
-  A, Z1, Z2, CV, rank; has `load_results_from_folder()`, `deduplicate_solutions()`
-- `solution.R[k]` = Stage-1 pre-positioning ratio for hub k (float, not
-  per-scenario — it's a Stage-1 decision, fixed before any scenario unfolds)
+| Dataset for experiments | **v2** — full 20-seed suite re-run; results stored in existing `/v2/` subdirs |
+| v1 figures | Kept as-is; v2 figures generated alongside; scripts do not change logic |
+| paper/ folder | **Completely off limits** — no reads, no writes, no modifications |
+| Config routing | Smart/auto — user picks dataset + version only; paths resolved by lookup table |
+| Python MCF | Plan-only in this PR; implementation tracked in `audit/doc_mcf_decoder_plan.md` |
+| Collapsible panels | Stage-1 and Pareto sections collapsible so map sits at the top |
+| Item 7 (diverse scenario sampling) | **Out of scope** — deferred to future work; not implemented in this PR |
+| Everything else in §3 | Approved |
 
 ---
 
-## 2. Missing Experiments for Full Thesis Coverage
+## 0. Field Name Reference (resolved from instance JSON)
 
-### Gap analysis
+All open questions answered. Use these exact paths in all new code.
 
-The thesis paper (from `core-prompts/experiment-new.md` canonical version)
-requires:
-
-| Thesis element | Needs | v1 status | v2 status |
+| Data | JSON path | Type | Notes |
 |---|---|---|---|
-| Table 4-1 (CV-Small metrics) | HV/IGD+/CPU for all 5 algorithms | ✅ `cv_small_metrics.csv` | ❌ re-run needed if v2 |
-| Fig 1 left panel (CV-Small Pareto) | Pareto fronts per algorithm | ✅ exists | ❌ |
-| Fig 1 right panel (CV-Large Pareto) | 20-seed combined front | ✅ 20 seeds | ❌ only 1 seed |
-| Fig 2 (1×3 solution map) | Knee-point solution decoded per scenario | ✅ `cv_large_map_detailed.pdf` | ⚠️ 1 seed only |
-| Fig 3 (SAA convergence) | N-sensitivity curve | ✅ `saa_convergence.pdf` | ❌ re-run on v2 CV-Small |
-| Table 4-2 / OOS paragraph | Multi-seed OOS feasibility % | ✅ all 20 seeds evaluated | ❌ |
-| Hub frequency chart (Fig 4-5) | Selection % across seeds | ✅ in `hub_stability.csv` | ❌ 1 seed meaningless |
-| Risk heatmap (Fig 4-6) | r_ks values per hub per scenario | ✅ (dataset property) | ✅ (v2 instance JSON) |
-| Narrative numbers (Blocks 1–10) | knee Z1/Z2, modal counts, hub names | ✅ derivable from v1 | ⚠️ derivable from seed2 only |
-
-### Decision required: v1 or v2 for experiments?
-
-**The thesis can take one of two positions:**
-
-**Position A — v1 experiments, v2 as dataset improvement.**
-All numerical claims (Table 4-1, 4-2, Figures 1–3, hub frequency) are reported
-from v1 results. The v2 dataset is presented as a methodological contribution
-(Chapter 3/Dataset section), with the seed2 solution as an illustrative case
-study. This is academically defensible since v1 already has 20 seeds.
-*No new solver runs needed.*
-
-**Position B — Re-run full suite on v2.**
-Re-run 20 seeds × 3 algorithms on v2 CV-Large and v2 CV-Small baselines.
-~8 hours compute. All figures regenerated. Cleaner for a thesis: the dataset
-you describe is the one you report results on.
-*Requires ~8h compute + all downstream analysis re-run.*
-
-> **This is the author's call. State the choice before implementation begins.**
-> The DSS features below work either way — they read whichever result files are
-> present.
-
-### Missing experiment: `narrative_data.py` (new, regardless of v1 vs v2)
-
-Neither v1 nor v2 has a script that extracts the Block 1–10 query keys into
-a single flat JSON for thesis text substitution. This must be written.
-
-### Summary: new experiment work required
-
-| Item | Needed for | Effort | Condition |
-|---|---|---|---|
-| **`visualizer/narrative_data.py`** | All Block 1–10 thesis numbers | ~1 day | Always needed |
-| Re-run v2 CV-Large 20 seeds | All thesis figures on v2 | ~6h compute | Only if Position B |
-| Re-run v2 CV-Small baselines | Table 4-1 on v2 | ~2h compute | Only if Position B |
-| Re-run OOS/SAA eval on v2 seeds | Table 4-2 OOS column on v2 | ~1h compute | Only if Position B |
-| Re-run SAA convergence on v2 | Fig 3 on v2 | ~1h compute | Only if Position B |
+| Hub capacity (kappa_k) | `instance["hub_params"]["capacity"][str(hub_global_idx)]` | dict[str→float] | Keyed by global node index as string |
+| Hub fixed cost | `instance["hub_params"]["fixed_cost"][str(hub_global_idx)]` | dict[str→float] | |
+| Hub holding cost | `instance["hub_params"]["hold_cost"][str(hub_global_idx)]` | dict[str→float] | |
+| Population (demand nodes) | `instance["base_population"][str(demand_global_idx)]` | dict[str→int] | |
+| Area km² | `instance["area_km2"][str(demand_global_idx)]` | dict[str→float] | |
+| Intrinsic risk (static) | `instance["nodes"]["aux_risk"][node_global_idx]` | list[float] | Scenario-independent flood susceptibility |
+| Risk range | `instance["nodes"]["risk_intervals"][demand_global_idx]` | list[[lo, hi]] | [min, max] across scenarios |
+| Per-scenario hub risk | `instance["scenarios"][s]["hub_risk"][str(hub_global_idx)]` | dict[str→float] | Direct lookup, no need to index `risk[]` |
+| Per-scenario demand risk | `instance["scenarios"][s]["risk"][global_idx]` | list[float] | Full node list incl. hubs |
+| chi threshold | `instance["global_params"]["chi"]` | float | 0.70 |
+| Flow demand assignment | `flow["scenarios"][s]["demand_assignments"][i]` | `{demand_idx, hub_idx, mode}` | |
+| Flow origin assignment | `flow["scenarios"][s]["origin_assignments"][i]` | `{origin_idx, hub_idx, mode}` | Z1 re-derivable from this |
+| Flow transshipment | `flow["scenarios"][s]["transshipment"]` | list | Empty in Python postprocessor (MCF omitted) |
+| Flow inventory held | `flow["scenarios"][s]["inventory_held"][k]` | list[float] | kg pre-positioned at hub k; better than R[k]×kappa for display |
+| Hub active flag | `flow["scenarios"][s]["y_ks"][k]` | list[bool] | Postprocessor activation (risk-filtered) |
+| Solution R ratio | `solution.R[k]` | float | Stage-1 pre-positioning ratio; `inv_fill% = R[k]*100` if no flow file |
 
 ---
 
-## 3. DSS Dashboard — Manager-Focused Redesign
+## 1. Result Directory Structure (v2, mirrors v1)
 
-This is the primary deliverable. The current app is a technical explorer.
-The upgraded app must answer the questions a disaster response coordinator
-actually asks when looking at it.
-
-### 3.1 The manager's mental model
-
-The coordinator's decision horizon has two stages:
-
-**Before disaster (Stage 1 — today):**
-> "Which X hubs do I build / designate? How much stock do I pre-position at each?"
-
-**During/after disaster (Stage 2 — scenario-dependent):**
-> "Given that the flood hit here with this severity — which hubs are still safe?
-> Which villages do I send to each hub? By road, boat, or helicopter?
-> Am I going to run out of stock at any hub?"
-
-The current UI shows Z1/Z2 numbers and a map, but doesn't frame it this way.
-The upgrade must make both stages legible at a glance.
-
-### 3.2 Redesigned Tab 1 layout
+The existing convention (`results/exp1/` = v1, `results/exp1/v2/` = v2) is preserved.
+New v2 runs write into the existing `/v2/` subdirectories.
 
 ```
-┌─ Solution Explorer ─────────────────────────────────────────────────────┐
-│                                                                          │
-│  STAGE 1 DECISION (fixed across all scenarios)                          │
-│  ┌──────────────────────────────────────────────────────────────────┐   │
-│  │  Established Hubs: 8 / 20 candidates                             │   │
-│  │  [H3] Tam Kỳ Logistics   100%▓▓▓▓▓▓▓▓▓▓  pre-position: 82%    │   │
-│  │  [H9] A Sáp Helipad       80%▓▓▓▓▓▓▓▓░░  pre-position: 63%    │   │
-│  │  [H14] Đà Nẵng Airport    60%▓▓▓▓▓▓░░░░  pre-position: 47%    │   │
-│  │  ...                                                              │   │
-│  │  Total logistics cost: $4.79M  ·  [click Pareto to compare]     │   │
-│  └──────────────────────────────────────────────────────────────────┘   │
-│                                                                          │
-│  STAGE 2 RESPONSE  ── Scenario: [● Mild  ○ Severe  ○ Extreme]          │
-│  ┌──────────────────────────────────────────────────────────────────┐   │
-│  │  Active hubs: 8 / 8   Inactive (flooded): 0                      │   │
-│  │                                                                    │   │
-│  │  Demand served: 100 communes                                      │   │
-│  │  🚚 Road: 91   🚤 Boat: 4   🚁 Helicopter: 5                    │   │
-│  │                                                                    │   │
-│  │  Equity (worst deprivation): 41,828 person-hours                 │   │
-│  │  vs best-cost plan:          +2.4% deprivation premium           │   │
-│  │  vs best-equity plan:        −$1.1M logistics saving             │   │
-│  └──────────────────────────────────────────────────────────────────┘   │
-│                                                                          │
-│  [Pareto Front]                    [Map]                                │
-│  [click point to explore plan]     [scenario response map]              │
-└──────────────────────────────────────────────────────────────────────────┘
+results/
+  exp1/                           ← v1 CV-Small (untouched)
+    cv_small_pb_nsga.json
+    cv_small_vns_ts.json
+    cv_small_gwo_hd.json
+    cv_small_greedy.json
+    cv_small_milp_aws.json
+    cv_small_metrics.csv
+    flows/
+    v2/                           ← v2 CV-Small (extend here)
+      cv_small_pb_nsga_seed{k}.json   (20 seeds, k=0..19)
+      cv_small_vns_ts_seed{k}.json    (20 seeds)
+      cv_small_gwo_hd_seed{k}.json    (20 seeds)
+      cv_small_greedy.json
+      cv_small_milp_aws.json
+      cv_small_metrics.csv            (generated by exp1_evaluate_cv_small.py)
+      flows/
+
+  exp2/                           ← v1 CV-Large (untouched)
+    CV_large_seed{k}.json             (k=0..19, all 20 exist)
+    CV_large_vns_ts_seed{k}.json
+    CV_large_gwo_hd_seed{k}.json
+    CV_large_*_saa_eval.json
+    CV_large_*_oos_eval.json
+    flows/
+    v2/                           ← v2 CV-Large (extend here)
+      CV_large_seed{k}.json           (currently only seed2; need 0..19)
+      CV_large_seed{k}_saa_eval.json  (generated by exp_oos_multiseed.py)
+      CV_large_seed{k}_oos_eval.json
+      exp2_metrics.csv
+      exp2_hub_stability.csv
+      flows/
+        solution_{k}.json
 ```
 
-### 3.3 Feature D1 — Stage-1 Decision Panel `[P0]`
+**Auto-routing lookup table** (used by both `app.py` and `experiments_view.py`):
 
-**What:** A new top section in Tab 1 (above the Pareto scatter) showing the
-Stage-1 decision of the selected solution as an **actionable brief**:
+```python
+PATHS = {
+    "CV Large": {
+        "v1": {
+            "instance":  "data/cv/v1/cv_large_drnd.json",
+            "results":   "results/exp2",
+            "flows":     "results/exp2/flows",
+            "saa_oos":   "results/exp2",
+            "analysis":  "results/exp2",
+        },
+        "v2": {
+            "instance":  "data/cv/v2/cv_large_drnd.json",
+            "results":   "results/exp2/v2",
+            "flows":     "results/exp2/v2/flows",
+            "saa_oos":   "results/exp2/v2",
+            "analysis":  "results/exp2/v2",
+        },
+    },
+    "CV Small": {
+        "v1": {
+            "instance":  "data/cv/v1/cv_small_drnd.json",
+            "results":   "results/exp1",
+            "flows":     "results/exp1/flows",
+            "analysis":  "results/exp1",
+        },
+        "v2": {
+            "instance":  "data/cv/v2/cv_small_drnd.json",
+            "results":   "results/exp1/v2",
+            "flows":     "results/exp1/v2/flows",
+            "analysis":  "results/exp1/v2",
+        },
+    },
+}
+```
 
-- **Hub roster table** with columns:
-  | Hub | Location name | Capacity (kg) | Pre-position ratio R[k] | Pre-position qty (kg) |
-  — Capacity from `instance["hub_candidates"][k]["capacity"]` (verify field name)
-  — Pre-position ratio from `solution.R[k]`
-  — Pre-position qty = `R[k] × capacity_k`
+---
 
-- **Visual capacity bar** for each hub: a simple progress bar showing R[k]
-  as a fill fraction. Immediately communicates "how full should this hub be?"
+## 2. Missing Experiments for Full v2 Thesis Coverage
 
-- **Logistics cost headline**: `Z1 = $X.XX M`
+| Experiment | Current v2 state | Action |
+|---|---|---|
+| CV-Large 20-seed PB-NSGA | seed2 only | Run seeds 0..19 → `results/exp2/v2/` |
+| CV-Large OOS/SAA eval | unevaluated | `exp_oos_multiseed.py` on v2 results dir |
+| CV-Large analysis | unevaluated | `exp2_analyze_case_study.py results/exp2/v2 results/exp2/v2 data/cv/v2` |
+| CV-Small 20-seed PB-NSGA | seed0 only | Run seeds 0..19 → `results/exp1/v2/` |
+| CV-Small baselines | unevaluated | Run VNS-TS, GWO-HD, Greedy, MILP-AWS on v2 instance |
+| CV-Small metrics | unevaluated | `exp1_evaluate_cv_small.py` on v2 results |
+| SAA convergence | v1 only | `exp_saa_convergence.py` pointing to v2 CV-Small |
+| `narrative_data.json` | does not exist | `narrative_data.py` (new — §4) |
 
-- **Trade-off position**: brief text showing where this solution sits on the
-  Pareto front:
-  - "Cost-focused: $X.X M logistics, Y,YYY person-hrs deprivation" (near cost extreme)
-  - "Balanced (knee): $X.X M, Y,YYY (recommended)" (at knee point)
-  - "Equity-focused: $X.X M, Y,YYY" (near equity extreme)
-  Auto-detect position by comparing Z2 to the front's range.
+All experiment scripts already exist and their logic does not change.
+They need only to be invoked with v2 paths; the Tab 3 runner handles this
+automatically via the `PATHS` lookup table.
 
-**Data sources (all already available):**
-- `solution.X[k]`, `solution.R[k]` — already parsed
-- Hub capacity: from instance JSON (field name TBD — see Q1)
-- Z1 range: `min/max([s.Z1 for s in solutions])`
+---
 
-### 3.4 Feature D2 — Stage-2 Scenario Response Panel `[P0]`
+## 3. DSS Dashboard — Manager-Focused Design
 
-**What:** The existing KPI section, restructured into a **scenario briefing
-card** with clearer managerial framing:
+### 3.1 Revised Tab 1 Layout (map-first)
+
+The key structural change: **the geospatial map moves to the top**. Stage-1 and
+Pareto panels become collapsible expanders below the map. A manager presenting
+to an audience can collapse everything and show just the map, then expand
+panels as needed.
+
+```
+┌─ Solution Explorer ─────────────────────────────────────────────────────────┐
+│                                                                              │
+│  Scenario: [● Mild  ○ Severe  ○ Extreme]   Map view: [● Single  ○ 3-panel] │
+│                                                                              │
+│  ┌─ Geospatial Network Map ───────────────────────────────────────────────┐ │
+│  │                                                                        │ │
+│  │   [Full-width Folium map, height 640]                                  │ │
+│  │   — hub markers (open/inactive/closed) with popup drilldown            │ │
+│  │   — demand→hub routing lines coloured by mode                         │ │
+│  │   — origin→hub supply lines                                            │ │
+│  │                                                                        │ │
+│  │   [Export map as HTML]                                                 │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                              │
+│  ▶ Stage 2 — Scenario Response     [collapsible, expanded by default]       │
+│  ▶ Stage 1 — Pre-Disaster Plan     [collapsible, collapsed by default]      │
+│  ▶ Pareto Front & Navigation       [collapsible, collapsed by default]      │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+The scenario toggle and map-view toggle move from sidebar to **above the map**,
+so the audience sees them without needing to look at the sidebar.
+
+### 3.2 Feature D1 — Stage-2 Scenario Response Panel `[P0]`
+
+Replaces the current KPI column. Framed as a **situational briefing**:
 
 **Hub safety status:**
 ```
-Scenario: Severe  ·  χ = 0.70
-Active hubs: 5 / 8     ⚠️ FLOODED: H1 (Huế Warehouse), H15 (Quảng Trị Depot), H16 (Phong Điền)
+Scenario: Severe  ·  χ = 0.70  ℹ️
+Active hubs:  5 / 8
+⚠️ Flooded (inactive): H1 Huế Warehouse (r=0.82)
+                        H15 Quảng Trị Depot (r=0.74)
+                        H16 Phong Điền Hub (r=0.71)
 ```
-— Hub name, not just index. Flooded hubs highlighted in amber/red.
-— Derived from `r_ks > chi` test on instance risk data.
+Data: `instance["scenarios"][s]["hub_risk"][str(hub_global_idx[k])]` vs `chi`.
+Hub names from `node_info.names[hub_global_idx[k]]`.
+
+The `ℹ️` icon expands a `st.expander` tooltip (collapsed by default):
+> *"χ = 0.70: Hubs are purpose-built hardened evacuation shelters. A hub remains
+> operationally viable when its local flood risk index r ≤ 0.70 — analogous to
+> real-world shelter siting criteria (Bangladesh MCS, Japan 指定避難所, Vietnam
+> Nhà tránh lũ) which require facilities to be above predicted inundation level.
+> Hubs exceeding this threshold are themselves overwhelmed and cannot receive evacuees."*
+>
+> Source: `audit/doc_rescue_hub_precedents.md`
 
 **Demand routing summary:**
 ```
 100 communes served
-  🚚 Road:        91  communes  (average travel: X hrs)
-  🚤 Boat:         4  communes  (water route active)
-  🚁 Helicopter:   5  communes  (air-only accessible)
+  🚚 Road        91   (avg response latency: X hrs)
+  🚤 Boat         4   (water route active)
+  🚁 Helicopter   5   (air-only accessible)
 
-  ⚠️ 3 communes switch to helicopter this scenario (road blocked)
+  ⚠️ vs Mild: +3 boat, −3 road  (3 communes rerouted due to flooding)
+  ⓘ Mode counts are postprocessor estimates; MCF lateral flows not shown
 ```
-— "Switch" count = communes with different mode from Mild scenario (requires
-  comparing two scenario flows — add to F implementation notes).
+"vs Mild" delta requires comparing `demand_assignments.mode` between scenario 0
+and the current scenario. Load both flow files if available.
 
-**Equity metric framed for managers:**
+"Response latency" = $\Omega_{is} = \tau_{ks} + 2\tau_{kim}$ from the formulation:
+hub preparation time + round-trip rescue travel time. This is the waiting time
+people at demand node i experience before rescue vehicles complete their round
+trip. Do NOT label this "travel distance" or "routing distance" — it is a time
+metric (hours) weighted by vulnerability $\lambda_{is} = \lambda_0(1 + r_{is})$
+in the deprivation cost Z2. Display avg $\Omega$ per mode group as "avg response
+latency (hrs)" if $\tau$ values are accessible from the instance.
+
+**Equity framing (from `narrative_data.json` when available):**
 ```
-Worst-served commune: [name], deprivation index Y,YYY
-Best-served commune:  [name], deprivation index Z
-Recommended plan saves 12.8% deprivation vs cheapest plan
-at a $1.1M logistics cost premium
-```
-— Block 1 query keys `deprivation_reduction_pct` and `cost_premium_pct` from
-  `narrative_data.json` (when available).
-
-### 3.5 Feature D3 — Hub Detail Drilldown `[P0]`
-
-**What:** Click on a hub in the map → sidebar shows a hub detail panel:
-
-```
-H9 — A Sáp Helipad
-────────────────────────────────────
-Stage-1 decision:  ✅ ESTABLISHED
-Pre-positioned:    63% capacity (3,150 kg)
-Flood risk (Mild):    0.31 — SAFE
-Flood risk (Severe):  0.58 — SAFE
-Flood risk (Extreme): 0.74 — ⚠️ INACTIVE (r > χ=0.70)
-
-Serves in Mild scenario:
-  Demand communes: 12
-  Modes: 🚚 Road×9  🚁 Helicopter×3
-  Highest-demand commune: Thôn X (2,400 persons)
-
-Serves in Severe scenario:
-  Demand communes: 14  (+2 from H1 which flooded)
-  Modes: 🚚 Road×11  🚁 Helicopter×3
+Worst-case deprivation: 41,828 person-hours
+  This plan: −12.8% vs cheapest plan  |  +$1.1M vs cheapest plan
 ```
 
-**Implementation:** In `build_map()`, Folium marker `popup` for each open hub.
-The popup HTML is built from `flow_sc.demand_assignments` filtered to this hub.
-Hub risk values from `inst_raw["scenarios"][s]["risk"][hub_global_idx]`.
+### 3.3 Feature D2 — Stage-1 Pre-Disaster Plan Panel `[P0]`
 
-This is the biggest "manager insight" feature — turning abstract X_k and mode
-vectors into named-location operational orders.
+Collapsible expander, **collapsed by default** (manager doesn't need it during
+scenario review).
 
-### 3.6 Feature D4 — Side-by-Side 3-Scenario Map `[P1]`
+When expanded, shows the Stage-1 first-response planning brief:
 
-**What:** Toggle above the map:
+**Hub establishment table:**
+
+| # | Hub | Capacity | Pre-stock | Fill % | Fixed cost | Hold rate | Hold cost |
+|---|---|---|---|---|---|---|---|
+| H3 | Tam Kỳ Logistics | 217,082 kg | 178,007 kg | 82% ▓▓▓▓▓▓▓▓░░ | $125,575 | $0.40/kg | $71,203 |
+| H9 | A Sáp Helipad | 158,107 kg | 99,607 kg | 63% ▓▓▓▓▓▓░░░░ | $202,593 | $0.38/kg | $37,851 |
+
+Data sources:
+- Capacity: `instance["hub_params"]["capacity"][str(hub_global_idx[k])]`
+- Pre-stock kg: `solution.R[k] × capacity_k`
+- Fill %: `solution.R[k] × 100` (or `flow["scenarios"][0]["inventory_held"][k] / capacity_k * 100` if flow available — more accurate)
+- Fixed cost: `instance["hub_params"]["fixed_cost"][str(hub_global_idx[k])]`
+- Hold rate: `instance["hub_params"]["hold_cost"][str(hub_global_idx[k])]` ($/kg)
+- Hold cost (Stage-1, scenario-independent): `hold_cost[k] × R[k] × capacity_k`
+  — This is the $c_k q_k$ term in Z1. Do NOT use `inventory_held[k]` from the flow
+  file here: that value is a per-scenario snapshot and could differ from $q_k$ if
+  flow semantics change. The Stage-1 holding cost is always `hold_cost × fill_fraction
+  × capacity`, a pre-disaster fixed charge.
+
+**Summary line:**
 ```
-Map view:  ● Single scenario   ○ Compare all three
+Total logistics cost: $4.79M  ·  8 hubs established  ·  Est. total pre-stock: 1,247 tonnes  ·  Total holding cost: $312K
 ```
-Three Folium maps in `st.columns([1,1,1])` at `height=420`.
-Headers: "🌊 Mild (p=0.60)", "⚠️ Severe (p=0.30)", "🔴 Extreme (p=0.10)".
 
-Immediately shows the manager what changes between scenarios — which hubs
-go inactive, which routes shift to boat/helicopter — without toggling.
+### 3.4 Feature D3 — Pareto Front Panel `[P0]`
 
-### 3.7 Feature D5 — Scenario Robustness Badge `[P1]`
+Moved to a collapsible expander (collapsed by default). Contains:
+- Existing Plotly Pareto scatter (clickable)
+- Quick-jump buttons (Best Z1 / Best Z2 / Compromise)
+- Solution prev/next nav
+- Trade-off position badge:
+  ```
+  ● Balanced (knee) — recommended
+  Z1 $4.79M  ·  Z2 41,828  ·  #7 of 23
+  -12.8% deprivation vs cheapest  |  +23% cost vs cheapest
+  ```
 
-**What:** For each Pareto solution in the scatter, add a small robustness badge
-in the hover tooltip:
+### 3.5 Feature D4 — Hub Popup Drilldown `[P0]`
 
+Click on any open hub marker on the map → a Folium popup shows:
+
+```
+┌─ H9 — A Sáp Helipad ──────────────────────────────────────┐
+│  Stage-1: ✅ ESTABLISHED                                   │
+│  Pre-positioned: 99,607 kg  (63% of 158,107 kg capacity)  │
+│  Inventory held this scenario: 99,607 kg                   │
+│                                                            │
+│  Flood risk:                                               │
+│    Mild    0.31 ✅ safe    Severe 0.58 ✅ safe             │
+│    Extreme 0.74 ⚠️ INACTIVE (r > χ=0.70)                  │
+│                                                            │
+│  Serving [Mild scenario]: 12 communes                      │
+│    🚚 Road ×9   🚁 Helicopter ×3                          │
+│    Highest-demand: Thôn Đại An (2,400 persons)             │
+└────────────────────────────────────────────────────────────┘
+```
+
+**Implementation:** Build popup HTML in `build_map()` from:
+- `flow["scenarios"][s]["demand_assignments"]` filtered to `hub_idx == k`
+- `instance["hub_params"]["capacity"][str(hub_global)]`
+- `flow["scenarios"][s]["inventory_held"][k]`
+- `instance["scenarios"][s]["hub_risk"][str(hub_global)]` for all 3 scenarios
+- `instance["base_population"][str(demand_global)]` for top demand commune
+
+The popup is scenario-specific; rebuilding `build_map()` with a different
+`scenario_idx` already regenerates it.
+
+**Origin node popups (supply nodes, global idx 120+):**
+Each origin marker on the map gets a small popup showing:
+```
+Origin O2 — Supply Depot
+Supply available: 71,306 kg
+Flood risk:  Mild 0.18  ·  Severe 0.34  ·  Extreme 0.31
+```
+Data: `instance["scenarios"][s]["supply"][str(origin_global_idx)]` for supply;
+`instance["scenarios"][s]["risk"][origin_global_idx]` for risk across all 3
+scenarios (pre-load all three scenario dicts at map build time).
+Origin nodes are already rendered as markers in `map_view.py`; this adds popup
+HTML to the existing `folium.CircleMarker` calls.
+
+### 3.6 Feature D5 — Side-by-Side 3-Scenario Map `[P1]`
+
+Toggle **above** the map (not in sidebar):
+```
+Map view:  ● Single scenario   ○ Compare all 3 scenarios
+```
+When "all 3": three maps in `st.columns([1,1,1])` at `height=420`.
+Panel headers: "🌊 Mild (p=0.60)" / "⚠️ Severe (p=0.30)" / "🔴 Extreme (p=0.10)".
+
+Cache `build_map()` outputs with `@st.cache_resource` keyed on
+`(dataset, version, sol_idx, show_labels, show_alloc, show_trans)`.
+
+### 3.7 Feature D6 — Tab Switching (seamless Input ↔ Solution)
+
+The user's requirement: switch quickly between Input tab and Solution tab
+during a presentation without losing context.
+
+**Implementation:** A sticky `st.radio` at the very top of the page (outside
+the tab widget), above `st.tabs`, acting as a global view toggle:
+
+```python
+view = st.radio("", ["🗺️ Solution", "📊 Input Dataset", "📈 Experiments"],
+                horizontal=True, label_visibility="collapsed")
+```
+
+This replaces `st.tabs` as the primary nav. Each "tab" is rendered as a
+conditional block below, so the map region stays at the same vertical position
+regardless of which view is active. No scrolling to the tab bar needed.
+
+The map in Solution view and the map in Input Dataset view are both rendered at
+the same location on screen (top of content area) so the audience can directly
+compare.
+
+### 3.8 Feature D7 — Static Input Layers `[P1]`
+
+> **Note:** The Delaunay/accessibility arc layer is **already fully implemented** in
+> `visualizer/dataset_view.py` (uses `graph["road_edges"]` from v2 instance; falls
+> back to computed `_delaunay_edges()` for water/air; labelled in the UI). No new
+> work needed for the Delaunay display. D7 adds only the two layers below.
+
+Two new toggles in the Input Dataset view:
+
+**Population:** Circle marker at each demand node. Radius ∝ `base_population[str(i)]`.
+Tooltip: "Node name · Pop: 7,127 · Area: 20.0 km²"
+Data: `instance["base_population"]`, `instance["area_km2"]`
+
+**Intrinsic Risk:** Demand node fill colour = `instance["nodes"]["aux_risk"][global_idx]`.
+Colour scale: white (0) → deep red (1). Scenario-independent. Shows inherent
+flood susceptibility before any epicentre is sampled.
+
+**Static view toggle:**
+```
+View:  ● Scenario-dependent   ○ Static (population + intrinsic risk)
+```
+In static mode: hide scenario KPI bar, fix `scenario_idx=0` for arc
+accessibility display, show population + intrinsic risk layers.
+
+### 3.9 Feature D9 — Hide Low-Demand Nodes Toggle `[P1]`
+
+A slider in the Input Dataset view (and optionally in the Solution map sidebar):
+
+```
+Hide demand nodes with population <  [▸ 500 ◂]  persons
+```
+
+Nodes with `base_population[str(i)] < threshold` are omitted from both the
+demand markers layer and the allocation/routing lines layer. Reduces visual
+clutter in dense commune clusters; useful for presentation.
+
+Implementation: filter `demand_nodes` list before passing to `build_map()` /
+`dataset_view.build_dataset_map()`. Default threshold: 0 (show all). Range: 0–5000.
+State persisted in `st.session_state["min_pop_threshold"]`.
+
+### 3.10 Feature D8 — Robustness Badge in Pareto Hover `[P2]`
+
+*(Renumbered from D8 — content unchanged.)*
+
+Plotly hover tooltip on each Pareto point gains robustness fields:
 ```
 Z1 = $4.8M  Z2 = 41,828
-Hubs active: Mild 8 / Severe 5 / Extreme 4
-Modes change: Mild→Severe: +3 boat, -3 road
-              Mild→Extreme: +3 air, -6 road
+Active hubs: Mild 8 / Severe 5 / Extreme 4
+Mode Δ (vs Mild): Severe +3🚤 -3🚚 | Extreme +3🚁 -6🚚
 ```
 
-This gives the manager a quick robustness read without clicking into the
-solution. Requires computing the scenario delta at load time across all
-solutions. Cache per solution index.
-
-### 3.8 Feature D6 — Static Input View (Population & Risk) `[P1]`
-
-**What:** In Tab 2 Input Dataset, add:
-- **Population circles:** radius ∝ `base_pop`, tooltip shows value. Lets
-  managers see which communes are densely populated.
-- **Intrinsic risk layer:** heatmap colour overlay on demand nodes showing
-  inherent flood susceptibility before any scenario.
-- **View mode toggle:** "Static (population + geography)" vs current
-  "Scenario-dependent (risk + demand + accessibility)."
-
-Field name verification needed before implementing (see Open Questions).
-
-### 3.9 Feature D7 — Export for Operations `[P2]`
-
-**What:** "Export Decision Brief" button that generates a formatted HTML/PDF
-report of the selected solution:
-
-```
-FLOOD RELIEF OPERATIONAL BRIEF
-Plan: Solution 7 of 23 (Balanced — knee point)
-Generated: 2026-06-19
-
-STAGE 1 — Pre-Disaster Preparation
-  8 hubs to establish:
-  • H9  A Sáp Helipad         Pre-position 3,150 kg (63%)
-  • H14 Đà Nẵng Airport Hub   Pre-position 2,800 kg (47%)
-  ...
-
-STAGE 2 — Scenario Response Plans
-  [Mild scenario] Active: 8/8 hubs ...
-  [Severe scenario] Active: 5/8 hubs — H1, H15, H16 inactive ...
-  [Extreme scenario] Active: 4/8 hubs — H1, H15, H16, H3 inactive ...
-```
-
-Use Python's `jinja2` + `weasyprint` or just produce clean HTML with an
-`st.download_button`. Defer if scope tight — not needed for thesis defense
-but adds DSS credibility.
+Requires computing hub risk filter and mode delta for all solutions at load
+time. Cache per `(dataset, version, pf_only)`.
 
 ---
 
-## 4. Experiments Tab (Lightweight Integration)
+## 4. Experiment Pipeline Tab
 
-Tab 3 "📈 Experiments & Results" is a thin wrapper around existing scripts.
-Its job is: **configure paths → run → display outputs**. No analysis
-re-implementation.
+### 4.1 No manual config panel
 
-### 4.1 Config panel
+Paths are **fully auto-routed** from the `PATHS` lookup (§1). The only user
+inputs:
+- Dataset: CV Large / CV Small (already in sidebar — reuse)
+- Version: v1 / v2 (already in sidebar — reuse)
+- Optionally: seed number input for single-seed re-runs
 
-```
-Instance path:   [data/cv/v2/cv_large_drnd.json    ] [Browse]
-Results dir:     [results/exp2/v2/                 ] [Browse]  ← or results/exp2/ for v1
-Flows dir:       [results/exp2/v2/flows            ] [Browse]
-Output dir:      [results/exp2/v2/                 ] [Browse]
-```
-Stored in `st.session_state`. Defaults point to v2 if directory has files,
-else fall back to v1.
+No "browse" buttons. No manual path entry. The user should never see a file
+path.
 
 ### 4.2 Pipeline runner
 
 ```
-Experiment                          Status    Action
-──────────────────────────────────────────────────────────────
-EXP-1  CV-Small baseline comparison  ✅       [▶ Re-run]
-       → exp1_evaluate_cv_small.py
-       Output: results/exp1/cv_small_metrics.csv
+EXP   Description                              Status   Action
+────────────────────────────────────────────────────────────────────────────
+EXP-1  CV-Small baselines (5 algorithms)        ✅ v1   [▶ Run on v2]
+         run_exp1_baselines.sh → exp1_evaluate_cv_small.py
+         Output → results/exp1/v2/cv_small_metrics.csv
 
-EXP-2  CV-Large 20-seed suite        ✅ (v1)  [▶ Run on v2]
-       → run_exp2_case_study.sh
-       20 seeds × 3 algorithms on configured instance
+EXP-2  CV-Large 20-seed PB-NSGA                ✅ v1   [▶ Run on v2]
+         run_exp2_case_study.sh
+         Output → results/exp2/v2/CV_large_seed{k}.json (k=0..19)
 
-EXP-3  OOS/SAA multi-seed eval       ✅ (v1)  [▶ Run on v2]
-       → exp_oos_multiseed.py + exp2_analyze_saa_oos.py
+EXP-3  OOS/SAA multi-seed evaluation           ✅ v1   [▶ Run on v2]
+         exp_oos_multiseed.py --results-dir results/exp2/v2
+         Output → results/exp2/v2/CV_large_seed{k}_{saa|oos}_eval.json
 
-EXP-4  SAA N-sensitivity             ✅       [▶ Re-run]
-       → exp_saa_convergence.py
+EXP-4  Aggregate analysis (metrics + figures)  ✅ v1   [▶ Run on v2]
+         exp2_analyze_case_study.py results/exp2/v2 results/exp2/v2 data/cv/v2
+         exp2_pareto_tradeoff.py
+         Output → results/exp2/v2/exp2_metrics.csv, *_hub_freq.pdf, etc.
 
-EXP-5  Extract narrative_data.json   ⏳       [▶ Run]
-       → narrative_data.py (new — §5)
+EXP-5  SAA N-sensitivity                       ✅ v1   [▶ Run on v2]
+         exp_saa_convergence.py
+         Output → results/saa_convergence/v2/
+
+EXP-6  Solution map (1×3 composite)            ✅ v1   [▶ Run on v2]
+         exp2_map_solution.py --instance data/cv/v2/cv_large_drnd.json
+                              --result results/exp2/v2/CV_large_seed{k}.json
+         Output → figures/v2/cv_large_map_detailed.pdf
+
+EXP-7  Extract narrative_data.json             ⏳      [▶ Run]
+         narrative_data.py --results results/exp2/v2 --instance data/cv/v2/...
+         Output → narrative_data.json
 ```
 
-Status = ✅ if primary output file exists (mtime check), ⏳ otherwise.
+Status logic: ✅ = primary output file exists with mtime newer than primary input.
 Each button calls subprocess inside `st.status()` with live log streaming.
-"Re-run" always available even when ✅ (allows forced refresh).
+Scripts called with v2 paths derived from `PATHS[dataset][version]`.
 
 ### 4.3 Figure display
 
 After pipeline runs, Tab 3 shows:
-- **Fig 1 Pareto:** inline PNG from `exp2_pareto_tradeoff.pdf` (via `pdf2image`)
-  or fallback download button.
-- **Table 4-1:** `st.dataframe` from `cv_small_metrics.csv`, best value green.
-- **Fig 2 Map:** inline PNG from `cv_large_map_detailed.pdf`.
-- **Fig 3 SAA:** inline PNG from `saa_convergence.pdf`.
-- **Fig 4-5 Hub Freq:** inline PNG from `*_hub_freq.pdf`.
-- **Fig 4-6 Risk Heatmap:** live Plotly (pure instance data — no file needed).
-- **Narrative export:** if `narrative_data.json` exists, show key scalars table
-  + download button.
 
-New module: `visualizer/experiments_view.py` — all Tab 3 rendering.
+| Section | Source | Rendering |
+|---|---|---|
+| Table 4-1 — CV-Small metrics | `results/exp1/v2/cv_small_metrics.csv` | `st.dataframe`, best value green |
+| Fig 1 — Pareto fronts | `figures/v2/exp2_pareto_tradeoff.pdf` | PNG via `pdf2image`; fallback: download button |
+| Fig 2 — 1×3 solution map | `figures/v2/cv_large_map_detailed.pdf` | PNG / download |
+| Fig 3 — SAA convergence | `figures/saa_convergence.pdf` | PNG / download |
+| Fig 4-5 — Hub selection frequency | `results/exp2/v2/*_hub_freq.pdf` | PNG / download |
+| Fig 4-6 — Risk heatmap | Instance JSON (no file needed) | Live Plotly (built inline) |
+| Narrative data | `narrative_data.json` | Key scalars table + download |
 
 ---
 
-## 5. New Script: `narrative_data.py`
+## 5. `narrative_data.py` — New Extraction Script
 
-This is the only genuinely new analysis code (the rest wires existing scripts).
+**Path:** `visualizer/narrative_data.py`
+**Purpose:** Produce `narrative_data.json` with every Block 1–10 query key.
+**Reuses:** `solution_loader.load_results_from_folder()`, `deduplicate_solutions()`
 
-**Purpose:** Extract every Block 1–10 thesis query key into `narrative_data.json`.
-
-**Reuses:** `solution_loader.load_results_from_folder()`,
-`deduplicate_solutions()`, and the already-parsed `solution.R` vector.
-
-**CLI:**
 ```bash
 .venv/bin/python3 visualizer/narrative_data.py \
-    --results  results/exp2/v2 \        # or results/exp2 for v1
+    --results  results/exp2/v2 \
     --flows    results/exp2/v2/flows \
     --instance data/cv/v2/cv_large_drnd.json \
     --out      narrative_data.json
 ```
 
-**Key computations:**
-- Pool all PB-NSGA JSONs in `--results`, filter `CV == 0`, non-domination
-  filter → combined ND front.
-- Knee = Tchebycheff (`argmin_i max(Z1_norm[i], Z2_norm[i])`).
-- `active_hub_count[s]`: hubs where `X[k]==1 AND r_ks ≤ chi`. Risk from
-  `instance["scenarios"][s]["risk"][hub_global_idx[k]]`.
-- `inv_fill_pct[k]`: `solution.R[k] * 100` (Stage-1 ratio, already in JSON).
-- `hub_selection_frequency[k]`: fraction of combined ND-front solutions with
-  `X[k]==1`.
-- Modal counts and air attribution: from flow file of the knee solution.
-- Validation assertions:
-  ```python
-  assert knee_CV == 0.0
-  assert modal_road[s] + modal_water[s] + modal_air[s] == total_demand_nodes
-  ```
+**Key computations using resolved field names:**
+```python
+chi = instance["global_params"]["chi"]   # 0.70
 
-**Output schema** (same as `plans_dss_system.md §PART 2`):
+# Hub capacity lookup
+capacity_k = lambda k: instance["hub_params"]["capacity"][str(hub_indices[k])]
+
+# Hub risk per scenario (direct dict lookup)
+r_ks = lambda s, k: instance["scenarios"][s]["hub_risk"][str(hub_indices[k])]
+
+# Active hubs for knee solution
+active_k = lambda s, k: solution.X[k] == 1 and r_ks(s, k) <= chi
+
+# Inventory fill % (from flow if available, else Stage-1 ratio)
+fill_pct = lambda k, flow_sc: (
+    flow_sc.inventory_held[k] / capacity_k(k) * 100
+    if flow_sc and flow_sc.inventory_held[k] > 0
+    else solution.R[k] * 100
+)
+
+# Knee selection: Tchebycheff on combined ND front
+z1s = [s.Z1 for s in combined_nd]; z2s = [s.Z2 for s in combined_nd]
+z1r = max(z1s)-min(z1s) or 1; z2r = max(z2s)-min(z2s) or 1
+knee_idx = min(range(len(combined_nd)),
+               key=lambda i: max((combined_nd[i].Z1-min(z1s))/z1r,
+                                 (combined_nd[i].Z2-min(z2s))/z2r))
+```
+
+**Validation (halt on failure):**
+```python
+assert knee_solution.CV == 0.0
+for s_name in ["mild", "severe", "extreme"]:
+    assert modal_road[s_name]+modal_water[s_name]+modal_air[s_name] == 100
+```
+
+**Output fields:** (complete — matches `plans_dss_system.md §PART 2`)
+
 ```json
 {
+  "Z2_cost_extreme_20seed": <float>,
+  "Z2_equity_extreme_20seed": <float>,
   "deprivation_reduction_pct": <float>,
   "cost_premium_pct": <float>,
-  "knee_Z1": <float>, "knee_Z2": <float>, "knee_seed": <int>, "knee_CV": 0.0,
-  "open_hub_count": <int>, "open_hub_list": [...],
+  "knee_Z1": <float>,  "knee_Z1_millions": <float>,
+  "knee_Z2": <float>,  "knee_seed": <int>,  "knee_CV": 0.0,
+  "open_hub_count": <int>,
+  "open_hub_list": ["<name>", ...],
   "reactive_hub_count": {"mild":0,"severe":0,"extreme":0},
   "lateral_link_count": {"mild":0,"severe":0,"extreme":0},
   "active_hub_count": {"mild":<int>,"severe":<int>,"extreme":<int>},
   "inactive_hub_names": {"mild":[],"severe":[...],"extreme":[...]},
-  "hub_risk_values": {"mild":{...},"severe":{...},"extreme":{...}},
-  "modal_road": {...}, "modal_water": {...}, "modal_air": {...},
+  "hub_risk_values": {"mild":{"H0":<f>,...},...},
+  "modal_road": {"mild":<int>,...},
+  "modal_water": {"mild":<int>,...},
+  "modal_air": {"mild":<int>,...},
   "total_demand_nodes": 100,
-  "air_serving_hubs": {"mild":[...],"severe":[...],"extreme":[...]},
-  "inv_fill_pct": {"H0":<f>, ...},
+  "air_serving_hubs": {"mild":[{"name":...,"hub_index":...,"count":...}],...},
+  "inv_fill_pct": {"H0":<float>,...},
   "chi": 0.70,
-  "hub_selection_frequency": {"H0":<f>, ...},
+  "hub_selection_frequency": {"H0":<float>,...},
   "total_solutions_pooled": <int>,
   "seeds_included": [...],
   "dataset_version": "v2",
@@ -453,93 +558,119 @@ This is the only genuinely new analysis code (the rest wires existing scripts).
 
 ---
 
-## 6. Implementation Plan
+## 6. Python MCF Decoder Plan
 
-### 6.1 New files
+**Decision:** Plan-only in this PR. Implementation in a follow-up.
 
-| File | What | Effort |
-|---|---|---|
-| `visualizer/narrative_data.py` | §5 extraction script | ~1 day |
-| `visualizer/experiments_view.py` | Tab 3 rendering | ~0.5 day |
-| `visualizer/verify_solution.py` | Z1 sanity + coverage check | ~0.5 day |
+**Plan document:** `audit/doc_mcf_decoder_plan.md` (to be created)
 
-### 6.2 Modified files
+**Purpose:** Mirror `src/solver/decoder.hpp::best_mode_time()` and the full
+second-stage MCF in Python to:
+1. Produce accurate mode assignments (not greedy approximation)
+2. Enable H2H transshipment flows on the map (`transshipment` list > 0)
+3. Allow verified Z2 re-derivation from Python
+4. Enable new analytical dimension: optimal vs greedy routing gap quantification
 
-| File | Changes | Effort |
-|---|---|---|
-| `visualizer/app.py` | Add Tab 3; Stage-1 panel (D1); Stage-2 restructure (D2); side-by-side toggle (D4); map popup hook for D3 | ~1 day |
-| `visualizer/map_view.py` | Hub popup HTML for D3 drilldown | ~0.5 day |
-| `visualizer/dataset_view.py` | Population + intrinsic risk layers (D6) | ~0.5 day |
-| `visualizer/pareto_view.py` | Add robustness badge in hover (D5) | ~0.5 day |
+**Planned files:**
+```
+visualizer/
+  mcf_decoder.py          ← new: Python MCF mirroring decoder.hpp
+  preprocess_flows_mcf.py ← new: drop-in replacement for preprocess_flows.py
+                               using MCF instead of greedy
+audit/
+  doc_mcf_decoder_plan.md ← new: algorithm spec, library choice, pseudocode
+```
 
-### 6.3 Files NOT to modify
+**Algorithm sketch (for the plan doc):**
+The second-stage problem for fixed X, q is a min-cost flow problem:
+- Source → Origin nodes → Hub nodes → Demand nodes → Sink
+- Arc capacities: supply at origins (unbounded), hub capacities (kappa_k × R_k),
+  accessibility constraints (zero-capacity arc if `acc[m][d][h]==0`)
+- Arc costs: `C_time[m][d][h]` for demand→hub arcs; `tau[o][h]` for origin→hub
+- Objective: minimize total transport cost = Z1 component
 
-- `src/scripts/*.py` — all experiment scripts are correct as-is.
-- `visualizer/preprocess_flows.py` — MCF limitation labeled in UI (D2), not fixed.
-- `src/solver/decoder.hpp` — out of scope.
+Library options ranked:
+1. `ortools.graph.min_cost_flow` — Google OR-Tools, C++ backed, fast
+2. `networkx.algorithms.flow.min_cost_flow` — pure Python, slower but no extra dep
+3. `scipy.sparse.csgraph.minimum_spanning_tree` — not applicable (wrong problem)
 
-### 6.4 Build order
-
-1. **`narrative_data.py`** — resolve Open Questions first; this unblocks D2 narrative numbers.
-2. **Stage-1 panel (D1)** — small; just display R[k] and capacity; instant manager value.
-3. **Stage-2 restructure (D2)** — hub safety status + mode framing.
-4. **Hub popup drilldown (D3)** — biggest impact; requires flow data in `build_map()`.
-5. **Tab 3 experiments wrapper (§4)** — display existing PDFs + CSV.
-6. **Side-by-side map (D4)**.
-7. **Static input layers (D6)** — after Q1/Q2 resolved.
-8. **Robustness badge (D5)** — after D4.
-9. **Export brief (D7)** — last, P2.
+**Why this matters for the thesis:** The current Python decoder reports
+`"lateral H→H flows omitted"` and shows 0 transshipment. With MCF, the DSS
+can show whether the optimizer's implicit H2H routing actually activates in
+practice — which speaks directly to the model's claim that the hub network
+enables flexible inter-hub coordination.
 
 ---
 
-## 7. Open Questions (resolve by reading instance JSON before coding)
+## 7. Implementation Plan
 
-| # | Question | Blocks |
-|---|---|---|
-| **Q1** | Field name for hub capacity in instance JSON? Check `instance["hub_candidates"][k]["capacity"]` vs `instance["nodes"]["capacity"]` vs another path. | D1, `narrative_data.py` |
-| **Q2** | Field names for `base_pop` and `intrinsic_risk` per node in v2 instance? | D6 |
-| **Q3** | Does `flow_sc.demand_assignments` contain the hub index each demand is assigned to? If yes, D3 drilldown is trivial. | D3 |
-| **Q4** | Does `flow_sc.origin_assignments` exist? (Needed for Z1 re-derivation in verifier.) | verify_solution.py |
-| **Q5** | v1 or v2 for thesis results? (See §2.) | Everything |
+### 7.1 New files
 
-**Answer Q1–Q4 in one pass** by running:
-```bash
-python3 -c "
-import json
-d = json.load(open('data/cv/v2/cv_large_drnd.json'))
-print('top-level keys:', list(d.keys()))
-# hub info
-hubs = d.get('hub_candidates') or d.get('hubs') or []
-if hubs: print('hub[0] keys:', list(hubs[0].keys()) if isinstance(hubs[0], dict) else 'list')
-# node info
-nodes = d.get('nodes', {})
-print('nodes keys:', list(nodes.keys()) if isinstance(nodes, dict) else type(nodes))
-"
-```
+| File | Feature | Priority | Est. |
+|---|---|---|---|
+| `visualizer/narrative_data.py` | §5 | P0 | 1 day |
+| `visualizer/experiments_view.py` | §4 | P0 | 0.5 day |
+| `audit/doc_mcf_decoder_plan.md` | §6 plan | P0 | 0.5 day |
+| `visualizer/verify_solution.py` | Z1/coverage check | P1 | 0.5 day |
+| `audit/doc_rescue_hub_precedents.md` | Chi justification + real-world precedents | — | **Already created** |
+
+### 7.2 Modified files
+
+| File | Changes |
+|---|---|
+| `visualizer/app.py` | Replace `st.tabs` with top-level `st.radio` nav (D6); move map to top; add collapsible expanders for Stage-1 (D2), Pareto (D3); add 3-panel toggle (D5); connect popup data (D4); add Tab 3 (§4) |
+| `visualizer/map_view.py` | Hub popup HTML with drilldown data (D4); needs `inst_raw`, `flow_sc`, all 3 scenario risk values passed in |
+| `visualizer/dataset_view.py` | Population circles + intrinsic risk colour layer (D7); static view mode |
+| `visualizer/pareto_view.py` | Robustness badge in hover (D8) |
+
+### 7.3 Files completely off limits
+
+- Everything under `paper/` — no reads, no writes
+- `src/solver/decoder.hpp` and all C++ source
+- All `.tex`, `.bib`, `.cls` files anywhere in the project
+
+### 7.4 Build order
+
+1. **`PATHS` table** — add to a new `visualizer/config.py`; import everywhere.
+   Unblocks all auto-routing. (30 min)
+2. **D6 nav restructure** — top-level radio, map to top, expanders.
+   Unblocks presentation flow immediately. (2 hours)
+3. **D4 hub popup** — most manager impact; needs `inst_raw` + flow
+   threaded through `build_map()`. (4 hours)
+4. **D1 Stage-2 briefing** — hub safety status with names, mode delta.
+   (3 hours)
+5. **D2 Stage-1 panel** — hub table with capacity bars. (2 hours)
+6. **`narrative_data.py`** — all Block 1–10 keys. (1 day)
+7. **`experiments_view.py`** (Tab 3). (4 hours)
+8. **D5 side-by-side map**. (2 hours)
+9. **D7 static input layers**. (3 hours)
+10. **`doc_mcf_decoder_plan.md`**. (3 hours)
+11. **D3 Pareto trade-off position badge**. (1 hour)
+12. **D8 hover robustness badge**. (2 hours)
 
 ---
 
 ## 8. Acceptance Criteria
 
-### DSS (manager usability)
-- [ ] Stage-1 panel shows hub list with name, pre-position ratio, and kg qty.
-- [ ] Stage-2 panel names flooded hubs explicitly (not just count).
-- [ ] Hub popup shows which communes are served + mode breakdown per scenario.
-- [ ] Side-by-side 3-scenario map loads without error for any selected solution.
-- [ ] All mode count displays carry MCF disclaimer tooltip.
+### Manager usability (DSS)
+- [ ] Map sits at the top; Stage-1 and Pareto panels are collapsed by default.
+- [ ] Switching between Solution / Input / Experiments views requires a single
+      click at the top of the page with no scrolling.
+- [ ] Hub popup shows: hub name, pre-positioned kg, risk per scenario,
+      active/inactive status, list of communes served with mode counts.
+- [ ] Stage-2 panel names flooded hubs (not just count) with risk values.
+- [ ] Side-by-side 3-scenario map loads for any selected solution.
+- [ ] Population circles visible in Input static view.
 
 ### Thesis evidence pipeline
-- [ ] `narrative_data.py` produces valid JSON with all Block 1–10 keys.
-- [ ] `knee_CV == 0.0` and modal counts sum to 100.
-- [ ] Tab 3 displays `cv_small_metrics.csv` as a styled dataframe.
-- [ ] Tab 3 renders at least 3 of the 5 existing PDF figures (inline or download).
+- [ ] `narrative_data.py` produces valid JSON; all Block 1–10 fields present.
+- [ ] `knee_CV == 0.0`; modal counts sum to 100 for all scenarios.
+- [ ] Tab 3 shows `cv_small_metrics.csv` as a styled dataframe.
+- [ ] Tab 3 renders at least the risk heatmap (live Plotly) + 2 PDF figures.
+- [ ] `doc_mcf_decoder_plan.md` exists with algorithm spec and file paths.
 
-### Experiments (if Position B chosen — v2 re-run)
-- [ ] 20 seeds run on v2 CV-Large and stored in `results/exp2/v2/`.
-- [ ] `exp2_analyze_case_study.py` re-run on v2 results dir, new PDFs committed.
-- [ ] OOS/SAA eval re-run on v2 seeds.
-- [ ] `narrative_data.py` reads v2 seeds and produces `narrative_data.json`.
-
-### Commit discipline (CLAUDE.md §1)
-- [ ] Code `.py` commits separate from result `.json` commits.
-- [ ] `doc_dataset_methodology.md` updated only if Q1/Q2 reveal undocumented field names.
+### Commit discipline
+- [ ] Code commits (`.py`, `.md`) separate from result commits (`.json`, `.csv`).
+- [ ] paper/ is untouched in every commit on this branch.
+- [ ] `doc_dataset_methodology.md` updated only if `§0` field names differ
+      from what's documented (they don't — fields are now confirmed above).
