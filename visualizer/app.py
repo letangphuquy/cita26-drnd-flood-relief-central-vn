@@ -43,7 +43,7 @@ from visualizer.dataset_view import build_dataset_map
 #   v2 = planar dataset (data/cv/v2/, pure Delaunay) — solved; result auto-detected.
 # See data/cv/README.md for details.
 _RESULTS_V2 = {
-    "CV Large": _ROOT / "results" / "exp2" / "v2" / "CV_large_seed0.json",
+    "CV Large": _ROOT / "results" / "exp2" / "v2" / "CV_large_seed2.json",
     "CV Small": _ROOT / "results" / "exp1" / "v2" / "cv_small_pb_nsga.json",
 }
 _FLOWS_V2 = {
