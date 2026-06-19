@@ -34,6 +34,11 @@ import math
 import json
 import random
 import os
+import heapq
+from collections import deque
+
+import numpy as np
+from scipy.spatial import Delaunay as _Delaunay
 
 # ============================================================================
 # CONFIGURATION
@@ -41,6 +46,8 @@ import os
 
 SEED = 2026
 random.seed(SEED)
+
+PHI = (1.0 + math.sqrt(5.0)) / 2.0  # golden ratio ≈ 1.618
 
 EARTH_R    = 6371.0
 NUM_MODES  = 3
@@ -57,11 +64,21 @@ LON_COAST    = 108.8    # coastal plain (eastern boundary)
 RIVER_SIGMA  = 18.0     # km — Gaussian decay for hydrological risk
 COASTAL_SIGMA = 40.0    # km — Gaussian decay for coastal surge risk
 
+# Road disruption model:
+#   score  = ALPHA_EPI × avg_raw_exp(u,v) + (1−ALPHA_EPI) × avg_aux_risk(u,v)
+#   p_road = 1 − (1 − score)^beta     [complementary-power; naturally in (0,1)]
+# ALPHA_EPI controls how much of the disruption is driven by epicenter proximity
+# vs. intrinsic road fragility.  At 0.7 the epicenter AoE dominates.
+ALPHA_EPI = 0.7
+
 # Scenario: (name, prob, n_epicenters, I_lo, I_hi, sev_mult, beta_road, phi)
+# beta_road is the exponent in the complementary-power disruption formula.
+# Calibrated so that score≈0.91 (edge at epicenter, high-risk terrain) gives:
+#   Mild p≈38%  Severe p≈85%  Extreme p≈94%
 SCENARIO_DEFS = [
-    ("mild",    0.60, 1, 0.30, 0.60, 1.0, 0.25, 0.57),
-    ("severe",  0.30, 2, 0.55, 0.85, 1.8, 0.55, 0.70),
-    ("extreme", 0.10, 3, 0.75, 1.00, 2.8, 0.88, 0.85),
+    ("mild",    0.60, 1, 0.30, 0.60, 1.0, 0.20, 0.57),
+    ("severe",  0.30, 2, 0.55, 0.85, 1.8, 0.80, 0.70),
+    ("extreme", 0.10, 3, 0.75, 1.00, 2.8, 1.20, 0.85),
 ]
 
 MODE_PARAMS = {
@@ -71,6 +88,53 @@ MODE_PARAMS = {
 }
 
 RISK_WEIGHTS = {"topo": 0.25, "hydro": 0.35, "coastal": 0.20, "delta": 0.20}
+
+# ── Hub capacity tiers ───────────────────────────────────────────────────────
+# Terrain factor deliberately NOT applied to capacity: mountain hubs are smaller.
+# Capacities are expressed as multipliers of (max_demand / n_H) so the scale
+# stays consistent with actual demand regardless of scenario parameters.
+# Max/min endpoint ratio = 1.5 / 0.3 = 5×; total ≈ 0.73 × max_demand.
+# Residual demand is covered by origin supply nodes via MCF hub-to-hub flows.
+_HUB_TIER = {
+    # Tier 1 — Major port / airport / logistics node
+    "Da_Nang_Airport_Hub":   1,
+    "Tam_Ky_Logistics_Hub":  1,
+    "Quang_Ngai_Port_Hub":   1,
+    # Tier 2 — Provincial city depot or warehouse
+    "Quang_Ngai_Depot":      2,
+    "Binh_Son_Warehouse":    2,
+    "Son_Ha_Hub":            2,
+    "Nui_Thanh_Reserve":     2,
+    # Tier 3 — District staging area, facility, or accessible forward depot
+    "Phu_Loc_Staging_Area":  3,
+    "Que_Son_Facility":      3,
+    "Lang_Co_Forward_Post":  3,
+    "Thang_Binh_Depot":      3,
+    "Bac_Tra_My_Depot":      3,
+    # Tier 4 — Mountain forward base or rescue station
+    "A_Luoi_Relief_Center":  4,
+    "Dong_Giang_Rescue_Stn": 4,
+    "Nam_Giang_Forward_Base":4,
+    "Phuoc_Son_Helipad":     4,
+    # Tier 5 — Remote helipad / deep-mountain outpost
+    "A_Dot_Mountain_Base":   5,
+    "A_Sap_Helipad":         5,
+    "Rao_Trang_Base":        5,
+    "Huong_Viet_Depot":      5,
+}
+# Tier capacity expressed as multipliers of (max_demand / n_H).
+# This anchors capacity to actual demand scale so hub-to-hub MCF flows
+# can redistribute surplus to deficit hubs without local bottlenecks.
+# Max/min endpoint ratio = 1.5 / 0.3 = 5×  (user requirement).
+# Sum of medians × n_H ≈ 14.5 × (max_demand/n_H) ≈ 0.73 × max_demand
+# (below total demand; shortfalls are covered by supply-node flows in MCF).
+_TIER_CAPACITY_MULT = {
+    1: (0.9, 1.5),   # major port / airport / logistics node
+    2: (0.7, 1.1),   # provincial city depot or warehouse
+    3: (0.5, 0.9),   # district staging; road-accessible
+    4: (0.4, 0.7),   # mountain forward base or rescue station
+    5: (0.3, 0.5),   # remote helipad / deep-mountain outpost
+}
 
 # ── River system waypoints (lat, lon) ────────────────────────────────────────
 # Used for hydrological risk criterion C2.
@@ -82,6 +146,23 @@ RIVERS = {
     "truong_giang": [(15.70,108.38),(15.63,108.45),(15.58,108.52)],
     "tra_bong": [(15.35,108.20),(15.28,107.98),(15.20,107.82)],
 }
+
+# Approximate Central Vietnam coastline waypoints (N→S), used to compute
+# distance-to-coast for epicenter sampling weights.
+COASTLINE = [
+    (17.02, 107.10),  # Cửa Tùng, northern Quảng Trị
+    (16.55, 107.64),  # Cửa Thuận An, Huế
+    (16.25, 108.03),  # Lăng Cô bay
+    (16.19, 108.13),  # Hải Vân pass
+    (16.11, 108.26),  # Đà Nẵng Tiên Sa / Sơn Trà
+    (15.88, 108.38),  # Cửa Đại, Hội An
+    (15.75, 108.45),  # Bình Dương coast (Thăng Bình)
+    (15.57, 108.50),  # Tam Thanh coast, Tam Kỳ
+    (15.48, 108.68),  # Cửa Kỳ Hà, Núi Thành
+    (15.35, 108.82),  # Dung Quất bay
+    (15.22, 108.93),  # Sa Kỳ port
+    (14.67, 109.06),  # Sa Huỳnh
+]
 
 # ── River delta / lowland accumulation centers (lat, lon, sigma_km) ─────────
 DELTA_CENTERS = [
@@ -359,22 +440,95 @@ def risk_interval(r_aux):
 
 
 # ============================================================================
+# PLANAR GRAPH HELPERS  (Delaunay topology + BFS reachability + Dijkstra)
+# ============================================================================
+
+MAX_EDGE_KM = 80.0   # Delaunay edges longer than this are not plausible direct links
+
+def _delaunay_edges(coords):
+    """
+    Undirected edge set from Delaunay triangulation, filtered to MAX_EDGE_KM.
+
+    Delaunay naturally produces convex-hull 'belt' edges connecting distant
+    nodes that have no close triangulation neighbours.  Dropping edges longer
+    than MAX_EDGE_KM removes these artefacts while keeping all realistic
+    direct road/waterway connections.
+    """
+    pts = np.array([[c[0], c[1]] for c in coords])
+    tri = _Delaunay(pts)
+    edges = set()
+    for simplex in tri.simplices:
+        for i in range(3):
+            for j in range(i + 1, 3):
+                u, v = int(simplex[i]), int(simplex[j])
+                if haversine(coords[u][0], coords[u][1],
+                             coords[v][0], coords[v][1]) <= MAX_EDGE_KM:
+                    edges.add((min(u, v), max(u, v)))
+    return edges
+
+
+def _adj_list(edges, n):
+    """Build a symmetric adjacency list from an undirected edge set."""
+    adj = [[] for _ in range(n)]
+    for (u, v) in edges:
+        adj[u].append(v)
+        adj[v].append(u)
+    return adj
+
+
+def _dijkstra(cost_matrix, adj, src, n):
+    """Shortest-path cost from *src* to all nodes using edges in *adj*."""
+    dist = [BIG_M] * n
+    dist[src] = 0.0
+    heap = [(0.0, src)]
+    while heap:
+        d, u = heapq.heappop(heap)
+        if d > dist[u]:
+            continue
+        for v in adj[u]:
+            nd = d + cost_matrix[u][v]
+            if nd < dist[v]:
+                dist[v] = nd
+                heapq.heappush(heap, (nd, v))
+    return dist
+
+
+_ISLAND_NODES = {"Ly_Son_Island_Supply"}
+
+# Delaunay edges that are geometrically short but cross open water (Da Nang Bay).
+# The actual road route goes through the Hai Van Tunnel on the western slope —
+# no bridge spans the bay between Son Tra and the Hai Van foothills.
+_FORBIDDEN_ROAD_PAIRS = {
+    frozenset(["Tho_Quang_Ward",    "Hai_Van_Pass_North"]),  # 12.6 km across bay
+    frozenset(["Son_Tra_District",  "Hai_Van_Pass_North"]),  # 16.4 km across bay
+}
+
+
+# ============================================================================
 # TRANSPORT MATRICES
 # ============================================================================
 
-def build_transport(coords):
+def build_transport(coords, road_edges=None, geo_edges=None, osrm_dist=None, osrm_time=None):
     """
     C[m][u][v] ($/trip) and T[m][u][v] (hours) for all 3 modes.
-    Road: Haversine × tortuosity × terrain factor.
-    Water: follows waterways, minimal terrain effect.
-    Air: straight-line, mild weather/terrain headwind factor.
+
+    Road direct-edge costs come from OSRM when available (actual road km),
+    otherwise fall back to Haversine × tortuosity.  Non-adjacent pairs use
+    Dijkstra shortest-path through the validated road graph.
+    Water and air costs remain Haversine-based throughout.
+
+    NOTE: osrm_dist/osrm_time are placeholder parameters for future OSRM
+    integration. They are always None in the current call chain — the road
+    graph is pure Delaunay. The OSRM branch is dead code until an OSRM
+    routing server is wired up and the caller is updated.
     """
     n = len(coords)
-    ROAD_TORTUOSITY = 1.35   # Central Vietnam mountain roads ~35% longer
+    ROAD_TORTUOSITY = 1.35
 
     C = [[[0.0]*n for _ in range(n)] for _ in range(NUM_MODES)]
     T = [[[0.0]*n for _ in range(n)] for _ in range(NUM_MODES)]
 
+    # -- Step 1: compute base costs for all pairs
     for u in range(n):
         for v in range(n):
             if u == v:
@@ -384,21 +538,51 @@ def build_transport(coords):
             d_hav = haversine(la1, lo1, la2, lo2)
             tf    = terrain_factor((lo1 + lo2) / 2.0)
 
-            # Mode 0 — road (truck): tortuosity + terrain
-            d_road = d_hav * ROAD_TORTUOSITY * tf
+            # Road: OSRM distance if available, else Haversine × tortuosity
+            edge_key = (min(u, v), max(u, v))
+            if osrm_dist and edge_key in osrm_dist:
+                d_road = osrm_dist[edge_key] * (1.0 + 0.05 * (tf - 1.0))  # mild terrain adj
+                t_road = osrm_time[edge_key] if osrm_time and edge_key in osrm_time else d_road / MODE_PARAMS[0]["speed"]
+            else:
+                d_road = d_hav * ROAD_TORTUOSITY * tf
+                t_road = d_road / MODE_PARAMS[0]["speed"]
             C[0][u][v] = d_road * MODE_PARAMS[0]["cost_per_km"]
-            T[0][u][v] = d_road / MODE_PARAMS[0]["speed"]
+            T[0][u][v] = t_road
 
-            # Mode 1 — water (motorboat): slight meandering, little terrain effect
+            # Water
             water_tf = 1.0 + 0.12 * (tf - 1.0)
             d_water  = d_hav * 1.15
             C[1][u][v] = d_water * MODE_PARAMS[1]["cost_per_km"] * water_tf
             T[1][u][v] = d_water / MODE_PARAMS[1]["speed"] * water_tf
 
-            # Mode 2 — air (helicopter): straight-line, mild wind/weather factor
+            # Air
             air_tf = 1.0 + 0.25 * (tf - 1.0)
             C[2][u][v] = d_hav * MODE_PARAMS[2]["cost_per_km"] * air_tf
             T[2][u][v] = d_hav / MODE_PARAMS[2]["speed"] * air_tf
+
+    # -- Step 2: shortest-path for non-adjacent pairs
+    r_edges = road_edges if road_edges is not None else _delaunay_edges(coords)
+    # geo_edges: water/air graph — Delaunay plus any stitch edges passed by caller
+    # (collocated demand/hub pairs have no Delaunay edges; the stitch must be
+    # included here so water Dijkstra can route through them)
+    d_edges = geo_edges if geo_edges is not None else _delaunay_edges(coords)
+    r_adj = _adj_list(r_edges, n)
+    d_adj = _adj_list(d_edges, n)
+    for src in range(n):
+        # Road: Dijkstra through OSRM-validated edges
+        dc = _dijkstra(C[0], r_adj, src, n)
+        dt = _dijkstra(T[0], r_adj, src, n)
+        for dst in range(n):
+            if src != dst and (min(src, dst), max(src, dst)) not in r_edges:
+                C[0][src][dst] = dc[dst]
+                T[0][src][dst] = dt[dst]
+        # Water: Dijkstra through Delaunay geometry
+        dc = _dijkstra(C[1], d_adj, src, n)
+        dt = _dijkstra(T[1], d_adj, src, n)
+        for dst in range(n):
+            if src != dst and (min(src, dst), max(src, dst)) not in d_edges:
+                C[1][src][dst] = dc[dst]
+                T[1][src][dst] = dt[dst]
 
     return C, T
 
@@ -407,8 +591,13 @@ def build_transport(coords):
 # SCENARIO GENERATION
 # ============================================================================
 
-def _weighted_sample(population, weights, k):
-    """Sample k distinct indices from population without replacement, weighted."""
+def _weighted_sample(population, weights, k, node_locs=None, repulsion_sigma=0.0):
+    """Sample k distinct indices from population without replacement, weighted.
+
+    If node_locs (list of (lat, lon) parallel to weights) and repulsion_sigma > 0,
+    after each pick the weights of all remaining candidates are multiplied by
+    exp(-d/repulsion_sigma), discouraging the next pick from clustering nearby.
+    """
     chosen = []
     pop = list(range(len(population)))
     wts = list(weights)
@@ -426,42 +615,111 @@ def _weighted_sample(population, weights, k):
                 break
         chosen.append(sel)
         pop.remove(sel)
+        if node_locs is not None and repulsion_sigma > 0.0:
+            slat, slon = node_locs[sel]
+            for i in pop:
+                d = haversine(slat, slon, node_locs[i][0], node_locs[i][1])
+                wts[i] *= 1.0 - math.exp(-d / repulsion_sigma)
     return chosen
 
 
+def _river_proximity_km(lat, lon):
+    """Min Haversine distance in km from (lat,lon) to any RIVERS waypoint.
+    O(|waypoints|) per call; caller pre-computes once per node outside scenario loop.
+    """
+    best = float("inf")
+    for waypoints in RIVERS.values():
+        for rlat, rlon in waypoints:
+            d = haversine(lat, lon, rlat, rlon)
+            if d < best:
+                best = d
+    return best
+
+
+def _coast_proximity_km(lat, lon):
+    """Min Haversine distance in km from (lat,lon) to the COASTLINE polyline."""
+    return min(haversine(lat, lon, clat, clon) for clat, clon in COASTLINE)
+
+
 def generate_scenarios(coords, aux_risk, r_intervals,
-                       demand_idx, hub_idx, origin_idx, base_pop):
+                       demand_idx, hub_idx, origin_idx, base_pop,
+                       road_edges=None, geo_edges=None, sea_lane_idx=None,
+                       epi_base_seed=SEED + 3):
     """
     Generate 3 disaster scenarios.
 
-    Epicenter strategy (per data-strategy.txt):
-      - Epicenters sampled from demand nodes weighted by r^a_u
-      - Surrounding nodes receive exposure via Gaussian decay
-      - Scenario risk r_{us} ← r_min_u + (r_max_u - r_min_u) × exposure_u
-
-    Accessibility:
-      - Road (m=0): stochastically disrupted ∝ beta × avg_risk
-      - Water (m=1) and Air (m=2): always available
+    Changes vs. original K_N / Delaunay implementation (see audit_agent_plan_data_methodology.md):
+      Change 0 — Epicenters hoisted before disruption loop (fixes random-state divergence
+                  caused by road-edge-count differences between K_N, Delaunay, OSRM runs)
+      Change 1 — aux_risk**2 weights → sharper coastal bias, mountain non-zero
+      Change 2 — Demand driven by raw_exp[i] (epicenter exposure), not risk[i]
+      Change 3 — Water: static river corridor (15 km) OR dynamic inundation (risk > 0.40)
 
     Returns list of scenario dicts compatible with model.hpp.
     """
     n = len(coords)
-    EPI_SIGMA = 85.0   # km — epicenter influence radius
+    EPI_SIGMA = 85.0        # km — epicenter Gaussian influence radius
+    RIVER_CORRIDOR_KM = 15.0  # static water access within 15 km of a river waypoint
+    INUNDATION_THRESH = 0.40  # dynamic flood water: both nodes must exceed this risk
 
-    # Probability weights for epicenter sampling
-    epi_weights = [aux_risk[i] for i in demand_idx]
+    # Road edges: OSRM-validated if available, else Delaunay fallback
+    _road_edges = road_edges if road_edges is not None else _delaunay_edges(coords)
+    # Water/air edges: caller-supplied geo_edges (Delaunay + collocated stitch)
+    # so that collocated demand nodes (no Delaunay edges) are air/water accessible
+    _edges = geo_edges if geo_edges is not None else _delaunay_edges(coords)
 
-    scenarios = []
-    for name, prob, n_epi, I_lo, I_hi, sev_mult, beta, phi in SCENARIO_DEFS:
+    # Pre-compute static river proximity (outside scenario loop — does not consume random)
+    river_prox = [_river_proximity_km(coords[u][0], coords[u][1]) for u in range(n)]
 
-        # -- Epicenters: sampled demand nodes weighted by r^a_u
-        chosen_local = _weighted_sample(demand_idx, epi_weights, n_epi)
-        epicenters = [
+    # Epicenter sampling weights: aux_risk^PHI × exp(−dist_to_coast/σ)
+    # PHI (golden ratio ≈ 1.618) gives moderate coastal bias — less concentrated
+    # than squared (2.0), more than linear (1.0).  EPI_COAST_SIGMA=25km suppresses
+    # mountain nodes to <5% of a coastal node's weight at 75km inland.
+    EPI_COAST_SIGMA  = 25.0  # km; tighter than original 30km to compensate for weaker PHI exponent
+    REPULSION_SIGMA  = 30.0  # km; within-scenario spatial repulsion — node 5km away retains ~15% weight, 100km ~96%
+    coast_dist = [_coast_proximity_km(coords[demand_idx[i]][0],
+                                      coords[demand_idx[i]][1])
+                  for i in range(len(demand_idx))]
+    epi_weights = [aux_risk[i]**PHI * math.exp(-coast_dist[k] / EPI_COAST_SIGMA)
+                   for k, i in enumerate(demand_idx)]
+    demand_locs = [(coords[demand_idx[i]][0], coords[demand_idx[i]][1])
+                   for i in range(len(demand_idx))]
+
+    # Per-scenario epicenter sampling: each scenario gets its own reproducible
+    # RNG state via a warmup loop (RWS without replacement within each draw).
+    # Different warmup depths → statistically independent draws across scenarios.
+    EPI_BASE_SEED = epi_base_seed
+    EPI_WARMUP    = 100  # random advances per scenario index
+    all_epicenters = []
+    for si, (_, _, n_epi, I_lo, I_hi, _, _, _) in enumerate(SCENARIO_DEFS):
+        random.seed(EPI_BASE_SEED)
+        for _ in range((si + 1) * EPI_WARMUP):
+            random.random()
+        chosen_local = _weighted_sample(demand_idx, epi_weights, n_epi,
+                                        node_locs=demand_locs,
+                                        repulsion_sigma=REPULSION_SIGMA)
+        all_epicenters.append([
             (coords[demand_idx[ci]][0],
              coords[demand_idx[ci]][1],
              random.uniform(I_lo, I_hi))
             for ci in chosen_local
-        ]
+        ])
+    # RNG state after last warmup flows forward into disruption/demand draws.
+
+    # Pre-compute once: union of all direct edges across road + geo graphs.
+    # WARNING — known asymmetry: pairs in _all_direct are EXCLUDED from BFS
+    # reachability updates even when their direct edge is disrupted in a scenario.
+    # A pair with no direct edge gets multi-hop BFS rescue; a pair whose direct
+    # edge is blocked does NOT. This means having a direct edge that gets disrupted
+    # is strictly worse than having no direct edge at all (paper should note this).
+    _all_direct = {(min(u, v), max(u, v))
+                   for u, v in list(_road_edges) + list(_edges)}
+
+    scenarios = []
+    for si, (name, prob, n_epi, I_lo, I_hi, sev_mult, beta, phi) in enumerate(SCENARIO_DEFS):
+
+        # Epicenters fixed before any disruption (Change 0)
+        epicenters = all_epicenters[si]
 
         # -- Raw exposure ∈ [0,1] via Gaussian decay from epicenters
         raw_exp = []
@@ -473,49 +731,84 @@ def generate_scenarios(coords, aux_risk, r_intervals,
             raw_exp.append(min(1.0, ex))
 
         # -- Scenario risk r_{us}: sample from node's risk interval
+        # risk[u] retains its original meaning: intrinsic flood susceptibility ×
+        # epicenter exposure → used for infrastructure damage, hub vulnerability,
+        # road disruption.  NOT used for demand (see Change 2).
         risk = []
         for u in range(n):
             r_min, r_max = r_intervals[u]
             r_us = r_min + (r_max - r_min) * raw_exp[u]
-            r_us += random.gauss(0, 0.025)   # small stochastic perturbation
+            r_us += random.gauss(0, 0.025)
             risk.append(round(max(0.01, min(0.99, r_us)), 4))
 
         # -- Accessibility a[m][u][v]
-        # Initialise fresh 3D list (NOT by list multiplication — avoids aliasing bug)
-        a = [[[1]*n for _ in range(n)] for _ in range(NUM_MODES)]
-        for u in range(n):
-            for v in range(n):
-                if u == v:
-                    for m in range(NUM_MODES):
-                        a[m][u][v] = 0
-                    continue
-                avg_risk_uv = (risk[u] + risk[v]) / 2.0
-                # Road disruption: higher beta and risk → more links broken
-                p_road = min(0.97, beta * avg_risk_uv)
-                if random.random() < p_road:
-                    a[0][u][v] = 0
-                    a[0][v][u] = 0
-                # Water (m=1): only enabled if there's significant flood risk (flood areas)
-                # Prose: "water mode will be enabled on flood areas"
-                if risk[u] > 0.30 and risk[v] > 0.30:
-                    a[1][u][v] = 1
-                    a[1][v][u] = 1
-                else:
-                    a[1][u][v] = 0
-                    a[1][v][u] = 0
-                    
-                # Air (m=2) remains 1
-                a[2][u][v] = 1
-                a[2][v][u] = 1
+        # Stage 1: direct edges — disruption applied per mode-specific graph.
+        # Stage 2: BFS extends path-reachability to non-adjacent pairs without
+        #   overwriting direct-edge values.
+        a = [[[0]*n for _ in range(n)] for _ in range(NUM_MODES)]
 
-        # -- Demand D_{is}: risk-driven fraction of base population
+        # Road (m=0): complementary-power disruption
+        # score = ALPHA_EPI × epicenter_exposure + (1−ALPHA_EPI) × intrinsic_fragility
+        # p_road = 1 − (1 − score)^beta  →  strongly non-linear near score=1
+        for (u, v) in _road_edges:
+            score = (ALPHA_EPI * (raw_exp[u] + raw_exp[v]) / 2.0
+                     + (1.0 - ALPHA_EPI) * (aux_risk[u] + aux_risk[v]) / 2.0)
+            p_road = 1.0 - (1.0 - score) ** beta
+            road_ok = 0 if random.random() < p_road else 1
+            a[0][u][v] = a[0][v][u] = road_ok
+
+        # Water (m=1): Change 3 — river corridor (static) OR inundation (dynamic)
+        # Air (m=2): Delaunay geometry, always available
+        for (u, v) in _edges:
+            river_ok = (river_prox[u] < RIVER_CORRIDOR_KM and
+                        river_prox[v] < RIVER_CORRIDOR_KM)
+            flood_ok = (risk[u] > INUNDATION_THRESH and
+                        risk[v] > INUNDATION_THRESH)
+            a[1][u][v] = a[1][v][u] = 1 if (river_ok or flood_ok) else 0
+            a[2][u][v] = a[2][v][u] = 1
+
+        # Sea lanes: island nodes (no road access) always have water AND air
+        # connectivity to all nodes within MAX_EDGE_KM — independent of flood level.
+        # Water: sea-lane is unconditional (no road bridge).
+        # Air: helicopter access is always physically feasible from an island.
+        if sea_lane_idx:
+            for u in sea_lane_idx:
+                for v in range(n):
+                    if v != u and haversine(coords[u][0], coords[u][1],
+                                           coords[v][0], coords[v][1]) <= MAX_EDGE_KM:
+                        a[1][u][v] = a[1][v][u] = 1
+                        a[2][u][v] = a[2][v][u] = 1
+
+        # BFS: extend path-reachability to non-direct pairs (preserves direct values)
+        for m in range(NUM_MODES):
+            direct_m = _road_edges if m == 0 else _edges
+            adj_m = [[] for _ in range(n)]
+            for (u, v) in direct_m:
+                if a[m][u][v]:
+                    adj_m[u].append(v)
+                    adj_m[v].append(u)
+            for src in range(n):
+                visited = {src}
+                queue = deque([src])
+                while queue:
+                    u = queue.popleft()
+                    for v in adj_m[u]:
+                        if v not in visited:
+                            visited.add(v)
+                            queue.append(v)
+                for dst in visited:
+                    if dst != src and (min(src, dst), max(src, dst)) not in _all_direct:
+                        a[m][src][dst] = 1
+
+        # -- Demand D_{is}: epicenter-exposure-driven (Change 2)
+        # Uses raw_exp[i] (pure Gaussian decay from epicenters), NOT risk[i].
+        # Decouples relief need (event-specific) from infrastructure damage (node-intrinsic).
         demand = {}
         total_demand_pers = 0.0
         for i in demand_idx:
-            r_is   = risk[i]
-            frac   = 0.05 + 0.85 * r_is        # 5% baseline + risk-driven
+            frac   = 0.05 + 0.95 * raw_exp[i]   # 5% baseline; scales to 100% at epicenter
             d_base = base_pop[i] * frac * sev_mult
-            noise  = random.gauss(0, 0.08 * d_base)
+            noise  = random.gauss(0, 0.06 * d_base)
             d_val  = max(5.0, d_base + noise)
             demand[str(i)] = round(d_val, 2)
             total_demand_pers += d_val
@@ -607,8 +900,10 @@ def compute_theta(C_all, hub_idx, demand_idx, scenarios, area_km2):
 def build_instance(size="small"):
     if size == "small":
         n_I, n_H, n_J = 20, 5, 2
+        random.seed(SEED)
     else:
         n_I, n_H, n_J = 100, 20, 12
+        random.seed(SEED + 1)
 
     print(f"\n{'='*60}")
     print(f"[{size.upper()}]  I={n_I}  H={n_H}  J={n_J}")
@@ -657,15 +952,81 @@ def build_instance(size="small"):
         tf = terrain_factor(lon)
         area_km2[str(i)] = round(random.uniform(8.0, 18.0) * tf, 2)
 
-    # ── Step 4: Transport matrices ────────────────────────────────────────────
-    print("  [3] Building transport matrices ...")
-    C_all, T_all = build_transport(coords)
+    # ── Step 4a: Planar road graph (Delaunay, islands excluded) ──────────────
+    print("  [3a] Building Delaunay road graph ...")
+    _island_idx  = {i for i, nm in enumerate(names) if nm in _ISLAND_NODES}
+    _name_to_idx = {nm: i for i, nm in enumerate(names)}
+    _forbidden_idx = {
+        frozenset([_name_to_idx[a], _name_to_idx[b]])
+        for pair in _FORBIDDEN_ROAD_PAIRS
+        for a, b in [tuple(sorted(pair))]
+        if a in _name_to_idx and b in _name_to_idx
+    }
+    # Delaunay geometry edges (before exclusions): used as base for water/air graph
+    _geo_delaunay = {(u, v) for (u, v) in _delaunay_edges(coords)
+                     if u not in _island_idx and v not in _island_idx}
+    road_edges  = {(u, v) for (u, v) in _geo_delaunay
+                   if frozenset([u, v]) not in _forbidden_idx}
+    # scipy.spatial.Delaunay is degenerate when two nodes share identical coordinates
+    # (demand node + its collocated hub). Only one of the pair gets Delaunay edges;
+    # the other is stranded. Fix: add explicit zero-distance edges for all collocated
+    # pairs to both road_edges AND geo_edges (water/air graph), so that collocated
+    # demand nodes are accessible by all three modes, not just road.
+    _COLLOCATED_KM = 0.5
+    _collocated_pairs = set()
+    for u in range(n_total):
+        if u in _island_idx:
+            continue
+        for v in range(u + 1, n_total):
+            if v in _island_idx:
+                continue
+            if haversine(coords[u][0], coords[u][1], coords[v][0], coords[v][1]) < _COLLOCATED_KM:
+                _collocated_pairs.add((u, v))
+    _collocated_added = 0
+    for u, v in _collocated_pairs:
+        if (u, v) not in road_edges:
+            road_edges.add((u, v))
+            _collocated_added += 1
+    # geo_edges: Delaunay + collocated stitch (no forbidden-pair exclusion for water/air)
+    geo_edges = _geo_delaunay | _collocated_pairs
+    print(f"      Road graph: {len(road_edges)} edges  "
+          f"({len(_island_idx)} island node(s) excluded, "
+          f"{len(_FORBIDDEN_ROAD_PAIRS)} sea-crossing pair(s) removed, "
+          f"{_collocated_added} collocated pair(s) stitched)")
+
+    # ── Step 4b: Transport matrices ───────────────────────────────────────────
+    print("  [3b] Building transport matrices ...")
+    C_all, T_all = build_transport(coords, road_edges=road_edges, geo_edges=geo_edges)
+
+    # Sea-lane C_time fix: island nodes are excluded from geo_edges, so Dijkstra
+    # in build_transport overwrites their haversine-based water costs with BIG_M.
+    # Restore the direct haversine water cost for every island→node pair within
+    # MAX_EDGE_KM, matching the sea-lane accessibility set in generate_scenarios.
+    for u in _island_idx:
+        for v in range(n_total):
+            if v == u:
+                continue
+            d_hav = haversine(coords[u][0], coords[u][1], coords[v][0], coords[v][1])
+            if d_hav <= MAX_EDGE_KM:
+                tf = terrain_factor((coords[u][1] + coords[v][1]) / 2.0)
+                water_tf = 1.0 + 0.12 * (tf - 1.0)
+                C_all[1][u][v] = C_all[1][v][u] = d_hav * 1.15 * MODE_PARAMS[1]["cost_per_km"] * water_tf
+                T_all[1][u][v] = T_all[1][v][u] = d_hav * 1.15 / MODE_PARAMS[1]["speed"] * water_tf
 
     # ── Step 5: Scenarios ─────────────────────────────────────────────────────
+    # Reseed before scenario generation so that epicenter sampling, disruption
+    # draws, demand noise and supply allocation are all independent of road
+    # graph topology changes (edge count affects random consumption in the
+    # disruption loop, which would otherwise corrupt everything that follows).
+    random.seed(SEED + 2 if size == "small" else SEED + 3)
     print("  [4] Generating 3 scenarios ...")
     scenarios = generate_scenarios(
         coords, aux_risk, r_intervals,
-        demand_idx, hub_idx, origin_idx, base_pop
+        demand_idx, hub_idx, origin_idx, base_pop,
+        road_edges=road_edges,
+        geo_edges=geo_edges,
+        sea_lane_idx=_island_idx,
+        epi_base_seed=SEED + 2 if size == "small" else SEED + 3,
     )
     for sc in scenarios:
         d_risks_s = [sc["risk"][i] for i in demand_idx]
@@ -677,26 +1038,38 @@ def build_instance(size="small"):
               f"supply={total_s:,.0f} kg  "
               f"phi={sc['phi_circuity']}")
 
-    # ── Step 6: Hub capacity (calibrated to worst-case demand) ───────────────
+    # ── Step 6: Hub capacity (tier-based, population-anchored) ───────────────
     print("  [5] Calibrating hub capacities ...")
-    max_demand_kg = max(
-        GAMMA * sum(float(v) for v in sc["demand"].values())
-        for sc in scenarios
-    )
+    # Anchor to static population × worst-case sev_mult — fully scenario-independent.
+    # Using realized scenario demands as a Stage 1 parameter would leak stochastic
+    # outcomes into the pre-positioning capacity decision (κ is a first-stage constant).
+    max_sev_mult      = max(sd[5] for sd in SCENARIO_DEFS)
+    total_base_pop    = sum(base_pop[i] for i in demand_idx)
+    planning_demand_kg = total_base_pop * GAMMA * max_sev_mult
+    per_hub_base      = planning_demand_kg / n_H  # reference unit for multipliers
+
     hub_capacity   = {}
     hub_fixed_cost = {}
     hub_hold_cost  = {}
     for k in hub_idx:
         _, lon = coords[k]
-        tf = terrain_factor(lon)
-        hub_capacity[str(k)]   = int(max_demand_kg / n_H * random.uniform(3.0, 6.0) * tf)
+        tf   = terrain_factor(lon)
+        tier = _HUB_TIER.get(names[k], 3)  # default tier 3 for unknown hubs
+        lo_m, hi_m = _TIER_CAPACITY_MULT[tier]
+        hub_capacity[str(k)]   = int(random.uniform(lo_m, hi_m) * per_hub_base)
+        # terrain_factor correctly applied to cost (mountain ops are more expensive)
         hub_fixed_cost[str(k)] = round(random.uniform(60000, 200000) * tf, 2)
         hub_hold_cost[str(k)]  = round(random.uniform(0.2, 0.8), 4)
 
     total_kappa = sum(hub_capacity.values())
-    print(f"      max_demand={max_demand_kg:,.0f} kg  "
+    actual_max_demand_kg = max(
+        GAMMA * sum(float(v) for v in sc["demand"].values())
+        for sc in scenarios
+    )
+    print(f"      planning_base={planning_demand_kg:,.0f} kg  "
+          f"actual_max={actual_max_demand_kg:,.0f} kg  "
           f"total_kappa={total_kappa:,.0f} kg  "
-          f"ratio={total_kappa/max_demand_kg:.1f}x")
+          f"kappa/actual={total_kappa/actual_max_demand_kg:.2f}x")
 
     # ── Step 7: Daganzo Theta ─────────────────────────────────────────────────
     print("  [6] Pre-computing Daganzo Theta matrix ...")
@@ -714,10 +1087,12 @@ def build_instance(size="small"):
         "meta": {
             "name":        f"CentralVietnam_{size.upper()}",
             "description": ("MO-IHLNDP flood relief — Vu Gia/Thu Bồn/Huế basin. "
-                            "Multi-criteria auxiliary risk + probabilistic scenarios."),
+                            "Multi-criteria auxiliary risk + Delaunay-planar network topology "
+                            "+ BFS path-reachability accessibility."),
             "seed":         SEED,
             "size":         size,
-            "methodology":  "multi-criteria auxiliary risk + risk-interval scenario model",
+            "methodology":  ("multi-criteria auxiliary risk + risk-interval scenario model "
+                             "+ Delaunay planar graph + BFS path-reachability"),
             "risk_weights": RISK_WEIGHTS,
         },
         "dimensions": {
@@ -752,6 +1127,10 @@ def build_instance(size="small"):
             "cost": C_all,
             "time": T_all,
         },
+        "graph": {
+            "road_edges": sorted([u, v] for u, v in road_edges),
+            "note": "OSRM-validated direct road connections (detour ≤1.8×, dist ≤80km)",
+        },
         "scenarios": scenarios,
         "theta":  Theta,
         "lambda": Lambda,
@@ -766,10 +1145,11 @@ def build_instance(size="small"):
 def main():
     import argparse
     parser = argparse.ArgumentParser(description="Generate CV DRND instance files.")
-    parser.add_argument("--outdir", type=str, default=None,
-                        help="Output directory (default: same as script).")
+    # Canonical output: data/cv/v2/
+    parser.add_argument("--outdir", type=str, required=True,
+                        help="Output directory, e.g. data/cv/v2/")
     args = parser.parse_args()
-    out_dir = args.outdir if args.outdir else os.path.dirname(os.path.abspath(__file__))
+    out_dir = args.outdir
     os.makedirs(out_dir, exist_ok=True)
 
     for size in ["small", "large"]:
