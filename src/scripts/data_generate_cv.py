@@ -32,7 +32,6 @@ References:
 
 import math
 import json
-import math
 import random
 import os
 import heapq
@@ -89,6 +88,53 @@ MODE_PARAMS = {
 }
 
 RISK_WEIGHTS = {"topo": 0.25, "hydro": 0.35, "coastal": 0.20, "delta": 0.20}
+
+# ── Hub capacity tiers ───────────────────────────────────────────────────────
+# Terrain factor deliberately NOT applied to capacity: mountain hubs are smaller.
+# Capacities are expressed as multipliers of (max_demand / n_H) so the scale
+# stays consistent with actual demand regardless of scenario parameters.
+# Max/min endpoint ratio = 1.5 / 0.3 = 5×; total ≈ 0.73 × max_demand.
+# Residual demand is covered by origin supply nodes via MCF hub-to-hub flows.
+_HUB_TIER = {
+    # Tier 1 — Major port / airport / logistics node
+    "Da_Nang_Airport_Hub":   1,
+    "Tam_Ky_Logistics_Hub":  1,
+    "Quang_Ngai_Port_Hub":   1,
+    # Tier 2 — Provincial city depot or warehouse
+    "Quang_Ngai_Depot":      2,
+    "Binh_Son_Warehouse":    2,
+    "Son_Ha_Hub":            2,
+    "Nui_Thanh_Reserve":     2,
+    # Tier 3 — District staging area, facility, or accessible forward depot
+    "Phu_Loc_Staging_Area":  3,
+    "Que_Son_Facility":      3,
+    "Lang_Co_Forward_Post":  3,
+    "Thang_Binh_Depot":      3,
+    "Bac_Tra_My_Depot":      3,
+    # Tier 4 — Mountain forward base or rescue station
+    "A_Luoi_Relief_Center":  4,
+    "Dong_Giang_Rescue_Stn": 4,
+    "Nam_Giang_Forward_Base":4,
+    "Phuoc_Son_Helipad":     4,
+    # Tier 5 — Remote helipad / deep-mountain outpost
+    "A_Dot_Mountain_Base":   5,
+    "A_Sap_Helipad":         5,
+    "Rao_Trang_Base":        5,
+    "Huong_Viet_Depot":      5,
+}
+# Tier capacity expressed as multipliers of (max_demand / n_H).
+# This anchors capacity to actual demand scale so hub-to-hub MCF flows
+# can redistribute surplus to deficit hubs without local bottlenecks.
+# Max/min endpoint ratio = 1.5 / 0.3 = 5×  (user requirement).
+# Sum of medians × n_H ≈ 14.5 × (max_demand/n_H) ≈ 0.73 × max_demand
+# (below total demand; shortfalls are covered by supply-node flows in MCF).
+_TIER_CAPACITY_MULT = {
+    1: (0.9, 1.5),   # major port / airport / logistics node
+    2: (0.7, 1.1),   # provincial city depot or warehouse
+    3: (0.5, 0.9),   # district staging; road-accessible
+    4: (0.4, 0.7),   # mountain forward base or rescue station
+    5: (0.3, 0.5),   # remote helipad / deep-mountain outpost
+}
 
 # ── River system waypoints (lat, lon) ────────────────────────────────────────
 # Used for hydrological risk criterion C2.
@@ -470,6 +516,11 @@ def build_transport(coords, road_edges=None, geo_edges=None, osrm_dist=None, osr
     otherwise fall back to Haversine × tortuosity.  Non-adjacent pairs use
     Dijkstra shortest-path through the validated road graph.
     Water and air costs remain Haversine-based throughout.
+
+    NOTE: osrm_dist/osrm_time are placeholder parameters for future OSRM
+    integration. They are always None in the current call chain — the road
+    graph is pure Delaunay. The OSRM branch is dead code until an OSRM
+    routing server is wired up and the caller is updated.
     """
     n = len(coords)
     ROAD_TORTUOSITY = 1.35
@@ -573,7 +624,9 @@ def _weighted_sample(population, weights, k, node_locs=None, repulsion_sigma=0.0
 
 
 def _river_proximity_km(lat, lon):
-    """Min Haversine distance in km from (lat,lon) to any RIVERS waypoint."""
+    """Min Haversine distance in km from (lat,lon) to any RIVERS waypoint.
+    O(|waypoints|) per call; caller pre-computes once per node outside scenario loop.
+    """
     best = float("inf")
     for waypoints in RIVERS.values():
         for rlat, rlon in waypoints:
@@ -653,6 +706,15 @@ def generate_scenarios(coords, aux_risk, r_intervals,
         ])
     # RNG state after last warmup flows forward into disruption/demand draws.
 
+    # Pre-compute once: union of all direct edges across road + geo graphs.
+    # WARNING — known asymmetry: pairs in _all_direct are EXCLUDED from BFS
+    # reachability updates even when their direct edge is disrupted in a scenario.
+    # A pair with no direct edge gets multi-hop BFS rescue; a pair whose direct
+    # edge is blocked does NOT. This means having a direct edge that gets disrupted
+    # is strictly worse than having no direct edge at all (paper should note this).
+    _all_direct = {(min(u, v), max(u, v))
+                   for u, v in list(_road_edges) + list(_edges)}
+
     scenarios = []
     for si, (name, prob, n_epi, I_lo, I_hi, sev_mult, beta, phi) in enumerate(SCENARIO_DEFS):
 
@@ -716,10 +778,6 @@ def generate_scenarios(coords, aux_risk, r_intervals,
                                            coords[v][0], coords[v][1]) <= MAX_EDGE_KM:
                         a[1][u][v] = a[1][v][u] = 1
                         a[2][u][v] = a[2][v][u] = 1
-
-        # All-edge sets for BFS bookkeeping
-        _all_direct = {(min(u,v), max(u,v)) for u,v in
-                       list(_road_edges) + list(_edges)}
 
         # BFS: extend path-reachability to non-direct pairs (preserves direct values)
         for m in range(NUM_MODES):
@@ -980,26 +1038,31 @@ def build_instance(size="small"):
               f"supply={total_s:,.0f} kg  "
               f"phi={sc['phi_circuity']}")
 
-    # ── Step 6: Hub capacity (calibrated to worst-case demand) ───────────────
+    # ── Step 6: Hub capacity (tier-based, demand-scaled) ─────────────────────
     print("  [5] Calibrating hub capacities ...")
     max_demand_kg = max(
         GAMMA * sum(float(v) for v in sc["demand"].values())
         for sc in scenarios
     )
+    per_hub_base = max_demand_kg / n_H  # reference unit for multipliers
+
     hub_capacity   = {}
     hub_fixed_cost = {}
     hub_hold_cost  = {}
     for k in hub_idx:
         _, lon = coords[k]
-        tf = terrain_factor(lon)
-        hub_capacity[str(k)]   = int(max_demand_kg / n_H * random.uniform(3.0, 6.0) * tf)
+        tf   = terrain_factor(lon)
+        tier = _HUB_TIER.get(names[k], 3)  # default tier 3 for unknown hubs
+        lo_m, hi_m = _TIER_CAPACITY_MULT[tier]
+        hub_capacity[str(k)]   = int(random.uniform(lo_m, hi_m) * per_hub_base)
+        # terrain_factor correctly applied to cost (mountain ops are more expensive)
         hub_fixed_cost[str(k)] = round(random.uniform(60000, 200000) * tf, 2)
         hub_hold_cost[str(k)]  = round(random.uniform(0.2, 0.8), 4)
 
     total_kappa = sum(hub_capacity.values())
     print(f"      max_demand={max_demand_kg:,.0f} kg  "
           f"total_kappa={total_kappa:,.0f} kg  "
-          f"ratio={total_kappa/max_demand_kg:.1f}x")
+          f"ratio={total_kappa/max_demand_kg:.2f}x")
 
     # ── Step 7: Daganzo Theta ─────────────────────────────────────────────────
     print("  [6] Pre-computing Daganzo Theta matrix ...")
