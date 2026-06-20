@@ -45,6 +45,27 @@ _SOLVER_BIN  = _ROOT / "src" / "solver" / ("solver.exe" if sys.platform.startswi
 _DEFAULT_GEN = {"CV Large": 500, "CV Small": 300}
 _INF_SENTINEL = 1e9
 
+_SC_COLORS = ["#0277BD", "#E65100", "#B71C1C"]  # mild=blue, severe=orange, extreme=red
+
+
+def _scenario_selector(key: str) -> int:
+    """Three-button scenario selector. Returns selected scenario index 0/1/2."""
+    idx = st.session_state.get("scenario_idx", 0)
+    cols = st.columns(3)
+    for i, (col, name, prob, icon, color) in enumerate(
+        zip(cols, _SC_NAMES, _SC_PROBS, _SC_ICONS, _SC_COLORS)
+    ):
+        with col:
+            if st.button(
+                f"{icon} **{name}** — p={prob}",
+                key=f"sc_{key}_{i}",
+                use_container_width=True,
+                type="primary" if idx == i else "secondary",
+            ):
+                st.session_state["scenario_idx"] = i
+                st.rerun()
+    return idx
+
 
 # ── cached loaders ────────────────────────────────────────────────────────────
 
@@ -308,10 +329,11 @@ def _render_stage1_panel(
         import pandas as pd  # noqa: PLC0415
         st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
         st.markdown(
-            f"Total cost **${solution.Z1/1e6:.2f}M** · "
-            f"{solution.num_open_hubs} hubs · "
-            f"Pre-stock **{total_prestock/1e3:.0f} t** · "
-            f"Hold cost **${total_hold_cost:,.0f}**"
+            f'Total cost <b>&#36;{solution.Z1/1e6:.2f}M</b> · '
+            f'{solution.num_open_hubs} hubs · '
+            f'Pre-stock <b>{total_prestock/1e3:.0f} t</b> · '
+            f'Hold cost <b>&#36;{total_hold_cost:,.0f}</b>',
+            unsafe_allow_html=True,
         )
     else:
         st.info("No hubs established in this solution.")
@@ -350,9 +372,10 @@ def _render_pareto_panel(
         unsafe_allow_html=True,
     )
     st.markdown(
-        f"Z1 = **${solution.Z1/1e6:.2f}M** · Z2 = **{solution.Z2:,.0f}** · "
+        f"Z1 = <b>&#36;{solution.Z1/1e6:.2f}M</b> · Z2 = <b>{solution.Z2:,.0f}</b> · "
         f"{z2_reduction:.1f}% better deprivation vs worst · "
-        f"{cost_premium:+.1f}% cost vs cheapest"
+        f"{cost_premium:+.1f}% cost vs cheapest",
+        unsafe_allow_html=True,
     )
 
     st.divider()
@@ -460,10 +483,7 @@ def main() -> None:
         dataset_label = f"{dataset_name} ({version_name})"
 
         st.divider()
-        pf_only     = st.checkbox("Pareto front only",    value=True)
-        show_labels = st.checkbox("Node labels",          value=False)
-        show_alloc  = st.checkbox("Allocation routes",    value=True)
-        show_trans  = st.checkbox("Transshipment flows",  value=True)
+        pf_only = st.checkbox("Pareto front only", value=True)
         st.divider()
 
         if paths.get("result"):
@@ -609,7 +629,7 @@ def main() -> None:
                     f'<div style="text-align:center;padding:5px 10px;background:#f0f2f6;'
                     f'border-radius:6px;font-size:13px">'
                     f'<b>Solution {sel_idx + 1} / {len(solutions)}</b>{_badge_html}'
-                    f' · Z1 = <b>${solution.Z1/1e6:.2f}M</b>'
+                    f' · Z1 = <b>&#36;{solution.Z1/1e6:.2f}M</b>'
                     f' · Z2 = <b>{solution.Z2:,.0f}</b>'
                     f'</div>',
                     unsafe_allow_html=True,
@@ -619,25 +639,18 @@ def main() -> None:
                     st.session_state["selected_idx"] = (sel_idx + 1) % len(solutions)
                     st.rerun()
 
-        # ── Controls above map ────────────────────────────────────────────────
-        ctrl1, ctrl2 = st.columns([3, 2])
-        with ctrl1:
-            scenario_idx = st.radio(
-                "Flood scenario",
-                options=[0, 1, 2],
-                format_func=lambda i: f"{_SC_ICONS[i]} {_SC_NAMES[i]} (p={_SC_PROBS[i]})",
-                index=ss.get("scenario_idx", 0),
-                horizontal=True,
-                key="scenario_radio_sol",
-            )
-            ss["scenario_idx"] = scenario_idx
-        with ctrl2:
-            map_mode = st.radio(
-                "Map view",
-                ["Single scenario", "Compare all 3 scenarios"],
-                horizontal=True,
-                key="map_mode_radio",
-            )
+        # ── Scenario selector ─────────────────────────────────────────────────
+        st.markdown("**Flood scenario**")
+        scenario_idx = _scenario_selector("sol")
+        ss["scenario_idx"] = scenario_idx
+        sc_label = _SC_NAMES[scenario_idx]
+
+        map_mode = st.radio(
+            "Map view",
+            ["Single scenario", "Compare all 3 scenarios"],
+            horizontal=True,
+            key="map_mode_radio",
+        )
 
         min_demand_filter = st.slider(
             "Hide rescue lines from nodes with demand <",
@@ -646,7 +659,27 @@ def main() -> None:
             key="min_demand_filter_sol",
         )
 
-        sc_label = _SC_NAMES[scenario_idx]
+        # ── Mini Pareto (collapsed by default for quick trade-off view) ───────
+        if len(solutions) > 1:
+            with st.expander("📈 Pareto front — click a point to jump", expanded=False):
+                _mfig = build_pareto_fig(solutions, selected_idx=sel_idx, title="")
+                _mfig.update_layout(
+                    height=200,
+                    margin=dict(l=30, r=10, t=10, b=30),
+                    showlegend=False,
+                )
+                _mev = st.plotly_chart(
+                    _mfig, on_select="rerun", key="pareto_mini", use_container_width=True
+                )
+                try:
+                    _pts = _mev.selection.points  # type: ignore[union-attr]
+                    if _pts:
+                        _ci = int(_pts[0].customdata[0])  # type: ignore[index]
+                        if _ci != sel_idx:
+                            st.session_state["selected_idx"] = _ci
+                            st.rerun()
+                except (AttributeError, TypeError, IndexError):
+                    pass
 
         # Load flows
         flow_sc      = _pick_flow(sel_idx, solution, result, scenario_idx,
@@ -668,8 +701,8 @@ def main() -> None:
                 node_info=node_info, solution=solution,
                 scenario_flow=flow_sc, instance_data=inst_raw,
                 scenario_idx=scenario_idx,
-                show_labels=show_labels, show_alloc=show_alloc,
-                show_transshipment=show_trans,
+                show_labels=False, show_alloc=True,
+                show_transshipment=True,
                 min_demand_filter=min_demand_filter,
             )
             st_folium(fmap, width="100%", height=620, returned_objects=[],
@@ -692,8 +725,8 @@ def main() -> None:
                         node_info=node_info, solution=solution,
                         scenario_flow=fsc, instance_data=inst_raw,
                         scenario_idx=s_idx,
-                        show_labels=False, show_alloc=show_alloc,
-                        show_transshipment=show_trans,
+                        show_labels=False, show_alloc=True,
+                        show_transshipment=True,
                         compact=True,
                         min_demand_filter=min_demand_filter,
                     )
@@ -720,88 +753,20 @@ def main() -> None:
     # VIEW 2 — Input Dataset Explorer
     # ════════════════════════════════════════════════════════════════════════
     elif view == "📊 Input Dataset":
-        # Scenario toggle above the dataset map
-        sc_row1, sc_row2 = st.columns([3, 2])
-        with sc_row1:
-            scenario_idx = st.radio(
-                "Flood scenario",
-                options=[0, 1, 2],
-                format_func=lambda i: f"{_SC_ICONS[i]} {_SC_NAMES[i]} (p={_SC_PROBS[i]})",
-                index=ss.get("scenario_idx", 0),
-                horizontal=True,
-                key="scenario_radio_ds",
-            )
-            ss["scenario_idx"] = scenario_idx
-
+        # ── Scenario selector ─────────────────────────────────────────────────
+        st.markdown("**Flood scenario**")
+        scenario_idx = _scenario_selector("ds")
+        ss["scenario_idx"] = scenario_idx
         sc_label = _SC_NAMES[scenario_idx]
-        st.caption(f"Dataset: **{dataset_label}** · Scenario: **{sc_label}**")
+        st.caption(f"Dataset: **{dataset_label}** · Scenario: **{sc_label}**  "
+                   f"(use the layer control ≡ on the map to toggle overlays)")
 
-        # Scenario KPI summary
-        sc_raw    = inst_raw.get("scenarios", [])
-        sc_data   = sc_raw[scenario_idx] if scenario_idx < len(sc_raw) else {}
-        mild_sc   = sc_raw[0] if sc_raw else {}
-        num_I     = inst_raw.get("dimensions", {}).get("num_I", len(node_info.demand_indices))
-
-        demand_vals = {int(k): float(v) for k, v in sc_data.get("demand", {}).items()}
-        mild_demand = {int(k): float(v) for k, v in mild_sc.get("demand", {}).items()}
-        risk_list   = sc_data.get("risk", [])
-        mild_risk   = mild_sc.get("risk", [])
-
-        total_demand = sum(demand_vals.values())
-        mild_total   = sum(mild_demand.values())
-        avg_risk     = sum(risk_list[:num_I]) / num_I if num_I and risk_list else 0.0
-        mild_avg     = sum(mild_risk[:num_I]) / num_I if num_I and mild_risk else 0.0
-
-        d1, d2, d3 = st.columns(3)
-        d1.metric("Total Relief Demand", f"{total_demand:,.0f} units",
-                  delta=f"{total_demand - mild_total:+,.0f} vs Mild" if scenario_idx > 0 else None,
-                  delta_color="inverse")
-        d2.metric("Avg Node Risk", f"{avg_risk:.3f}",
-                  delta=f"{avg_risk - mild_avg:+.3f} vs Mild" if scenario_idx > 0 else None,
-                  delta_color="inverse")
-        epicenters = sc_data.get("epicenters", [])
-        d3.metric("Flood Epicentres", len(epicenters))
-
-        # Layer toggles — immediate apply (no form batching needed for map explorer UX)
-        st.divider()
-        _fr1, _fr2, _fr3 = st.columns([3, 1, 1])
-        with _fr1:
-            risk_overlay = st.radio(
-                "Risk overlay",
-                ["Situational (scenario)", "Intrinsic (static)", "None"],
-                index=0,
-                horizontal=True,
-                key="ds_risk_overlay",
-            )
-        with _fr2:
-            ds_dem = st.checkbox("Demand",     value=True,  key="ds_dem")
-        with _fr3:
-            ds_epi = st.checkbox("Epicentres", value=True,  key="ds_epi")
-
-        _fa1, _fa2, _fa3, _fa4 = st.columns([1, 1, 1, 2])
-        with _fa1:
-            ds_road  = st.checkbox("Road",               value=True,  key="ds_road")
-        with _fa2:
-            ds_water = st.checkbox("Water",              value=True,  key="ds_water")
-        with _fa3:
-            ds_air   = st.checkbox("Air",                value=False, key="ds_air")
-        with _fa4:
-            ds_pop   = st.checkbox("Population circles", value=False, key="ds_pop")
-
-        ds_risk  = risk_overlay == "Situational (scenario)"
-        ds_irisk = risk_overlay == "Intrinsic (static)"
-        min_pop  = 0
-
+        # ── Map — layer toggles live inside the Folium LayerControl ──────────
+        # Risk index and Intrinsic risk (static) are mutually exclusive via JS.
         dmap = build_dataset_map(
             node_info=node_info, instance_data=inst_raw, scenario_idx=scenario_idx,
-            show_risk=ds_risk, show_demand=ds_dem, show_epicenters=ds_epi,
-            show_road=ds_road, show_water=ds_water, show_air=ds_air,
-            show_population=ds_pop, show_intrinsic_risk=ds_irisk,
-            min_pop_threshold=min_pop,
         )
-        _dmap_key = (f"dmap_{dataset_name}_{version_name}_{scenario_idx}"
-                     f"_{ds_risk}_{ds_dem}_{ds_epi}_{ds_road}_{ds_water}_{ds_air}"
-                     f"_{ds_pop}_{ds_irisk}")
+        _dmap_key = f"dmap_{dataset_name}_{version_name}_{scenario_idx}"
         st_folium(dmap, width="100%", height=640, returned_objects=[], key=_dmap_key)
 
         st.download_button(
@@ -810,6 +775,38 @@ def main() -> None:
             file_name=f"dataset_{dataset_name.lower().replace(' ','_')}_{version_name}_{sc_label.lower()}.html",
             mime="text/html",
         )
+
+        # ── Scenario KPIs — shown below the map ───────────────────────────────
+        sc_raw    = inst_raw.get("scenarios", [])
+        sc_data   = sc_raw[scenario_idx] if scenario_idx < len(sc_raw) else {}
+        mild_sc   = sc_raw[0] if sc_raw else {}
+        num_I     = inst_raw.get("dimensions", {}).get("num_I", len(node_info.demand_indices))
+
+        _dv   = {int(k): float(v) for k, v in sc_data.get("demand", {}).items()}
+        _mdv  = {int(k): float(v) for k, v in mild_sc.get("demand", {}).items()}
+        _rl   = sc_data.get("risk", [])
+        _mrl  = mild_sc.get("risk", [])
+
+        total_demand = sum(_dv.values())
+        mild_total   = sum(_mdv.values())
+        avg_risk     = sum(_rl[:num_I]) / num_I if num_I and _rl else 0.0
+        mild_avg     = sum(_mrl[:num_I]) / num_I if num_I and _mrl else 0.0
+
+        with st.expander("📊 Scenario KPIs", expanded=True):
+            d1, d2, d3 = st.columns(3)
+            d1.metric(
+                "Total Relief Demand",
+                f"{total_demand:,.0f} units",
+                delta=f"{total_demand - mild_total:+,.0f} vs Mild" if scenario_idx > 0 else None,
+                delta_color="inverse",
+            )
+            d2.metric(
+                "Avg Node Risk",
+                f"{avg_risk:.3f}",
+                delta=f"{avg_risk - mild_avg:+.3f} vs Mild" if scenario_idx > 0 else None,
+                delta_color="inverse",
+            )
+            d3.metric("Flood Epicentres", len(sc_data.get("epicenters", [])))
 
     # ════════════════════════════════════════════════════════════════════════
     # VIEW 3 — Experiments
