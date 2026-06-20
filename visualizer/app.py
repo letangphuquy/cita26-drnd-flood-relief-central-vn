@@ -256,9 +256,9 @@ def _render_stage2_panel(
         best_z2_sol = min(solutions, key=lambda s: s.Z2)
         z2_reduction = (best_z2_sol.Z2 - solution.Z2) / best_z2_sol.Z2 * 100 if best_z2_sol.Z2 > 0 else 0
         cost_premium = (solution.Z1 - best_z1_sol.Z1) / best_z1_sol.Z1 * 100 if best_z1_sol.Z1 > 0 else 0
-        st.caption(
-            f"Worst-case deprivation: **{solution.Z2:,.0f}** person-hrs &nbsp;|&nbsp; "
-            f"vs lowest-cost plan: **{z2_reduction:+.1f}%** deprivation, **{cost_premium:+.1f}%** cost"
+        st.markdown(
+            f"Worst-case deprivation: **{solution.Z2:,.0f}** person-hrs · "
+            f"vs lowest-cost: **{z2_reduction:+.1f}%** deprivation, **{cost_premium:+.1f}%** cost"
         )
 
 
@@ -307,11 +307,11 @@ def _render_stage1_panel(
     if rows:
         import pandas as pd  # noqa: PLC0415
         st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
-        st.caption(
-            f"Total logistics cost: **${solution.Z1/1e6:.2f}M** &nbsp;|&nbsp; "
-            f"{solution.num_open_hubs} hubs established &nbsp;|&nbsp; "
-            f"Total pre-stock: **{total_prestock/1e3:.0f} tonnes** &nbsp;|&nbsp; "
-            f"Total hold cost (Stage-1): **${total_hold_cost:,.0f}**"
+        st.markdown(
+            f"Total cost **${solution.Z1/1e6:.2f}M** · "
+            f"{solution.num_open_hubs} hubs · "
+            f"Pre-stock **{total_prestock/1e3:.0f} t** · "
+            f"Hold cost **${total_hold_cost:,.0f}**"
         )
     else:
         st.info("No hubs established in this solution.")
@@ -349,10 +349,10 @@ def _render_pareto_panel(
         f"border-radius:6px;display:inline-block;font-size:12px'>{badge_label}</div>",
         unsafe_allow_html=True,
     )
-    st.caption(
-        f"Z1 = **${solution.Z1/1e6:.2f}M** &nbsp; Z2 = **{solution.Z2:,.0f}** &nbsp; "
-        f"| {z2_reduction:.1f}% better deprivation vs worst &nbsp; "
-        f"| {cost_premium:+.1f}% cost vs cheapest"
+    st.markdown(
+        f"Z1 = **${solution.Z1/1e6:.2f}M** · Z2 = **{solution.Z2:,.0f}** · "
+        f"{z2_reduction:.1f}% better deprivation vs worst · "
+        f"{cost_premium:+.1f}% cost vs cheapest"
     )
 
     st.divider()
@@ -408,7 +408,7 @@ def _render_pareto_panel(
         st.write(f"**Open hubs ({solution.num_open_hubs}):**")
         for name in open_hub_names:
             st.write(f"  • {name}")
-        st.write(f"**Rank:** {solution.rank} &nbsp; **CV:** {solution.CV:.4f}")
+        st.write(f"**Rank:** {solution.rank} · **CV:** {solution.CV:.4f}")
 
 
 # ── main ──────────────────────────────────────────────────────────────────────
@@ -535,19 +535,33 @@ def main() -> None:
             )
 
     # ── Top header + global nav ───────────────────────────────────────────────
-    st.title("Disaster Relief Network — Decision Support System")
-    st.caption(f"Dataset: **{dataset_label}** · {len(solutions)} feasible solutions loaded")
-
-    view = st.radio(
-        "",
-        ["🗺️ Solution", "📊 Input Dataset", "📈 Experiments"],
-        index=["🗺️ Solution", "📊 Input Dataset", "📈 Experiments"].index(ss.get("view", "🗺️ Solution")),
-        horizontal=True,
-        label_visibility="collapsed",
-        key="global_nav",
-    )
-    ss["view"] = view
-
+    _h_col, _nav_col, _info_col = st.columns([1, 3, 2])
+    with _h_col:
+        st.markdown(
+            '<p style="font-size:12px;font-weight:600;white-space:nowrap;'
+            'margin:0;padding-top:8px;color:#333">🗺️ Relief Network DSS</p>',
+            unsafe_allow_html=True,
+        )
+    with _nav_col:
+        view = st.radio(
+            "",
+            ["🗺️ Solution", "📊 Input Dataset", "📈 Experiments"],
+            index=["🗺️ Solution", "📊 Input Dataset", "📈 Experiments"].index(
+                ss.get("view", "🗺️ Solution")
+            ),
+            horizontal=True,
+            label_visibility="collapsed",
+            key="global_nav",
+        )
+        ss["view"] = view
+    with _info_col:
+        _n_sol = len(solutions)
+        st.markdown(
+            f'<div style="text-align:right;padding-top:10px;font-size:12px;color:#555">'
+            f'{dataset_label} · {_n_sol} solution{"s" if _n_sol != 1 else ""}'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
     st.divider()
 
     # ════════════════════════════════════════════════════════════════════════
@@ -565,6 +579,45 @@ def main() -> None:
             st.stop()
 
         num_hubs = len(node_info.hub_indices)
+
+        # ── Solution carousel ─────────────────────────────────────────────────
+        if len(solutions) > 1:
+            _z1s = [s.Z1 for s in solutions]
+            _z2s = [s.Z2 for s in solutions]
+            _z1r = (max(_z1s) - min(_z1s)) or 1.0
+            _z2r = (max(_z2s) - min(_z2s)) or 1.0
+            _knee = min(
+                range(len(solutions)),
+                key=lambda i: max(
+                    (solutions[i].Z1 - min(_z1s)) / _z1r,
+                    (solutions[i].Z2 - min(_z2s)) / _z2r,
+                ),
+            )
+            _badge = ("⭐ Knee" if sel_idx == _knee else
+                      "💰 Best Z1" if sel_idx == _z1s.index(min(_z1s)) else
+                      "⚖️ Best Z2" if sel_idx == _z2s.index(min(_z2s)) else "")
+            _cc1, _cc2, _cc3 = st.columns([1, 10, 1])
+            with _cc1:
+                if st.button("◀", key="car_prev", use_container_width=True):
+                    st.session_state["selected_idx"] = (sel_idx - 1) % len(solutions)
+                    st.rerun()
+            with _cc2:
+                _badge_html = (f' <span style="background:#1976D2;color:white;'
+                               f'padding:1px 7px;border-radius:4px;font-size:11px">{_badge}</span>'
+                               if _badge else "")
+                st.markdown(
+                    f'<div style="text-align:center;padding:5px 10px;background:#f0f2f6;'
+                    f'border-radius:6px;font-size:13px">'
+                    f'<b>Solution {sel_idx + 1} / {len(solutions)}</b>{_badge_html}'
+                    f' · Z1 = <b>${solution.Z1/1e6:.2f}M</b>'
+                    f' · Z2 = <b>{solution.Z2:,.0f}</b>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+            with _cc3:
+                if st.button("▶", key="car_next", use_container_width=True):
+                    st.session_state["selected_idx"] = (sel_idx + 1) % len(solutions)
+                    st.rerun()
 
         # ── Controls above map ────────────────────────────────────────────────
         ctrl1, ctrl2 = st.columns([3, 2])
@@ -585,6 +638,13 @@ def main() -> None:
                 horizontal=True,
                 key="map_mode_radio",
             )
+
+        min_demand_filter = st.slider(
+            "Hide rescue lines from nodes with demand <",
+            min_value=0, max_value=5000, value=0, step=100,
+            help="Hides allocation lines from low-demand communes. Demand dots remain on map.",
+            key="min_demand_filter_sol",
+        )
 
         sc_label = _SC_NAMES[scenario_idx]
 
@@ -610,6 +670,7 @@ def main() -> None:
                 scenario_idx=scenario_idx,
                 show_labels=show_labels, show_alloc=show_alloc,
                 show_transshipment=show_trans,
+                min_demand_filter=min_demand_filter,
             )
             st_folium(fmap, width="100%", height=620, returned_objects=[],
                       key=f"map_{sel_idx}_{scenario_idx}")
@@ -633,6 +694,8 @@ def main() -> None:
                         scenario_idx=s_idx,
                         show_labels=False, show_alloc=show_alloc,
                         show_transshipment=show_trans,
+                        compact=True,
+                        min_demand_filter=min_demand_filter,
                     )
                     st_folium(fm, width="100%", height=420, returned_objects=[],
                               key=f"map3_{sel_idx}_{s_idx}")
@@ -699,27 +762,35 @@ def main() -> None:
         epicenters = sc_data.get("epicenters", [])
         d3.metric("Flood Epicentres", len(epicenters))
 
-        # Layer toggles
+        # Layer toggles — immediate apply (no form batching needed for map explorer UX)
         st.divider()
-        st.write("**Scenario-dependent layers:**")
-        t1, t2, t3, t4, t5, t6 = st.columns(6)
-        ds_risk  = t1.checkbox("Risk",        value=True,  key="ds_risk")
-        ds_dem   = t2.checkbox("Demand",      value=True,  key="ds_dem")
-        ds_epi   = t3.checkbox("Epicentres",  value=True,  key="ds_epi")
-        ds_road  = t4.checkbox("Road",        value=True,  key="ds_road")
-        ds_water = t5.checkbox("Water",       value=True,  key="ds_water")
-        ds_air   = t6.checkbox("Air",         value=False, key="ds_air")
+        _fr1, _fr2, _fr3 = st.columns([3, 1, 1])
+        with _fr1:
+            risk_overlay = st.radio(
+                "Risk overlay",
+                ["Situational (scenario)", "Intrinsic (static)", "None"],
+                index=0,
+                horizontal=True,
+                key="ds_risk_overlay",
+            )
+        with _fr2:
+            ds_dem = st.checkbox("Demand",     value=True,  key="ds_dem")
+        with _fr3:
+            ds_epi = st.checkbox("Epicentres", value=True,  key="ds_epi")
 
-        st.write("**Static layers (scenario-independent):**")
-        s1, s2, s3 = st.columns([1, 1, 3])
-        ds_pop   = s1.checkbox("Population circles",  value=False, key="ds_pop")
-        ds_irisk = s2.checkbox("Intrinsic risk",      value=False, key="ds_irisk")
-        # D9 — hide low-demand nodes
-        min_pop = s3.slider(
-            "Hide demand nodes with population <", min_value=0, max_value=5000,
-            value=ss.get("min_pop_threshold", 0), step=100, key="min_pop_slider",
-        )
-        ss["min_pop_threshold"] = min_pop
+        _fa1, _fa2, _fa3, _fa4 = st.columns([1, 1, 1, 2])
+        with _fa1:
+            ds_road  = st.checkbox("Road",               value=True,  key="ds_road")
+        with _fa2:
+            ds_water = st.checkbox("Water",              value=True,  key="ds_water")
+        with _fa3:
+            ds_air   = st.checkbox("Air",                value=False, key="ds_air")
+        with _fa4:
+            ds_pop   = st.checkbox("Population circles", value=False, key="ds_pop")
+
+        ds_risk  = risk_overlay == "Situational (scenario)"
+        ds_irisk = risk_overlay == "Intrinsic (static)"
+        min_pop  = 0
 
         dmap = build_dataset_map(
             node_info=node_info, instance_data=inst_raw, scenario_idx=scenario_idx,
@@ -730,7 +801,7 @@ def main() -> None:
         )
         _dmap_key = (f"dmap_{dataset_name}_{version_name}_{scenario_idx}"
                      f"_{ds_risk}_{ds_dem}_{ds_epi}_{ds_road}_{ds_water}_{ds_air}"
-                     f"_{ds_pop}_{ds_irisk}_{min_pop}")
+                     f"_{ds_pop}_{ds_irisk}")
         st_folium(dmap, width="100%", height=640, returned_objects=[], key=_dmap_key)
 
         st.download_button(
