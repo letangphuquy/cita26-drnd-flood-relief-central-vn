@@ -381,16 +381,15 @@ def _render_pareto_panel(
     st.divider()
 
     fig = build_pareto_fig(solutions, selected_idx=sel_idx, title="")
-    event = st.plotly_chart(fig, on_select="rerun", key="pareto_chart", use_container_width=True)
-    try:
-        pts = event.selection.points  # type: ignore[union-attr]
-        if pts:
-            clicked_idx = int(pts[0].customdata[0])  # type: ignore[index]
-            if clicked_idx != sel_idx:
-                st.session_state["selected_idx"] = clicked_idx
-                st.rerun()
-    except (AttributeError, TypeError, IndexError):
-        pass
+    fig.update_layout(dragmode="select")
+    fig.update_xaxes(fixedrange=True)
+    fig.update_yaxes(fixedrange=True)
+    event = st.plotly_chart(fig, on_select="rerun", selection_mode="points",
+                            key="pareto_chart", use_container_width=True)
+    for _pt in (event.selection.points or []):
+        if _pt["curve_number"] == 0 and _pt["point_number"] != sel_idx:
+            st.session_state["selected_idx"] = _pt["point_number"]
+            st.rerun()
 
     # Navigation
     qj1, qj2, qj3 = st.columns(3)
@@ -422,16 +421,6 @@ def _render_pareto_panel(
             st.session_state["selected_idx"] = (sel_idx + 1) % len(solutions)
             st.rerun()
 
-    with st.expander("Solution details"):
-        open_hub_names = [
-            node_info.names[node_info.hub_indices[k]]
-            if node_info.hub_indices[k] < len(node_info.names) else f"Hub {k}"
-            for k in solution.open_hubs
-        ]
-        st.write(f"**Open hubs ({solution.num_open_hubs}):**")
-        for name in open_hub_names:
-            st.write(f"  • {name}")
-        st.write(f"**Rank:** {solution.rank} · **CV:** {solution.CV:.4f}")
 
 
 # ── main ──────────────────────────────────────────────────────────────────────
@@ -444,23 +433,31 @@ def main() -> None:
         initial_sidebar_state="expanded",
     )
 
+    st.markdown(
+        "<style>"
+        "[data-testid='stHeader']{display:none!important}"
+        "[data-testid='stMainBlockContainer']{padding-top:0.5rem}"
+        "</style>",
+        unsafe_allow_html=True,
+    )
+
     # ── Session defaults ──────────────────────────────────────────────────────
     ss = st.session_state
-    ss.setdefault("selected_idx",   0)
-    ss.setdefault("dataset",        DATASETS[0])
-    ss.setdefault("dataset_version", "v1")
-    ss.setdefault("scenario_idx",   0)
-    ss.setdefault("view",           "🗺️ Solution")
+    ss.setdefault("selected_idx",      0)
+    ss.setdefault("dataset",           DATASETS[0])
+    ss.setdefault("dataset_version",   "v1")
+    ss.setdefault("scenario_idx",      0)
+    ss.setdefault("map_mode",          "Single scenario")
+    ss.setdefault("min_demand_filter", 0)
 
-    # ── Sidebar ───────────────────────────────────────────────────────────────
+    # ── Sidebar Part 1 — Dataset controls (needed before data load) ───────────
     with st.sidebar:
         st.title("🗺️ Relief Network DSS")
         st.caption("MO-IHLNDP · PB-NSGA · Central Vietnam")
         st.divider()
 
         dataset_name = st.radio(
-            "Dataset",
-            DATASETS,
+            "Dataset", DATASETS,
             index=DATASETS.index(ss["dataset"]),
             key="dataset_radio",
         )
@@ -470,8 +467,7 @@ def main() -> None:
         if ss["dataset_version"] not in version_options:
             ss["dataset_version"] = "v1"
         version_name = st.radio(
-            "Dataset version",
-            version_options,
+            "Dataset version", version_options,
             index=version_options.index(ss["dataset_version"]),
             format_func=lambda v: "v1 — canonical" if v == "v1" else "v2 — planar",
             horizontal=True,
@@ -479,13 +475,105 @@ def main() -> None:
         )
         ss["dataset_version"] = version_name
 
-        paths = get_explorer_config(dataset_name, version_name)
-        dataset_label = f"{dataset_name} ({version_name})"
+    paths = get_explorer_config(dataset_name, version_name)
+    dataset_label = f"{dataset_name} ({version_name})"
+
+    # ── Load data ─────────────────────────────────────────────────────────────
+    pf_only = True
+    try:
+        _inst_mtime = Path(paths["instance"]).stat().st_mtime
+        result    = (_load_result(paths["result"], Path(paths["result"]).stat().st_mtime)
+                     if paths.get("result") else None)
+        node_info = _load_instance(paths["instance"], _inst_mtime)
+        inst_raw  = _load_instance_raw(paths["instance"], _inst_mtime)
+    except Exception as e:
+        st.error(f"Failed to load data: {e}")
+        st.stop()
+
+    solutions: List[Solution] = []
+    sel_idx  = 0
+    solution: Optional[Solution] = None
+    no_feasible_msg: Optional[str] = None
+    if result is not None:
+        solutions = _get_solutions(result, pf_only)
+        if solutions:
+            sel_idx  = min(ss["selected_idx"], len(solutions) - 1)
+            solution = solutions[sel_idx]
+        else:
+            all_sols = result.pareto_front or result.all_feasible
+            best_cv  = min((s.CV for s in all_sols), default=0.0)
+            no_feasible_msg = (
+                f"**{dataset_label}** has no zero-violation (CV=0) solutions — "
+                f"best CV found: **{best_cv:,.2f}**. Try a different seed/algo via Run Solver."
+            )
+
+    # ── Sidebar Part 2 — Solution controls + mini Pareto + map options ────────
+    with st.sidebar:
+        st.divider()
+
+        if solutions and len(solutions) > 1:
+            _z1s = [s.Z1 for s in solutions]
+            _z2s = [s.Z2 for s in solutions]
+            _z1r = (max(_z1s) - min(_z1s)) or 1.0
+            _z2r = (max(_z2s) - min(_z2s)) or 1.0
+            _knee_idx = min(
+                range(len(solutions)),
+                key=lambda i: max(
+                    (solutions[i].Z1 - min(_z1s)) / _z1r,
+                    (solutions[i].Z2 - min(_z2s)) / _z2r,
+                ),
+            )
+            st.markdown("**Pareto front** — click to select")
+            _sfig = build_pareto_fig(solutions, selected_idx=sel_idx, title="")
+            _sfig.update_layout(
+                height=180, margin=dict(l=20, r=8, t=4, b=25), showlegend=False,
+                dragmode="select",
+            )
+            _sfig.update_xaxes(fixedrange=True)
+            _sfig.update_yaxes(fixedrange=True)
+            _sev = st.plotly_chart(
+                _sfig, on_select="rerun", selection_mode="points",
+                key="pareto_sidebar", use_container_width=True,
+            )
+            for _pt in (_sev.selection.points or []):
+                if _pt["curve_number"] == 0 and _pt["point_number"] != sel_idx:
+                    ss["selected_idx"] = _pt["point_number"]
+                    st.rerun()
+            _qb1, _qb2, _qb3 = st.columns(3)
+            if _qb1.button("💰 Z1",  use_container_width=True, help="Cheapest solution"):
+                ss["selected_idx"] = int(min(range(len(solutions)), key=lambda i: solutions[i].Z1))
+                st.rerun()
+            if _qb2.button("⚖️ Z2",  use_container_width=True, help="Lowest deprivation"):
+                ss["selected_idx"] = int(min(range(len(solutions)), key=lambda i: solutions[i].Z2))
+                st.rerun()
+            if _qb3.button("⭐ Knee", use_container_width=True, help="Balanced — recommended"):
+                ss["selected_idx"] = _knee_idx
+                st.rerun()
 
         st.divider()
-        pf_only = st.checkbox("Pareto front only", value=True)
-        st.divider()
+        st.markdown("**Map controls**")
+        map_mode = st.radio(
+            "View",
+            ["Single scenario", "Compare all 3 scenarios"],
+            index=["Single scenario", "Compare all 3 scenarios"].index(ss["map_mode"]),
+            horizontal=True,
+            key="map_mode_radio",
+        )
+        ss["map_mode"] = map_mode
 
+        min_demand_filter = st.slider(
+            "Hide rescue lines < demand",
+            min_value=0, max_value=5000,
+            value=ss["min_demand_filter"],
+            step=100,
+            help="Hides allocation lines from low-demand communes. Demand dots remain on map.",
+            key="min_demand_slider",
+        )
+        ss["min_demand_filter"] = min_demand_filter
+
+    # ── Sidebar Part 3 — Flow status + solver ────────────────────────────────
+    with st.sidebar:
+        st.divider()
         if paths.get("result"):
             avail = flows_available(flows_dir=paths.get("flows_dir"))
             if avail:
@@ -527,67 +615,13 @@ def main() -> None:
                     ss["selected_idx"] = 0
                     st.rerun()
 
-    # ── Load data ─────────────────────────────────────────────────────────────
-    try:
-        _inst_mtime = Path(paths["instance"]).stat().st_mtime
-        result    = _load_result(paths["result"], Path(paths["result"]).stat().st_mtime) if paths.get("result") else None
-        node_info = _load_instance(paths["instance"], _inst_mtime)
-        inst_raw  = _load_instance_raw(paths["instance"], _inst_mtime)
-    except Exception as e:
-        st.error(f"Failed to load data: {e}")
-        st.stop()
-
-    solutions: List[Solution] = []
-    sel_idx  = 0
-    solution: Optional[Solution] = None
-    no_feasible_msg: Optional[str] = None
-    if result is not None:
-        solutions = _get_solutions(result, pf_only)
-        if solutions:
-            sel_idx  = min(ss["selected_idx"], len(solutions) - 1)
-            solution = solutions[sel_idx]
-        else:
-            all_sols = result.pareto_front or result.all_feasible
-            best_cv  = min((s.CV for s in all_sols), default=0.0)
-            no_feasible_msg = (
-                f"**{dataset_label}** has no zero-violation (CV=0) solutions — "
-                f"best CV found: **{best_cv:,.2f}**. Try a different seed/algo via Run Solver."
-            )
-
-    # ── Top header + global nav ───────────────────────────────────────────────
-    _h_col, _nav_col, _info_col = st.columns([1, 3, 2])
-    with _h_col:
-        st.markdown(
-            '<p style="font-size:12px;font-weight:600;white-space:nowrap;'
-            'margin:0;padding-top:8px;color:#333">🗺️ Relief Network DSS</p>',
-            unsafe_allow_html=True,
-        )
-    with _nav_col:
-        view = st.radio(
-            "",
-            ["🗺️ Solution", "📊 Input Dataset", "📈 Experiments"],
-            index=["🗺️ Solution", "📊 Input Dataset", "📈 Experiments"].index(
-                ss.get("view", "🗺️ Solution")
-            ),
-            horizontal=True,
-            label_visibility="collapsed",
-            key="global_nav",
-        )
-        ss["view"] = view
-    with _info_col:
-        _n_sol = len(solutions)
-        st.markdown(
-            f'<div style="text-align:right;padding-top:10px;font-size:12px;color:#555">'
-            f'{dataset_label} · {_n_sol} solution{"s" if _n_sol != 1 else ""}'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
-    st.divider()
+    # ── Global tabs ───────────────────────────────────────────────────────────
+    tab_sol, tab_ds, tab_exp = st.tabs(["🗺️ Solution", "📊 Input Dataset", "📈 Experiments"])
 
     # ════════════════════════════════════════════════════════════════════════
-    # VIEW 1 — Solution Explorer
+    # TAB 1 — Solution Explorer
     # ════════════════════════════════════════════════════════════════════════
-    if view == "🗺️ Solution":
+    with tab_sol:
         if result is None or solution is None:
             if no_feasible_msg:
                 st.warning(no_feasible_msg)
@@ -596,164 +630,195 @@ def main() -> None:
                     f"**{dataset_label}** has no solver output yet. "
                     "Switch to v1 to explore solutions, or run the solver via the sidebar."
                 )
-            st.stop()
-
-        num_hubs = len(node_info.hub_indices)
-
-        # ── Solution carousel ─────────────────────────────────────────────────
-        if len(solutions) > 1:
-            _z1s = [s.Z1 for s in solutions]
-            _z2s = [s.Z2 for s in solutions]
-            _z1r = (max(_z1s) - min(_z1s)) or 1.0
-            _z2r = (max(_z2s) - min(_z2s)) or 1.0
-            _knee = min(
-                range(len(solutions)),
-                key=lambda i: max(
-                    (solutions[i].Z1 - min(_z1s)) / _z1r,
-                    (solutions[i].Z2 - min(_z2s)) / _z2r,
-                ),
-            )
-            _badge = ("⭐ Knee" if sel_idx == _knee else
-                      "💰 Best Z1" if sel_idx == _z1s.index(min(_z1s)) else
-                      "⚖️ Best Z2" if sel_idx == _z2s.index(min(_z2s)) else "")
-            _cc1, _cc2, _cc3 = st.columns([1, 10, 1])
-            with _cc1:
-                if st.button("◀", key="car_prev", use_container_width=True):
-                    st.session_state["selected_idx"] = (sel_idx - 1) % len(solutions)
-                    st.rerun()
-            with _cc2:
-                _badge_html = (f' <span style="background:#1976D2;color:white;'
-                               f'padding:1px 7px;border-radius:4px;font-size:11px">{_badge}</span>'
-                               if _badge else "")
-                st.markdown(
-                    f'<div style="text-align:center;padding:5px 10px;background:#f0f2f6;'
-                    f'border-radius:6px;font-size:13px">'
-                    f'<b>Solution {sel_idx + 1} / {len(solutions)}</b>{_badge_html}'
-                    f' · Z1 = <b>&#36;{solution.Z1/1e6:.2f}M</b>'
-                    f' · Z2 = <b>{solution.Z2:,.0f}</b>'
-                    f'</div>',
-                    unsafe_allow_html=True,
-                )
-            with _cc3:
-                if st.button("▶", key="car_next", use_container_width=True):
-                    st.session_state["selected_idx"] = (sel_idx + 1) % len(solutions)
-                    st.rerun()
-
-        # ── Scenario selector ─────────────────────────────────────────────────
-        st.markdown("**Flood scenario**")
-        scenario_idx = _scenario_selector("sol")
-        ss["scenario_idx"] = scenario_idx
-        sc_label = _SC_NAMES[scenario_idx]
-
-        map_mode = st.radio(
-            "Map view",
-            ["Single scenario", "Compare all 3 scenarios"],
-            horizontal=True,
-            key="map_mode_radio",
-        )
-
-        min_demand_filter = st.slider(
-            "Hide rescue lines from nodes with demand <",
-            min_value=0, max_value=5000, value=0, step=100,
-            help="Hides allocation lines from low-demand communes. Demand dots remain on map.",
-            key="min_demand_filter_sol",
-        )
-
-        # ── Mini Pareto (collapsed by default for quick trade-off view) ───────
-        if len(solutions) > 1:
-            with st.expander("📈 Pareto front — click a point to jump", expanded=False):
-                _mfig = build_pareto_fig(solutions, selected_idx=sel_idx, title="")
-                _mfig.update_layout(
-                    height=200,
-                    margin=dict(l=30, r=10, t=10, b=30),
-                    showlegend=False,
-                )
-                _mev = st.plotly_chart(
-                    _mfig, on_select="rerun", key="pareto_mini", use_container_width=True
-                )
-                try:
-                    _pts = _mev.selection.points  # type: ignore[union-attr]
-                    if _pts:
-                        _ci = int(_pts[0].customdata[0])  # type: ignore[index]
-                        if _ci != sel_idx:
-                            st.session_state["selected_idx"] = _ci
-                            st.rerun()
-                except (AttributeError, TypeError, IndexError):
-                    pass
-
-        # Load flows
-        flow_sc      = _pick_flow(sel_idx, solution, result, scenario_idx,
-                                   num_hubs=num_hubs, flows_dir=paths.get("flows_dir"))
-        mild_flow_sc = (_pick_flow(sel_idx, solution, result, 0,
-                                    num_hubs=num_hubs, flows_dir=paths.get("flows_dir"))
-                        if scenario_idx > 0 else flow_sc)
-
-        if flow_sc is None:
-            st.info(
-                "Detailed routing unavailable — showing approximate hub placement. "
-                "Run `python visualizer/preprocess_flows.py` to generate full routing.",
-                icon="ℹ️",
-            )
-
-        # ── Map ───────────────────────────────────────────────────────────────
-        if map_mode == "Single scenario":
-            fmap = build_map(
-                node_info=node_info, solution=solution,
-                scenario_flow=flow_sc, instance_data=inst_raw,
-                scenario_idx=scenario_idx,
-                show_labels=False, show_alloc=True,
-                show_transshipment=True,
-                min_demand_filter=min_demand_filter,
-            )
-            st_folium(fmap, width="100%", height=620, returned_objects=[],
-                      key=f"map_{sel_idx}_{scenario_idx}")
-            map_html = fmap._repr_html_()  # type: ignore[attr-defined]
-            st.download_button(
-                "Export map as HTML", data=map_html,
-                file_name=f"relief_map_sol{sel_idx+1}_{sc_label.lower()}.html",
-                mime="text/html",
-            )
         else:
-            # D5 — side-by-side 3-scenario map
-            cols = st.columns(3)
-            for s_idx, (col, sc_name, sc_icon) in enumerate(zip(cols, _SC_NAMES, _SC_ICONS)):
-                with col:
-                    st.caption(f"{sc_icon} **{sc_name}** (p={_SC_PROBS[s_idx]})")
-                    fsc = _pick_flow(sel_idx, solution, result, s_idx,
-                                      num_hubs=num_hubs, flows_dir=paths.get("flows_dir"))
-                    fm  = build_map(
-                        node_info=node_info, solution=solution,
-                        scenario_flow=fsc, instance_data=inst_raw,
-                        scenario_idx=s_idx,
-                        show_labels=False, show_alloc=True,
-                        show_transshipment=True,
-                        compact=True,
-                        min_demand_filter=min_demand_filter,
-                    )
-                    st_folium(fm, width="100%", height=420, returned_objects=[],
-                              key=f"map3_{sel_idx}_{s_idx}")
+            num_hubs = len(node_info.hub_indices)
 
-        # ── Stage-2 Scenario Response (D1) ────────────────────────────────────
-        with st.expander(f"📊 Stage 2 — Scenario Response ({sc_label})", expanded=True):
+            # ── Solution carousel ─────────────────────────────────────────────
+            if len(solutions) > 1:
+                _z1s = [s.Z1 for s in solutions]
+                _z2s = [s.Z2 for s in solutions]
+                _z1r = (max(_z1s) - min(_z1s)) or 1.0
+                _z2r = (max(_z2s) - min(_z2s)) or 1.0
+                _knee = min(
+                    range(len(solutions)),
+                    key=lambda i: max(
+                        (solutions[i].Z1 - min(_z1s)) / _z1r,
+                        (solutions[i].Z2 - min(_z2s)) / _z2r,
+                    ),
+                )
+                _badge = ("⭐ Knee" if sel_idx == _knee else
+                          "💰 Best Z1" if sel_idx == _z1s.index(min(_z1s)) else
+                          "⚖️ Best Z2" if sel_idx == _z2s.index(min(_z2s)) else "")
+                _cc1, _cc2, _cc3 = st.columns([1, 10, 1])
+                with _cc1:
+                    if st.button("◀", key="car_prev", use_container_width=True):
+                        ss["selected_idx"] = (sel_idx - 1) % len(solutions)
+                        st.rerun()
+                with _cc2:
+                    _badge_html = (f' <span style="background:#1976D2;color:white;'
+                                   f'padding:1px 7px;border-radius:4px;font-size:11px">{_badge}</span>'
+                                   if _badge else "")
+                    st.markdown(
+                        f'<div style="text-align:center;padding:5px 10px;background:#f0f2f6;'
+                        f'border-radius:6px;font-size:13px">'
+                        f'<b>Solution {sel_idx + 1} / {len(solutions)}</b>{_badge_html}'
+                        f' · Z1 = <b>&#36;{solution.Z1/1e6:.2f}M</b>'
+                        f' · Z2 = <b>{solution.Z2:,.0f}</b>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+                with _cc3:
+                    if st.button("▶", key="car_next", use_container_width=True):
+                        ss["selected_idx"] = (sel_idx + 1) % len(solutions)
+                        st.rerun()
+
+            # ── Scenario selector ─────────────────────────────────────────────
+            st.markdown("**Flood scenario**")
+            scenario_idx = _scenario_selector("sol")
+            ss["scenario_idx"] = scenario_idx
+            sc_label = _SC_NAMES[scenario_idx]
+
+            # Load flows
+            flow_sc = _pick_flow(sel_idx, solution, result, scenario_idx,
+                                  num_hubs=num_hubs, flows_dir=paths.get("flows_dir"))
+            mild_flow_sc = (_pick_flow(sel_idx, solution, result, 0,
+                                       num_hubs=num_hubs, flows_dir=paths.get("flows_dir"))
+                            if scenario_idx > 0 else flow_sc)
+
+            if flow_sc is None:
+                st.info(
+                    "Detailed routing unavailable — showing approximate hub placement. "
+                    "Run `python visualizer/preprocess_flows.py` to generate full routing.",
+                    icon="ℹ️",
+                )
+
+            # ── Map ───────────────────────────────────────────────────────────
+            st.markdown('<div id="_dss-map-anchor"></div>', unsafe_allow_html=True)
+            if map_mode == "Single scenario":
+                fmap = build_map(
+                    node_info=node_info, solution=solution,
+                    scenario_flow=flow_sc, instance_data=inst_raw,
+                    scenario_idx=scenario_idx,
+                    show_labels=False, show_alloc=True,
+                    show_transshipment=True,
+                    min_demand_filter=min_demand_filter,
+                )
+                st_folium(fmap, width="100%", height=620, returned_objects=[],
+                          key=f"map_{sel_idx}_{scenario_idx}")
+                map_html = fmap._repr_html_()  # type: ignore[attr-defined]
+                st.download_button(
+                    "Export map as HTML", data=map_html,
+                    file_name=f"relief_map_sol{sel_idx+1}_{sc_label.lower()}.html",
+                    mime="text/html",
+                )
+            else:
+                cols = st.columns(3)
+                for s_idx, (col, sc_name, sc_icon) in enumerate(zip(cols, _SC_NAMES, _SC_ICONS)):
+                    with col:
+                        st.caption(f"{sc_icon} **{sc_name}** (p={_SC_PROBS[s_idx]})")
+                        fsc = _pick_flow(sel_idx, solution, result, s_idx,
+                                          num_hubs=num_hubs, flows_dir=paths.get("flows_dir"))
+                        fm  = build_map(
+                            node_info=node_info, solution=solution,
+                            scenario_flow=fsc, instance_data=inst_raw,
+                            scenario_idx=s_idx,
+                            show_labels=False, show_alloc=True,
+                            show_transshipment=True,
+                            compact=True,
+                            min_demand_filter=min_demand_filter,
+                        )
+                        st_folium(fm, width="100%", height=420, returned_objects=[],
+                                  key=f"map3_{sel_idx}_{s_idx}")
+
+            # ── Stage 2 — Scenario Response ───────────────────────────────────
+            st.divider()
+            st.subheader(f"📊 Stage 2 — Scenario Response ({sc_label})")
             _render_stage2_panel(
                 solution=solution, node_info=node_info, inst_raw=inst_raw,
                 flow_sc=flow_sc, mild_flow_sc=mild_flow_sc,
                 scenario_idx=scenario_idx, solutions=solutions, sel_idx=sel_idx,
             )
 
-        # ── Stage-1 Pre-Disaster Plan (D2) ───────────────────────────────────
-        with st.expander("🏗️ Stage 1 — Pre-Disaster Plan", expanded=False):
+            # ── Stage 1 — Pre-Disaster Plan ───────────────────────────────────
+            st.divider()
+            st.subheader("🏗️ Stage 1 — Pre-Disaster Plan")
             _render_stage1_panel(solution=solution, node_info=node_info, inst_raw=inst_raw)
 
-        # ── Pareto Front & Navigation (D3) ───────────────────────────────────
-        with st.expander("📈 Pareto Front & Navigation", expanded=False):
-            _render_pareto_panel(solutions=solutions, sel_idx=sel_idx, solution=solution, node_info=node_info)
+            # ── Pareto Front & Navigation ─────────────────────────────────────
+            st.divider()
+            st.markdown('<div id="_dss-pareto-anchor"></div>', unsafe_allow_html=True)
+            st.subheader("📈 Pareto Front & Navigation")
+            _render_pareto_panel(
+                solutions=solutions, sel_idx=sel_idx,
+                solution=solution, node_info=node_info,
+            )
+
+            # ── Floating scroll FAB ───────────────────────────────────────────
+            st.markdown("""
+<style>
+#_dss-fab {
+    position: fixed; bottom: 26px; right: 26px; z-index: 99999;
+    background: rgba(25,118,210,0.88); color: white; border: none;
+    border-radius: 22px; padding: 9px 18px; font-size: 12px; font-weight: 500;
+    cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,.25);
+    transition: background 0.15s;
+}
+#_dss-fab:hover { background: rgba(21,101,192,0.95); }
+</style>
+<button id="_dss-fab">↓ Pareto</button>
+""", unsafe_allow_html=True)
+            # Script must live in a components.v1.html iframe so it executes
+            # reliably; use window.parent to reach elements in the host page.
+            import streamlit.components.v1 as _cv1  # noqa: PLC0415
+            _cv1.html("""<script>
+(function() {
+    function init() {
+        var pd = window.parent.document;
+        var btn  = pd.getElementById('_dss-fab');
+        var main = pd.querySelector('[data-testid="stMain"]');
+        if (!btn || !main) { setTimeout(init, 150); return; }
+        function nearPareto() {
+            var el = pd.getElementById('_dss-pareto-anchor');
+            if (!el) return false;
+            return el.getBoundingClientRect().top < main.clientHeight * 0.6;
+        }
+        function update() {
+            btn.textContent = nearPareto() ? '↑ Map' : '↓ Pareto';
+        }
+        btn.onclick = function() {
+            var target = nearPareto()
+                ? pd.getElementById('_dss-map-anchor')
+                : pd.getElementById('_dss-pareto-anchor');
+            if (target) target.scrollIntoView({behavior:'smooth', block:'start'});
+        };
+        main.addEventListener('scroll', update);
+        update();
+    }
+    init();
+
+    // Streamlit overrides clickmode to "event", which prevents single-click
+    // from emitting plotly_selected (only drag does). This poller restores
+    // "event+select" so point clicks fire plotly_selected → on_select rerun.
+    (function patch() {
+        var pW = window.parent;
+        var Plotly = pW.Plotly;
+        if (Plotly) {
+            pW.document.querySelectorAll('.js-plotly-plot').forEach(function(d) {
+                if (d._fullLayout && d._fullLayout.dragmode === 'select'
+                        && d._fullLayout.clickmode !== 'event+select') {
+                    Plotly.relayout(d, {clickmode: 'event+select'});
+                }
+            });
+        }
+        setTimeout(patch, 350);
+    })();
+})();
+</script>""", height=0)
 
     # ════════════════════════════════════════════════════════════════════════
-    # VIEW 2 — Input Dataset Explorer
+    # TAB 2 — Input Dataset Explorer
     # ════════════════════════════════════════════════════════════════════════
-    elif view == "📊 Input Dataset":
-        # ── Scenario selector ─────────────────────────────────────────────────
+    with tab_ds:
         st.markdown("**Flood scenario**")
         scenario_idx = _scenario_selector("ds")
         ss["scenario_idx"] = scenario_idx
@@ -761,8 +826,6 @@ def main() -> None:
         st.caption(f"Dataset: **{dataset_label}** · Scenario: **{sc_label}**  "
                    f"(use the layer control ≡ on the map to toggle overlays)")
 
-        # ── Map — layer toggles live inside the Folium LayerControl ──────────
-        # Risk index and Intrinsic risk (static) are mutually exclusive via JS.
         dmap = build_dataset_map(
             node_info=node_info, instance_data=inst_raw, scenario_idx=scenario_idx,
         )
@@ -776,16 +839,15 @@ def main() -> None:
             mime="text/html",
         )
 
-        # ── Scenario KPIs — shown below the map ───────────────────────────────
-        sc_raw    = inst_raw.get("scenarios", [])
-        sc_data   = sc_raw[scenario_idx] if scenario_idx < len(sc_raw) else {}
-        mild_sc   = sc_raw[0] if sc_raw else {}
-        num_I     = inst_raw.get("dimensions", {}).get("num_I", len(node_info.demand_indices))
+        sc_raw  = inst_raw.get("scenarios", [])
+        sc_data = sc_raw[scenario_idx] if scenario_idx < len(sc_raw) else {}
+        mild_sc = sc_raw[0] if sc_raw else {}
+        num_I   = inst_raw.get("dimensions", {}).get("num_I", len(node_info.demand_indices))
 
-        _dv   = {int(k): float(v) for k, v in sc_data.get("demand", {}).items()}
-        _mdv  = {int(k): float(v) for k, v in mild_sc.get("demand", {}).items()}
-        _rl   = sc_data.get("risk", [])
-        _mrl  = mild_sc.get("risk", [])
+        _dv  = {int(k): float(v) for k, v in sc_data.get("demand", {}).items()}
+        _mdv = {int(k): float(v) for k, v in mild_sc.get("demand", {}).items()}
+        _rl  = sc_data.get("risk", [])
+        _mrl = mild_sc.get("risk", [])
 
         total_demand = sum(_dv.values())
         mild_total   = sum(_mdv.values())
@@ -795,23 +857,21 @@ def main() -> None:
         with st.expander("📊 Scenario KPIs", expanded=True):
             d1, d2, d3 = st.columns(3)
             d1.metric(
-                "Total Relief Demand",
-                f"{total_demand:,.0f} units",
+                "Total Relief Demand", f"{total_demand:,.0f} units",
                 delta=f"{total_demand - mild_total:+,.0f} vs Mild" if scenario_idx > 0 else None,
                 delta_color="inverse",
             )
             d2.metric(
-                "Avg Node Risk",
-                f"{avg_risk:.3f}",
+                "Avg Node Risk", f"{avg_risk:.3f}",
                 delta=f"{avg_risk - mild_avg:+.3f} vs Mild" if scenario_idx > 0 else None,
                 delta_color="inverse",
             )
             d3.metric("Flood Epicentres", len(sc_data.get("epicenters", [])))
 
     # ════════════════════════════════════════════════════════════════════════
-    # VIEW 3 — Experiments
+    # TAB 3 — Experiments
     # ════════════════════════════════════════════════════════════════════════
-    elif view == "📈 Experiments":
+    with tab_exp:
         try:
             from visualizer.experiments_view import render as render_experiments  # noqa: PLC0415
             render_experiments(dataset_name, version_name, inst_raw, node_info)
