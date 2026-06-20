@@ -153,7 +153,7 @@ def build_dataset_map(
     m = folium.Map(location=centre, zoom_start=9, tiles="OpenStreetMap", control_scale=True)
 
     # ── Edge sets per mode ────────────────────────────────────────────────────
-    _geom_edges = _delaunay_edges(coords) if (show_water or show_air or show_road) else set()
+    _geom_edges = _delaunay_edges(coords)
     _graph = instance_data.get("graph", {})
     if _graph.get("road_edges"):
         road_edge_set = {(int(e[0]), int(e[1])) for e in _graph["road_edges"]}
@@ -174,120 +174,116 @@ def build_dataset_map(
     origin_set = set(node_info.origin_indices)
 
     # ─────────────────────────────────────────────────────────────────────────
-    # Layer 1: Risk choropleth (scenario-dependent)
+    # Layers 1-6: always render into FeatureGroups so the Folium LayerControl
+    # toggle has real content to show/hide. Initial visibility is set via
+    # show=<flag> on each FeatureGroup above.
     # ─────────────────────────────────────────────────────────────────────────
-    if show_risk:
-        for idx, (lat, lon) in enumerate(coords):
-            risk   = float(risk_vals[idx]) if idx < len(risk_vals) else 0.0
-            colour = _risk_color(risk)
-            radius = 10 if idx in hub_set else 7
 
-            node_type = ("Hub candidate" if idx in hub_set
-                         else "Supply origin" if idx in origin_set
-                         else "Demand node")
-            name    = names[idx] if idx < len(names) else f"Node {idx}"
-            pop_str = (f"<br>Population: {base_pop.get(str(idx), '—')}"
-                       if idx not in hub_set and idx not in origin_set else "")
+    # Layer 1: Scenario risk choropleth
+    for idx, (lat, lon) in enumerate(coords):
+        risk      = float(risk_vals[idx]) if idx < len(risk_vals) else 0.0
+        colour    = _risk_color(risk)
+        radius    = 10 if idx in hub_set else 7
+        node_type = ("Hub candidate" if idx in hub_set
+                     else "Supply origin" if idx in origin_set
+                     else "Demand node")
+        name      = names[idx] if idx < len(names) else f"Node {idx}"
+        pop_str   = (f"<br>Population: {base_pop.get(str(idx), '—')}"
+                     if idx not in hub_set and idx not in origin_set else "")
+        folium.CircleMarker(
+            location=[lat, lon],
+            radius=radius,
+            color="#555" if idx in hub_set else "white",
+            weight=1.5 if idx in hub_set else 0.8,
+            fill=True, fill_color=colour, fill_opacity=0.85,
+            tooltip=f"{name} | risk={risk:.3f}",
+            popup=folium.Popup(
+                f"<b>{name}</b><br>{node_type}<br>Risk: <b>{risk:.3f}</b>{pop_str}",
+                max_width=220,
+            ),
+        ).add_to(fg_risk)
 
-            folium.CircleMarker(
-                location=[lat, lon],
-                radius=radius,
-                color="#555" if idx in hub_set else "white",
-                weight=1.5 if idx in hub_set else 0.8,
-                fill=True, fill_color=colour, fill_opacity=0.85,
-                tooltip=f"{name} | risk={risk:.3f}",
-                popup=folium.Popup(
-                    f"<b>{name}</b><br>{node_type}<br>Risk: <b>{risk:.3f}</b>{pop_str}",
-                    max_width=220,
-                ),
-            ).add_to(fg_risk)
+    # Layer 2: Demand volume heatmap + supply origins
+    for local_i, d_idx in enumerate(node_info.demand_indices):
+        pop_val   = pop_vals.get(d_idx, 0)
+        if pop_val < min_pop_threshold:
+            continue
+        lat, lon  = coords[d_idx]
+        demand    = demand_vals.get(d_idx, 0.0)
+        norm      = demand / max_demand
+        colour    = _demand_color(norm)
+        radius    = 5 + 15 * norm
+        name      = names[d_idx] if d_idx < len(names) else f"Demand {local_i}"
+        pop       = base_pop.get(str(d_idx), "—")
+        ir_val    = float(aux_risk[d_idx]) if d_idx < len(aux_risk) else 0.0
+        sc_risk_v = float(risk_vals[d_idx]) if d_idx < len(risk_vals) else 0.0
+        folium.CircleMarker(
+            location=[lat, lon],
+            radius=radius,
+            color="white", weight=0.8,
+            fill=True, fill_color=colour, fill_opacity=0.80,
+            tooltip=f"{name} | demand={demand:,.0f}",
+            popup=folium.Popup(
+                f'<div style="font-size:11px;line-height:1.5">'
+                f"<b>{name}</b><br>"
+                f"Demand: <b>{demand:,.0f}</b> persons<br>"
+                f"Population: <b>{pop}</b><br>"
+                f"Scenario risk: <b>{sc_risk_v:.3f}</b><br>"
+                f"Intrinsic risk (aux): <b>{ir_val:.3f}</b>"
+                f"</div>",
+                max_width=220,
+            ),
+        ).add_to(fg_dem)
 
-    # ─────────────────────────────────────────────────────────────────────────
-    # Layer 2: Demand heatmap (scenario-dependent)
-    # ─────────────────────────────────────────────────────────────────────────
-    if show_demand:
-        for local_i, d_idx in enumerate(node_info.demand_indices):
-            pop_val = pop_vals.get(d_idx, 0)
-            if pop_val < min_pop_threshold:
-                continue
-            lat, lon = coords[d_idx]
-            demand   = demand_vals.get(d_idx, 0.0)
-            norm     = demand / max_demand
-            colour   = _demand_color(norm)
-            radius   = 5 + 15 * norm
-            name     = names[d_idx] if d_idx < len(names) else f"Demand {local_i}"
-            pop      = base_pop.get(str(d_idx), "—")
+    for o_idx in node_info.origin_indices:
+        lat, lon = coords[o_idx]
+        name     = names[o_idx] if o_idx < len(names) else f"Origin {o_idx}"
+        supply   = float(supply_raw.get(str(o_idx), 0.0))
+        folium.Marker(
+            location=[lat, lon],
+            icon=_origin_icon(),
+            tooltip=f"Supply: {name} | supply={supply:,.0f}",
+            popup=folium.Popup(
+                f"<b>{name}</b><br>Supply: <b>{supply:,.0f}</b> units",
+                max_width=200,
+            ),
+        ).add_to(fg_dem)
 
-            folium.CircleMarker(
-                location=[lat, lon],
-                radius=radius,
-                color="white", weight=0.8,
-                fill=True, fill_color=colour, fill_opacity=0.80,
-                tooltip=f"{name} | demand={demand:,.0f}",
-                popup=folium.Popup(
-                    f"<b>{name}</b><br>"
-                    f"Demand: <b>{demand:,.0f}</b> units<br>"
-                    f"Population: {pop}",
-                    max_width=220,
-                ),
-            ).add_to(fg_dem)
-
-        for o_idx in node_info.origin_indices:
-            lat, lon = coords[o_idx]
-            name   = names[o_idx] if o_idx < len(names) else f"Origin {o_idx}"
-            supply = float(supply_raw.get(str(o_idx), 0.0))
-            folium.Marker(
-                location=[lat, lon],
-                icon=_origin_icon(),
-                tooltip=f"Supply: {name} | supply={supply:,.0f}",
-                popup=folium.Popup(
-                    f"<b>{name}</b><br>Supply: <b>{supply:,.0f}</b> units",
-                    max_width=200,
-                ),
-            ).add_to(fg_dem)
-
-    # ─────────────────────────────────────────────────────────────────────────
     # Layer 3: Flood epicentres
-    # ─────────────────────────────────────────────────────────────────────────
-    if show_epicenters:
-        for i, epi in enumerate(epicenters):
-            elat      = float(epi["lat"])
-            elon      = float(epi["lon"])
-            intensity = float(epi.get("intensity", 0.5))
-            radius_m  = int(intensity * 35_000)
+    for i, epi in enumerate(epicenters):
+        elat      = float(epi["lat"])
+        elon      = float(epi["lon"])
+        intensity = float(epi.get("intensity", 0.5))
+        radius_m  = int(intensity * 35_000)
+        folium.Circle(
+            location=[elat, elon], radius=radius_m,
+            color="#C62828", weight=2, dash_array="8 4",
+            fill=True, fill_color="#EF5350", fill_opacity=0.08,
+            tooltip=f"Epicentre {i+1} | intensity={intensity:.3f}",
+        ).add_to(fg_epi)
+        folium.Marker(
+            location=[elat, elon],
+            icon=folium.DivIcon(
+                html='<div style="font-size:20px;color:#B71C1C;text-shadow:0 0 4px white;line-height:1">⚡</div>',
+                icon_size=(24, 24), icon_anchor=(12, 12),
+            ),
+            tooltip=f"Epicentre {i+1}: intensity={intensity:.3f}, r={radius_m/1000:.0f} km",
+            popup=folium.Popup(
+                f"<b>Flood epicentre {i+1}</b><br>"
+                f"Intensity: {intensity:.3f}<br>"
+                f"Influence radius: {radius_m/1000:.0f} km",
+                max_width=200,
+            ),
+        ).add_to(fg_epi)
 
-            folium.Circle(
-                location=[elat, elon], radius=radius_m,
-                color="#C62828", weight=2, dash_array="8 4",
-                fill=True, fill_color="#EF5350", fill_opacity=0.08,
-                tooltip=f"Epicentre {i+1} | intensity={intensity:.3f}",
-            ).add_to(fg_epi)
-
-            folium.Marker(
-                location=[elat, elon],
-                icon=folium.DivIcon(
-                    html='<div style="font-size:20px;color:#B71C1C;text-shadow:0 0 4px white;line-height:1">⚡</div>',
-                    icon_size=(24, 24), icon_anchor=(12, 12),
-                ),
-                tooltip=f"Epicentre {i+1}: intensity={intensity:.3f}, r={radius_m/1000:.0f} km",
-                popup=folium.Popup(
-                    f"<b>Flood epicentre {i+1}</b><br>"
-                    f"Intensity: {intensity:.3f}<br>"
-                    f"Influence radius: {radius_m/1000:.0f} km",
-                    max_width=200,
-                ),
-            ).add_to(fg_epi)
-
-    # ─────────────────────────────────────────────────────────────────────────
-    # Layer 4: Accessibility planar graph (Delaunay edges per mode)
-    # ─────────────────────────────────────────────────────────────────────────
+    # Layer 4: Accessibility planar graph (all modes always rendered)
     _MODE_META = [
-        (0, "Road",  "#2E7D32", fg_road,  show_road,  road_edge_set),
-        (1, "Water", "#0277BD", fg_water, show_water, _geom_edges),
-        (2, "Air",   "#6A1B9A", fg_air,   show_air,   _geom_edges),
+        (0, "Road",  "#2E7D32", fg_road,  road_edge_set),
+        (1, "Water", "#0277BD", fg_water, _geom_edges),
+        (2, "Air",   "#6A1B9A", fg_air,   _geom_edges),
     ]
-    for mode_idx, mode_name, mode_colour, fg, show_flag, mode_edges in _MODE_META:
-        if not show_flag or not accessibility or mode_idx >= len(accessibility):
+    for mode_idx, mode_name, mode_colour, fg, mode_edges in _MODE_META:
+        if not accessibility or mode_idx >= len(accessibility):
             continue
         ac_matrix = accessibility[mode_idx]
         n = len(coords)
@@ -306,51 +302,42 @@ def build_dataset_map(
                             f"{names[v] if v<len(names) else v} [{mode_name}]",
                 ).add_to(fg)
 
-    # ─────────────────────────────────────────────────────────────────────────
     # Layer 5: Population circles (static, scenario-independent)
-    # ─────────────────────────────────────────────────────────────────────────
-    if show_population:
-        for local_i, d_idx in enumerate(node_info.demand_indices):
-            pop_val = pop_vals.get(d_idx, 0)
-            if pop_val < min_pop_threshold:
-                continue
-            lat, lon = coords[d_idx]
-            norm   = pop_val / max_pop
-            radius = 5 + 20 * norm
-            name   = names[d_idx] if d_idx < len(names) else f"Demand {local_i}"
-            colour = _pop_color(norm)
+    for local_i, d_idx in enumerate(node_info.demand_indices):
+        pop_val = pop_vals.get(d_idx, 0)
+        if pop_val < min_pop_threshold:
+            continue
+        lat, lon = coords[d_idx]
+        norm     = pop_val / max_pop
+        radius   = 5 + 20 * norm
+        name     = names[d_idx] if d_idx < len(names) else f"Demand {local_i}"
+        colour   = _pop_color(norm)
+        folium.CircleMarker(
+            location=[lat, lon],
+            radius=radius,
+            color="white", weight=0.8,
+            fill=True, fill_color=colour, fill_opacity=0.75,
+            tooltip=f"{name} | pop={pop_val:,}",
+            popup=folium.Popup(
+                f"<b>{name}</b><br>"
+                f"Population: <b>{pop_val:,}</b><br>"
+                f"Area: {instance_data.get('area_km2', {}).get(str(d_idx), '—')} km²",
+                max_width=220,
+            ),
+        ).add_to(fg_pop)
 
-            folium.CircleMarker(
-                location=[lat, lon],
-                radius=radius,
-                color="white", weight=0.8,
-                fill=True, fill_color=colour, fill_opacity=0.75,
-                tooltip=f"{name} | pop={pop_val:,}",
-                popup=folium.Popup(
-                    f"<b>{name}</b><br>"
-                    f"Population: <b>{pop_val:,}</b><br>"
-                    f"Area: {instance_data.get('area_km2', {}).get(str(d_idx), '—')} km²",
-                    max_width=220,
-                ),
-            ).add_to(fg_pop)
-
-    # ─────────────────────────────────────────────────────────────────────────
-    # Layer 6: Intrinsic risk (static, scenario-independent)
-    # Uses instance["nodes"]["aux_risk"] — flood susceptibility before any
-    # epicentre is sampled.
-    # ─────────────────────────────────────────────────────────────────────────
-    if show_intrinsic_risk and aux_risk:
+    # Layer 6: Intrinsic (aux) risk — static, scenario-independent
+    if aux_risk:
         demand_aux = [float(aux_risk[d_idx]) if d_idx < len(aux_risk) else 0.0
                       for d_idx in node_info.demand_indices]
         for local_i, d_idx in enumerate(node_info.demand_indices):
             pop_val = pop_vals.get(d_idx, 0)
             if pop_val < min_pop_threshold:
                 continue
-            lat, lon   = coords[d_idx]
-            ir_val     = demand_aux[local_i]
-            colour     = _risk_color(ir_val)
-            name       = names[d_idx] if d_idx < len(names) else f"Demand {local_i}"
-
+            lat, lon = coords[d_idx]
+            ir_val   = demand_aux[local_i]
+            colour   = _risk_color(ir_val)
+            name     = names[d_idx] if d_idx < len(names) else f"Demand {local_i}"
             folium.CircleMarker(
                 location=[lat, lon],
                 radius=8,
@@ -368,6 +355,7 @@ def build_dataset_map(
     # ── Add all groups ────────────────────────────────────────────────────────
     for fg in (fg_road, fg_water, fg_air, fg_dem, fg_risk, fg_epi, fg_pop, fg_irisks):
         fg.add_to(m)
+    folium.LayerControl(collapsed=True).add_to(m)
 
     # ── Legend ────────────────────────────────────────────────────────────────
     sc_names = ["Mild", "Severe", "Extreme"]
