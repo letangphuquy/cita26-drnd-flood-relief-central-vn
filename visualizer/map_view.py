@@ -444,7 +444,7 @@ def build_map(
     for fg in (fg_alloc, fg_trans, fg_demand, fg_hubs, fg_orig):
         fg.add_to(m)
     if not compact:
-        folium.LayerControl(collapsed=False).add_to(m)
+        folium.LayerControl(collapsed=True).add_to(m)
 
         # ── Legend ────────────────────────────────────────────────────────────
         sc_name = _SC_NAMES[scenario_idx] if scenario_idx < len(_SC_NAMES) else str(scenario_idx)
