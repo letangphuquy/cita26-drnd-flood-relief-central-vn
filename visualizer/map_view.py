@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import folium
-from folium.plugins import MarkerCluster
+from folium.plugins import MarkerCluster  # noqa: F401 (kept for potential future use)
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src" / "visualizer"))
 from solution_loader import NodeInfo, Solution, infer_hub_allocations
@@ -21,16 +21,20 @@ from visualizer.flow_loader import ScenarioFlow
 # ── colour constants ──────────────────────────────────────────────────────────
 _MODE_COLOURS  = {0: "#E53935", 1: "#039BE5", 2: "#7CB342"}  # road/water/air
 _MODE_NAMES    = {0: "Road", 1: "Water/Boat", 2: "Air/Helicopter"}
-_MODE_DASHES   = {0: None, 1: [8, 4], 2: [2, 4]}              # dash patterns
+_MODE_ICONS    = {0: "🚚", 1: "🚤", 2: "🚁"}
+_MODE_DASHES   = {0: None, 1: [8, 4], 2: [2, 4]}
 
 _COL_HUB_OPEN     = "#FF7043"
-_COL_HUB_INACTIVE = "#FFB74D"  # open this scenario, but not reactive/restocked
+_COL_HUB_INACTIVE = "#FFB74D"
 _COL_HUB_CLOSED   = "#9E9E9E"
-_COL_ORIGIN     = "#43A047"
-_COL_DEMAND_DEF = "#4C72B0"
-_COL_ALLOC      = "#BBBBBB"
-_COL_BLOCKED    = "#EF5350"
-_MODE_COLOURS_FADED = {0: "#FFCDD2", 1: "#B3E5FC", 2: "#DCEDC8"}  # pale road/water/air for blocked nodes
+_COL_ORIGIN       = "#43A047"
+_COL_DEMAND_DEF   = "#4C72B0"
+_COL_ALLOC        = "#BBBBBB"
+_COL_BLOCKED      = "#EF5350"
+_MODE_COLOURS_FADED = {0: "#FFCDD2", 1: "#B3E5FC", 2: "#DCEDC8"}
+
+_SC_NAMES = ["Mild", "Severe", "Extreme"]
+_SC_ICONS = ["🌊", "⚠️", "🔴"]
 
 
 def _dist(a: Tuple[float, float], b: Tuple[float, float]) -> float:
@@ -38,8 +42,6 @@ def _dist(a: Tuple[float, float], b: Tuple[float, float]) -> float:
 
 
 def _hub_icon(state: str) -> folium.DivIcon:
-    """state: 'active' (open + reactive), 'inactive' (open, not reactive
-    this scenario), or 'closed'."""
     if state == "active":
         colour, size, border = _COL_HUB_OPEN, 18, "2px solid #5D4037"
     elif state == "inactive":
@@ -72,6 +74,114 @@ def _origin_icon() -> folium.DivIcon:
     )
 
 
+# ── popup builders ────────────────────────────────────────────────────────────
+
+def _hub_popup_html(
+    k: int,
+    h_idx: int,
+    label: str,
+    open_: bool,
+    scenario_idx: int,
+    chi: float,
+    solution: Solution,
+    instance_data: Dict[str, Any],
+    scenario_flow: Optional[ScenarioFlow],
+    node_info: NodeInfo,
+) -> str:
+    hub_params   = instance_data.get("hub_params", {})
+    scenarios_raw = instance_data.get("scenarios", [])
+    base_pop     = instance_data.get("base_population", {})
+
+    capacity  = float(hub_params.get("capacity",  {}).get(str(h_idx), 0))
+    fc        = float(hub_params.get("fixed_cost", {}).get(str(h_idx), 0))
+    hc_rate   = float(hub_params.get("hold_cost",  {}).get(str(h_idx), 0))
+    r_k       = solution.R[k] if k < len(solution.R) else 0.0
+    prestock  = r_k * capacity
+    hold_cost = hc_rate * prestock  # c_k * q_k — Stage-1 cost
+
+    rows: List[str] = [
+        f"<b style='font-size:13px'>{label}</b>",
+        f"<span style='color:#888;font-size:11px'>H{k} · global node {h_idx}</span>",
+        "",
+    ]
+
+    if not open_:
+        rows.append("❌ <b>Not established (Stage-1)</b>")
+        return "<br>".join(rows)
+
+    rows += [
+        "✅ <b>ESTABLISHED</b>",
+        f"Pre-positioned: <b>{prestock:,.0f} kg</b> ({r_k*100:.0f}% of {capacity:,.0f} kg)",
+        f"Fixed cost: <b>${fc:,.0f}</b> &nbsp;|&nbsp; Hold cost (Stage-1): <b>${hold_cost:,.0f}</b>",
+        "",
+        "<b>Flood risk per scenario:</b>",
+    ]
+
+    for s_idx, sc_name in enumerate(_SC_NAMES):
+        if s_idx >= len(scenarios_raw):
+            continue
+        hr    = scenarios_raw[s_idx].get("hub_risk", {})
+        r_val = float(hr.get(str(h_idx), 0.0))
+        safe  = r_val <= chi
+        icon  = "✅" if safe else "⚠️"
+        note  = "" if safe else f" — <span style='color:#c62828'>INACTIVE (r &gt; χ={chi})</span>"
+        cur   = " ◀" if s_idx == scenario_idx else ""
+        rows.append(f"&nbsp;&nbsp;{icon} <b>{sc_name}</b>: r={r_val:.2f}{note}{cur}")
+
+    # Rescue zones served this scenario
+    if scenario_flow is not None:
+        sc_name = _SC_NAMES[scenario_idx] if scenario_idx < len(_SC_NAMES) else ""
+        served  = [a for a in scenario_flow.demand_assignments if a.hub_idx == h_idx]
+        if served:
+            mode_cnts: Dict[int, int] = {}
+            for a in served:
+                mode_cnts[a.mode] = mode_cnts.get(a.mode, 0) + 1
+            mode_str = " &nbsp; ".join(
+                f"{_MODE_ICONS.get(m,'?')} {_MODE_NAMES.get(m,'?')} ×{cnt}"
+                for m, cnt in sorted(mode_cnts.items()) if cnt > 0
+            )
+            top_a = max(served, key=lambda a: float(base_pop.get(str(a.demand_idx), 0)), default=None)
+            top_str = ""
+            if top_a:
+                top_pop  = int(float(base_pop.get(str(top_a.demand_idx), 0)))
+                top_name = (node_info.names[top_a.demand_idx]
+                            if top_a.demand_idx < len(node_info.names)
+                            else f"Node {top_a.demand_idx}")
+                if top_pop > 0:
+                    top_str = f"<br>&nbsp;&nbsp;Highest-demand: {top_name} ({top_pop:,} persons)"
+            rows += [
+                "",
+                f"<b>Rescue zones [{sc_name}]: {len(served)} communes</b>",
+                mode_str + top_str,
+            ]
+
+    return "<br>".join(rows)
+
+
+def _origin_popup_html(o_idx: int, label: str, instance_data: Dict[str, Any]) -> str:
+    scenarios_raw = instance_data.get("scenarios", [])
+    rows: List[str] = [
+        f"<b style='font-size:13px'>{label}</b>",
+        "<span style='color:#888;font-size:11px'>Supply depot · Origin node</span>",
+        "",
+        "<b>Supply available:</b>",
+    ]
+    risk_parts: List[str] = []
+    for s_idx, sc_name in enumerate(_SC_NAMES):
+        if s_idx >= len(scenarios_raw):
+            continue
+        sc     = scenarios_raw[s_idx]
+        supply = float(sc.get("supply", {}).get(str(o_idx), 0.0))
+        risk_list = sc.get("risk", [])
+        risk   = float(risk_list[o_idx]) if o_idx < len(risk_list) else 0.0
+        rows.append(f"&nbsp;&nbsp;<b>{sc_name}</b>: {supply:,.0f} kg")
+        risk_parts.append(f"<b>{sc_name}</b>: {risk:.2f}")
+    rows += ["", "<b>Flood risk:</b>", "&nbsp;&nbsp;" + " &nbsp; ".join(risk_parts)]
+    return "<br>".join(rows)
+
+
+# ── main API ──────────────────────────────────────────────────────────────────
+
 def build_map(
     node_info: NodeInfo,
     solution: Solution,
@@ -91,21 +201,21 @@ def build_map(
     solution       : Selected Pareto solution.
     scenario_flow  : Optional pre-computed flow for this scenario.
                      If None, allocation is inferred from X and A vectors.
-    instance_data  : Raw loaded instance dict (for scenario accessibility).
+    instance_data  : Raw loaded instance dict (all scenarios, hub_params, etc.).
     scenario_idx   : Which scenario to render (0=mild, 1=severe, 2=extreme).
     show_labels    : Draw node name labels.
     show_alloc     : Draw demand→hub allocation lines.
     show_transshipment : Draw hub-to-hub flow lines.
     """
-    coords = node_info.coords
+    coords     = node_info.coords
     hub_set    = set(node_info.hub_indices)
     origin_set = set(node_info.origin_indices)
     demand_set = set(node_info.demand_indices)
 
     open_hub_globals = {node_info.hub_indices[k] for k in solution.open_hubs}
 
-    # ── Scenario accessibility matrix ─────────────────────────────────────────
-    # accessibility[m][u][v] = 1 if route u→v via mode m is usable in scenario s
+    chi = float(instance_data.get("global_params", {}).get("chi", 0.70))
+
     scenarios_raw = instance_data.get("scenarios", [])
     sc_access: Optional[List] = None
     if scenario_idx < len(scenarios_raw):
@@ -119,22 +229,19 @@ def build_map(
         except (IndexError, TypeError):
             return True
 
-    # ── Map centre & zoom ────────────────────────────────────────────────────
     lats = [c[0] for c in coords]
     lons = [c[1] for c in coords]
     centre = (sum(lats) / len(lats), sum(lons) / len(lons))
 
-    m = folium.Map(location=centre, zoom_start=9, tiles="OpenStreetMap",
-                   control_scale=True)
+    m = folium.Map(location=centre, zoom_start=9, tiles="OpenStreetMap", control_scale=True)
 
-    # ── Feature groups (for layer control) ───────────────────────────────────
     fg_hubs   = folium.FeatureGroup(name="Hubs", show=True)
     fg_demand = folium.FeatureGroup(name="Demand nodes", show=True)
     fg_orig   = folium.FeatureGroup(name="Supply origins", show=True)
     fg_alloc  = folium.FeatureGroup(name="Allocation routes", show=show_alloc)
     fg_trans  = folium.FeatureGroup(name="Transshipment flows", show=show_transshipment)
 
-    # ── Determine demand→hub assignments ─────────────────────────────────────
+    # ── Demand→hub assignments ────────────────────────────────────────────────
     if scenario_flow is not None:
         da = {a.demand_idx: a for a in scenario_flow.demand_assignments}
         oa = {a.origin_idx: a for a in scenario_flow.origin_assignments}
@@ -144,7 +251,6 @@ def build_map(
             if active and k < len(node_info.hub_indices)
         }
     else:
-        # Fallback: nearest open hub, use A vector for mode
         da = {}
         for local_i, d_idx in enumerate(node_info.demand_indices):
             if not open_hub_globals:
@@ -157,39 +263,33 @@ def build_map(
         oa = {}
         active_hubs = open_hub_globals
 
-    # ── Draw allocation lines ─────────────────────────────────────────────────
+    # ── Allocation lines ──────────────────────────────────────────────────────
     if show_alloc:
         for d_idx, asgn in da.items():
             if asgn.hub_idx < 0:
                 continue
-            d_coord = coords[d_idx]
-            h_coord = coords[asgn.hub_idx]
-            mode    = asgn.mode
+            mode       = asgn.mode
             accessible = _is_accessible(mode, d_idx, asgn.hub_idx)
-            colour = _MODE_COLOURS.get(mode, _COL_ALLOC) if accessible else _COL_BLOCKED
-            opacity = 0.7 if accessible else 0.4
-            dash = _MODE_DASHES.get(mode)
+            colour     = _MODE_COLOURS.get(mode, _COL_ALLOC) if accessible else _COL_BLOCKED
+            opacity    = 0.7 if accessible else 0.4
+            dash       = _MODE_DASHES.get(mode)
             line_kw: dict = dict(color=colour, weight=1.5, opacity=opacity)
             if dash:
                 line_kw["dash_array"] = " ".join(map(str, dash))
             folium.PolyLine(
-                locations=[d_coord, h_coord],
+                locations=[coords[d_idx], coords[asgn.hub_idx]],
                 tooltip=f"{_MODE_NAMES.get(mode,'?')} {'✓' if accessible else '✗ blocked'}",
                 **line_kw,
             ).add_to(fg_alloc)
 
-        # Origin → hub lines
         for o_idx, asgn in oa.items():
             if asgn.hub_idx < 0:
                 continue
-            o_coord = coords[o_idx]
-            h_coord = coords[asgn.hub_idx]
-            mode    = asgn.mode
+            mode = asgn.mode
             folium.PolyLine(
-                locations=[o_coord, h_coord],
+                locations=[coords[o_idx], coords[asgn.hub_idx]],
                 color=_MODE_COLOURS.get(mode, _COL_ORIGIN),
-                weight=2, opacity=0.6,
-                dash_array="6 3",
+                weight=2, opacity=0.6, dash_array="6 3",
                 tooltip=f"Supply → Hub  [{_MODE_NAMES.get(mode,'?')}]",
             ).add_to(fg_alloc)
 
@@ -210,33 +310,27 @@ def build_map(
                 tooltip=f"Transship {ts.flow:,.0f} units [{_MODE_NAMES.get(ts.mode,'?')}]",
             ).add_to(fg_trans)
 
-    # ── Hub markers ──────────────────────────────────────────────────────────
+    # ── Hub markers ───────────────────────────────────────────────────────────
     for k, h_idx in enumerate(node_info.hub_indices):
         lat, lon = coords[h_idx]
-        open_ = h_idx in open_hub_globals
+        open_    = h_idx in open_hub_globals
         reactive = h_idx in active_hubs if scenario_flow else open_
 
-        inv_info = ""
-        if scenario_flow and k < len(scenario_flow.inventory_held):
-            inv_info = f"<br>Inventory held: {scenario_flow.inventory_held[k]:,.0f}"
-
+        hub_state = ("active"   if open_ and reactive else
+                     "inactive" if open_ else "closed")
         label = node_info.names[h_idx] if h_idx < len(node_info.names) else f"Hub {k}"
-        hub_state = ("active" if open_ and reactive
-                      else "inactive" if open_
-                      else "closed")
-        status = {"active": "Open + Active",
-                  "inactive": "Open (inactive this scenario)",
-                  "closed": "Closed"}[hub_state]
-        popup_html = (
-            f"<b>{label}</b><br>"
-            f"Hub #{k} (global {h_idx})<br>"
-            f"Status: {status}{inv_info}"
+
+        popup_html = _hub_popup_html(
+            k=k, h_idx=h_idx, label=label, open_=open_,
+            scenario_idx=scenario_idx, chi=chi,
+            solution=solution, instance_data=instance_data,
+            scenario_flow=scenario_flow, node_info=node_info,
         )
         folium.Marker(
             location=[lat, lon],
             icon=_hub_icon(hub_state),
-            tooltip=f"Hub {k}: {label}",
-            popup=folium.Popup(popup_html, max_width=250),
+            tooltip=f"H{k}: {label}",
+            popup=folium.Popup(popup_html, max_width=300),
         ).add_to(fg_hubs)
 
         if show_labels:
@@ -251,8 +345,8 @@ def build_map(
     # ── Demand node markers ───────────────────────────────────────────────────
     for local_i, d_idx in enumerate(node_info.demand_indices):
         lat, lon = coords[d_idx]
-        asgn = da.get(d_idx)
-        mode = asgn.mode if asgn and asgn.mode in (0, 1, 2) else 0
+        asgn  = da.get(d_idx)
+        mode  = asgn.mode if asgn and asgn.mode in (0, 1, 2) else 0
         colour = _MODE_COLOURS.get(mode, _COL_DEMAND_DEF)
         accessible = _is_accessible(mode, d_idx, asgn.hub_idx) if asgn and asgn.hub_idx >= 0 else True
 
@@ -266,8 +360,7 @@ def build_map(
         folium.CircleMarker(
             location=[lat, lon],
             radius=6 if accessible else 4,
-            color="white",
-            weight=1,
+            color="white", weight=1,
             fill=True,
             fill_color=colour if accessible else _MODE_COLOURS_FADED.get(mode, _COL_BLOCKED),
             fill_opacity=0.85 if accessible else 0.5,
@@ -282,21 +375,21 @@ def build_map(
     for o_idx in node_info.origin_indices:
         lat, lon = coords[o_idx]
         name = node_info.names[o_idx] if o_idx < len(node_info.names) else f"Origin {o_idx}"
+        popup_html = _origin_popup_html(o_idx, name, instance_data)
         folium.Marker(
             location=[lat, lon],
             icon=_origin_icon(),
-            tooltip=f"Supply: {name}",
-            popup=folium.Popup(f"<b>{name}</b><br>Supply origin", max_width=180),
+            tooltip=f"Supply depot: {name}",
+            popup=folium.Popup(popup_html, max_width=260),
         ).add_to(fg_orig)
 
-    # ── Add all groups + layer control ───────────────────────────────────────
+    # ── Layer control ─────────────────────────────────────────────────────────
     for fg in (fg_alloc, fg_trans, fg_demand, fg_hubs, fg_orig):
         fg.add_to(m)
     folium.LayerControl(collapsed=False).add_to(m)
 
     # ── Legend ────────────────────────────────────────────────────────────────
-    scenario_names = ["Mild", "Severe", "Extreme"]
-    sc_name = scenario_names[scenario_idx] if scenario_idx < len(scenario_names) else str(scenario_idx)
+    sc_name = _SC_NAMES[scenario_idx] if scenario_idx < len(_SC_NAMES) else str(scenario_idx)
     legend_html = f"""
     <div style="position:fixed;bottom:30px;left:30px;z-index:1000;
                 background:white;padding:10px 14px;border-radius:8px;
