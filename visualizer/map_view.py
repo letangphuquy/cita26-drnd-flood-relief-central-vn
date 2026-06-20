@@ -12,11 +12,10 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import folium
-from folium.plugins import MarkerCluster  # noqa: F401 (kept for potential future use)
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src" / "visualizer"))
-from solution_loader import NodeInfo, Solution, infer_hub_allocations
-from visualizer.flow_loader import ScenarioFlow
+from solution_loader import NodeInfo, Solution
+from visualizer.flow_loader import DemandAssignment, ScenarioFlow
 
 # ── colour constants ──────────────────────────────────────────────────────────
 _MODE_COLOURS  = {0: "#E53935", 1: "#039BE5", 2: "#7CB342"}  # road/water/air
@@ -100,7 +99,7 @@ def _hub_popup_html(
     hold_cost = hc_rate * prestock  # c_k * q_k — Stage-1 cost
 
     rows: List[str] = [
-        f"<b style='font-size:13px'>{label}</b>",
+        f"<b>{label}</b>",
         f"<span style='color:#888;font-size:11px'>H{k} · global node {h_idx}</span>",
         "",
     ]
@@ -163,7 +162,7 @@ def _hub_popup_html(
 def _origin_popup_html(o_idx: int, label: str, instance_data: Dict[str, Any]) -> str:
     scenarios_raw = instance_data.get("scenarios", [])
     rows: List[str] = [
-        f"<b style='font-size:13px'>{label}</b>",
+        f"<b>{label}</b>",
         "<span style='color:#888;font-size:11px'>Supply depot · Origin node</span>",
         "",
         "<b>Supply available:</b>",
@@ -252,10 +251,6 @@ def build_map(
     show_transshipment : Draw hub-to-hub flow lines.
     """
     coords     = node_info.coords
-    hub_set    = set(node_info.hub_indices)
-    origin_set = set(node_info.origin_indices)
-    demand_set = set(node_info.demand_indices)
-
     open_hub_globals = {node_info.hub_indices[k] for k in solution.open_hubs}
 
     chi = float(instance_data.get("global_params", {}).get("chi", 0.70))
@@ -302,20 +297,17 @@ def build_map(
             nearest_h = min(open_hub_globals, key=lambda h: _dist(coords[d_idx], coords[h]))
             mode = solution.A[local_i] if local_i < len(solution.A) else 0
             mode = mode if mode in (0, 1, 2) else 0
-            from visualizer.flow_loader import DemandAssignment  # noqa: PLC0415
             da[d_idx] = DemandAssignment(demand_idx=d_idx, hub_idx=nearest_h, mode=mode)
         oa = {}
         active_hubs = open_hub_globals
 
     # ── Demand filter lookup (for allocation lines only) ──────────────────────
     sc_demand_lookup: Dict[int, float] = {}
-    if min_demand_filter > 0:
-        _scs = instance_data.get("scenarios", [])
-        if scenario_idx < len(_scs):
-            sc_demand_lookup = {
-                int(k): float(v)
-                for k, v in _scs[scenario_idx].get("demand", {}).items()
-            }
+    if min_demand_filter > 0 and scenario_idx < len(scenarios_raw):
+        sc_demand_lookup = {
+            int(k): float(v)
+            for k, v in scenarios_raw[scenario_idx].get("demand", {}).items()
+        }
 
     # ── Allocation lines ──────────────────────────────────────────────────────
     if show_alloc:

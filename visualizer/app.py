@@ -48,7 +48,7 @@ _INF_SENTINEL = 1e9
 _SC_COLORS = ["#0277BD", "#E65100", "#B71C1C"]  # mild=blue, severe=orange, extreme=red
 
 
-def _scenario_selector(key: str) -> int:
+def _scenario_selector(key: str, disabled: bool = False) -> int:
     """Three-button scenario selector. Returns selected scenario index 0/1/2."""
     idx = st.session_state.get("scenario_idx", 0)
     cols = st.columns(3)
@@ -61,6 +61,7 @@ def _scenario_selector(key: str) -> int:
                 key=f"sc_{key}_{i}",
                 use_container_width=True,
                 type="primary" if idx == i else "secondary",
+                disabled=disabled,
             ):
                 st.session_state["scenario_idx"] = i
                 st.rerun()
@@ -244,8 +245,33 @@ def _render_stage2_panel(
 
     st.divider()
 
+    # Reactive hubs (y_ks active but not planned)
+    if flow_sc is not None and flow_sc.y_ks:
+        reactive_ks = [
+            k for k, active in enumerate(flow_sc.y_ks)
+            if active and k < len(solution.X) and solution.X[k] == 0
+        ]
+        if reactive_ks:
+            r_names = [
+                node_info.names[node_info.hub_indices[k]]
+                if k < len(node_info.hub_indices) and node_info.hub_indices[k] < len(node_info.names)
+                else f"Hub {k}"
+                for k in reactive_ks
+            ]
+            st.warning(
+                f"⚡ **{len(reactive_ks)} reactive hub(s) opened:** {', '.join(r_names)}",
+                icon=None,
+            )
+        else:
+            st.caption("ⓘ No reactive hubs opened this scenario.")
+
+    st.divider()
+
     # Mode counts
     if flow_sc is not None:
+        import pandas as pd  # noqa: PLC0415
+        from collections import defaultdict  # noqa: PLC0415
+
         da_modes = [a.mode for a in flow_sc.demand_assignments]
         curr_counts = {0: da_modes.count(0), 1: da_modes.count(1), 2: da_modes.count(2)}
         total = sum(curr_counts.values())
@@ -267,6 +293,35 @@ def _render_stage2_panel(
                 st.caption(f"vs Mild: {' · '.join(changed)} — communes rerouted due to flooding")
 
         st.caption("ⓘ Mode counts are postprocessor estimates; MCF lateral flows not shown")
+
+        # Per-hub commune breakdown
+        hub_communes: dict = defaultdict(lambda: {0: 0, 1: 0, 2: 0})
+        for asgn in flow_sc.demand_assignments:
+            if asgn.hub_idx >= 0:
+                hub_communes[asgn.hub_idx][asgn.mode] += 1
+
+        if hub_communes:
+            st.divider()
+            st.write("**Commune assignments per hub:**")
+            hub_rows = []
+            air_hubs = []
+            for h_idx, modes in sorted(hub_communes.items(), key=lambda x: -sum(x[1].values())):
+                name = node_info.names[h_idx] if h_idx < len(node_info.names) else f"Node {h_idx}"
+                total_h = sum(modes.values())
+                hub_rows.append({
+                    "Hub": name,
+                    "Total": total_h,
+                    "🚚 Road": modes[0],
+                    "🚤 Water": modes[1],
+                    "🚁 Air": modes[2],
+                })
+                if modes[2] > 0:
+                    air_hubs.append((name, modes[2]))
+            st.dataframe(pd.DataFrame(hub_rows), hide_index=True, use_container_width=True)
+
+            if air_hubs:
+                air_summary = " · ".join(f"**{n}** ({c} communes)" for n, c in air_hubs)
+                st.info(f"🚁 Helicopter service provided by: {air_summary}", icon=None)
     else:
         st.info("Detailed mode breakdown requires flow files. Run preprocess_flows.py.", icon="ℹ️")
 
@@ -403,23 +458,6 @@ def _render_pareto_panel(
         st.session_state["selected_idx"] = knee_idx
         st.rerun()
 
-    nav_cols = st.columns([1, 2, 1])
-    with nav_cols[0]:
-        if st.button("◀ Prev", use_container_width=True):
-            st.session_state["selected_idx"] = (sel_idx - 1) % len(solutions)
-            st.rerun()
-    with nav_cols[1]:
-        jump = st.number_input(
-            "Jump to solution", min_value=1, max_value=len(solutions),
-            value=sel_idx + 1, step=1, label_visibility="collapsed",
-        )
-        if jump - 1 != sel_idx:
-            st.session_state["selected_idx"] = jump - 1
-            st.rerun()
-    with nav_cols[2]:
-        if st.button("Next ▶", use_container_width=True):
-            st.session_state["selected_idx"] = (sel_idx + 1) % len(solutions)
-            st.rerun()
 
 
 
@@ -437,6 +475,14 @@ def main() -> None:
         "<style>"
         "[data-testid='stHeader']{display:none!important}"
         "[data-testid='stMainBlockContainer']{padding-top:0.5rem}"
+        "#_dss-sidebar-btn{"
+        "position:fixed;top:50px;left:0;z-index:1000000;"
+        "display:none;background:rgba(25,118,210,0.85);color:white;"
+        "border:none;border-radius:0 6px 6px 0;padding:10px 10px;"
+        "cursor:pointer;font-size:18px;line-height:1;"
+        "box-shadow:2px 2px 8px rgba(0,0,0,.3);"
+        "transition:background 0.15s}"
+        "#_dss-sidebar-btn:hover{background:rgba(21,101,192,0.97)}"
         "</style>",
         unsafe_allow_html=True,
     )
@@ -562,7 +608,7 @@ def main() -> None:
         ss["map_mode"] = map_mode
 
         min_demand_filter = st.slider(
-            "Hide rescue lines < demand",
+            "Hide rescue lines < demand (persons)",
             min_value=0, max_value=5000,
             value=ss["min_demand_filter"],
             step=100,
@@ -633,6 +679,10 @@ def main() -> None:
         else:
             num_hubs = len(node_info.hub_indices)
 
+            # sentinel used by FAB JS to locate and hide the carousel when sidebar is open
+            st.markdown('<span id="_dss-carousel-sentinel" style="display:none"></span>',
+                        unsafe_allow_html=True)
+
             # ── Solution carousel ─────────────────────────────────────────────
             if len(solutions) > 1:
                 _z1s = [s.Z1 for s in solutions]
@@ -673,8 +723,11 @@ def main() -> None:
                         st.rerun()
 
             # ── Scenario selector ─────────────────────────────────────────────
+            compare_mode = (map_mode == "Compare all 3 scenarios")
             st.markdown("**Flood scenario**")
-            scenario_idx = _scenario_selector("sol")
+            scenario_idx = _scenario_selector("sol", disabled=compare_mode)
+            if compare_mode:
+                st.caption("All 3 scenarios shown on map — switch to Single to filter.")
             ss["scenario_idx"] = scenario_idx
             sc_label = _SC_NAMES[scenario_idx]
 
@@ -732,12 +785,32 @@ def main() -> None:
 
             # ── Stage 2 — Scenario Response ───────────────────────────────────
             st.divider()
-            st.subheader(f"📊 Stage 2 — Scenario Response ({sc_label})")
-            _render_stage2_panel(
-                solution=solution, node_info=node_info, inst_raw=inst_raw,
-                flow_sc=flow_sc, mild_flow_sc=mild_flow_sc,
-                scenario_idx=scenario_idx, solutions=solutions, sel_idx=sel_idx,
-            )
+            if compare_mode:
+                st.subheader("📊 Stage 2 — Scenario Response")
+                _s2_tabs = st.tabs([f"{_SC_ICONS[i]} {_SC_NAMES[i]}" for i in range(3)])
+                for _s2_idx, _s2_tab in enumerate(_s2_tabs):
+                    with _s2_tab:
+                        _s2_flow = _pick_flow(
+                            sel_idx, solution, result, _s2_idx,
+                            num_hubs=num_hubs, flows_dir=paths.get("flows_dir"),
+                        )
+                        _s2_mild = (
+                            _pick_flow(sel_idx, solution, result, 0,
+                                       num_hubs=num_hubs, flows_dir=paths.get("flows_dir"))
+                            if _s2_idx > 0 else _s2_flow
+                        )
+                        _render_stage2_panel(
+                            solution=solution, node_info=node_info, inst_raw=inst_raw,
+                            flow_sc=_s2_flow, mild_flow_sc=_s2_mild,
+                            scenario_idx=_s2_idx, solutions=solutions, sel_idx=sel_idx,
+                        )
+            else:
+                st.subheader(f"📊 Stage 2 — Scenario Response ({sc_label})")
+                _render_stage2_panel(
+                    solution=solution, node_info=node_info, inst_raw=inst_raw,
+                    flow_sc=flow_sc, mild_flow_sc=mild_flow_sc,
+                    scenario_idx=scenario_idx, solutions=solutions, sel_idx=sel_idx,
+                )
 
             # ── Stage 1 — Pre-Disaster Plan ───────────────────────────────────
             st.divider()
@@ -796,22 +869,69 @@ def main() -> None:
     }
     init();
 
+    // Hide the solution carousel when the sidebar is open — it duplicates the
+    // mini-Pareto + nav buttons already in the sidebar.
+    // Sentinel is wrapped as: sentinel → stMarkdownContainer → stElementContainer
+    // The carousel lives in the immediately following stLayoutWrapper sibling.
+    (function carouselVisibility() {
+        var pd = window.parent.document;
+        function updateCarousel() {
+            var sentinel = pd.getElementById('_dss-carousel-sentinel');
+            if (!sentinel) return;
+            var sidebar = pd.querySelector('[data-testid="stSidebar"]');
+            var sidebarOpen = !!(sidebar && sidebar.getAttribute('aria-expanded') !== 'false');
+            var ec = sentinel.closest('[data-testid="stElementContainer"]');
+            var carouselWrapper = ec && ec.nextElementSibling;
+            if (carouselWrapper) {
+                carouselWrapper.style.display = sidebarOpen ? 'none' : '';
+            }
+        }
+        setInterval(updateCarousel, 200);
+    })();
+
+    // Inject a sidebar re-expand button that appears only when sidebar is collapsed.
+    // Streamlit doesn't render a collapsedControl element — it just slides the sidebar
+    // off-screen — so we create our own button and show/hide it via a poll.
+    (function sidebarBtn() {
+        var pd = window.parent.document;
+        if (pd.getElementById('_dss-sidebar-btn')) return;
+        var sb = pd.createElement('button');
+        sb.id = '_dss-sidebar-btn';
+        sb.textContent = '❯';
+        sb.title = 'Expand sidebar';
+        sb.onclick = function() {
+            var collapseBtn = pd.querySelector('[data-testid="stBaseButton-headerNoPadding"]');
+            if (collapseBtn) collapseBtn.dispatchEvent(new MouseEvent('click', {bubbles:true, cancelable:true}));
+        };
+        pd.body.appendChild(sb);
+        function updateSidebar() {
+            var sidebar = pd.querySelector('[data-testid="stSidebar"]');
+            var b = pd.getElementById('_dss-sidebar-btn');
+            if (!b) return;
+            b.style.display = (sidebar && sidebar.getAttribute('aria-expanded') === 'false') ? 'block' : 'none';
+        }
+        setInterval(updateSidebar, 200);
+    })();
+
     // Streamlit overrides clickmode to "event", which prevents single-click
     // from emitting plotly_selected (only drag does). This poller restores
     // "event+select" so point clicks fire plotly_selected → on_select rerun.
-    (function patch() {
-        var pW = window.parent;
-        var Plotly = pW.Plotly;
-        if (Plotly) {
-            pW.document.querySelectorAll('.js-plotly-plot').forEach(function(d) {
-                if (d._fullLayout && d._fullLayout.dragmode === 'select'
-                        && d._fullLayout.clickmode !== 'event+select') {
-                    Plotly.relayout(d, {clickmode: 'event+select'});
-                }
-            });
-        }
-        setTimeout(patch, 350);
-    })();
+    if (!window.__dss_patch_running) {
+        window.__dss_patch_running = true;
+        (function patch() {
+            var pW = window.parent;
+            var Plotly = pW.Plotly;
+            if (Plotly) {
+                pW.document.querySelectorAll('.js-plotly-plot').forEach(function(d) {
+                    if (d._fullLayout && d._fullLayout.dragmode === 'select'
+                            && d._fullLayout.clickmode !== 'event+select') {
+                        Plotly.relayout(d, {clickmode: 'event+select'});
+                    }
+                });
+            }
+            setTimeout(patch, 350);
+        })();
+    }
 })();
 </script>""", height=0)
 
