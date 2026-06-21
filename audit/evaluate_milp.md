@@ -109,32 +109,34 @@ Limits the fraction of *exclusively air-accessible* assignments (demand nodes an
 
 ---
 
-### D5 — Z2 Uses Fastest Mode (Air); Decoder Uses Road-First ✓ ADDRESSED
+### D5 — Z2 Mode-Time Formula: No Gap
 
 **Paper (Equation for $\Omega_{is}$):**
 $$\Omega_{is} = \sum_{k} z_{iks} \left( \tau_{ks} + 2 \cdot \min_{m \mid a_{ikms}=1} \tau_{kim} \right)$$
 The paper uses $\min_m \tau_{kim}$ — the **fastest accessible mode** — for deprivation time calculation.
 
-**MILP (line 142):**
+**MILP (`build_and_solve_milp`, Z2 bounds section):**
 ```python
-min_t = min(transport.time[m][k][i] for m accessible)
+min_t = _mode_time(sc, inst["transport"]["time"], k_node, i_node, num_M, False)  # utopian
 ```
-Correctly implements the paper's formula: uses the minimum travel time (always air, since helicopter is 3–7× faster than road).
+Always uses the minimum travel time across all accessible modes. Faithful to the paper's formula.
 
-**C++ decoder (`decoder.hpp`, CLAUDE.md §5):**
-Road (0) → Water (1) → Air (2) priority. Air is last resort.
+**C++ decoder (`decoder.hpp` lines 383–391, confirmed by source inspection):**
+```cpp
+double min_t = inst.big_M;
+for (int m = 0; m < num_M; m++)
+    umin(min_t, inst.C_time[m][i][bk]);   // loops ALL modes, picks minimum
+double omega = sc.hub_process_time[best_ki] + 2.0 * min_t;
+```
+The decoder also uses **utopian min-time** for Z2. Road→water→air priority (`best_mode_time`) applies only to logistics assignment (which mode carries goods), not to the deprivation calculation.
 
-**Consequence:** The LP is **faithful to the paper's math**. The C++ decoder **deviates from the paper** by imposing an operational mode preference not in the formal model. This creates a model-algorithm gap:
+**Consequence:** There is **no model-algorithm gap on Z2**. Both the MILP and the PB-NSGA decoder compute Z2 with the same utopian $\min_m \tau_{kim}$ formula. The Z2 comparison in Table 1 is valid as-is.
 
-- LP-optimal Z2 values assume air speed for all demand nodes → Z2 is systematically **underestimated** vs. what the decoder would achieve.
-- All `lp_assignments` show mode=2 for nodes where air is fastest — this is correct per the paper's $\Omega$ formula, but contradicts the decoder's road-first policy.
-- The Pareto front comparison in Table 1 (MILP vs. PB-NSGA) uses Z2 values computed under different mode assumptions. The MILP's Z2 is more optimistic.
+**`lp_assignments` mode extraction** uses `lp_assignments_priority=True` (default), which applies the decoder's road→water→air priority for selecting the visualised logistics mode — matching `best_mode_time()` in the decoder. This does **not** affect Z2 values.
 
-**Fix applied (`src/solver/milp_aws_baseline.py`):** `build_and_solve_milp` now accepts `priority_mode=True` (default). When True, `_mode_time()` selects road→water→air in priority order for both the Z2 C_dep computation and the `lp_assignments` mode extraction. Pass `--no-priority-mode` at the CLI to restore the utopian min-time behaviour for reference.
+**Note on road-first in Z2 (attempted and reverted):** Applying road→water→air priority to Z2 c_dep causes the deprivation formula to saturate (hit the `exp(20)` cap for most demand nodes since road is 7–8× slower than air), producing Z2 ≈ 10¹² and making the MILP numerically infeasible. This confirms that the utopian formula is load-bearing for LP tractability, not merely a modelling simplification.
 
-**Thesis framing:** The paper's Ω formula uses `min_m τ_kim` as an optimistic lower bound that enables clean linearisation. The solver's road-first policy is a deliberate operational constraint — helicopters are scarce and expensive in practice — justified in §X as an intentional decoder design choice rather than a modelling error. When comparing MILP vs PB-NSGA, both use the road-first policy so Z2 values are on the same scale.
-
-**Severity:** High — affects validity of Z2 comparison. Now addressed by default.
+**Severity:** Not a discrepancy. No action required.
 
 ---
 
@@ -150,6 +152,60 @@ Total flow through hub $k$ (inventory + incoming supply + incoming transshipment
 
 ---
 
+### D7 — Supply Routing: Binary z_jks vs Decoder's Fractional MCF ← ROOT CAUSE OF Z1 GAP
+
+**Paper (Constraint 5):**
+$$\sum_{k \in \mathcal{H}} z_{jks} \le 1 \quad \forall j \in \mathcal{J}, s \in \mathcal{S}$$
+The paper leaves the interpretation of $z_{jks}$ ambiguous — it is a binary allocation indicator, but the actual supply volume routed is not specified as proportional to the full origin supply.
+
+**MILP (`milp_aws_baseline.py`, lines 205–209):**
+```python
+min_c = min(C_cost[m][j][k] for m accessible)
+z1_expr += pi * min_c * float(sc["supply"][str(j_node)]) * z_jks[ji, ki, si]
+```
+When $z_{jks}=1$, the MILP pays `π_s × C_cost × O_{js}` — the **full origin supply** regardless of actual need.
+
+**Decoder (`decoder.hpp`, lines 460–513):**
+The decoder runs a **min-cost flow (MCF)** solver for supply routing:
+```cpp
+mcf_add_edge(g, SRC, origin_node(jj), O, 0.0);               // origin capacity = full supply
+mcf_add_edge(g, origin_node(jj), hub_node(ki), O, o2h_cost); // arc per accessible hub
+min_cost_flow(g, SRC, SNK, total_deficit);                    // push only as much as needed
+Z1_s += e.cost * used;                                         // pays only for actual flow
+```
+The MCF pushes only `total_deficit` units from origins — exactly what the hubs need to cover the gap. It pays `C_cost × actual_flow`, not `C_cost × full_supply`.
+
+**Consequence — quantified on CV-Small v2, Z1-min solutions:**
+
+| Quantity | Value |
+|---|---|
+| Scenario 2 (π=0.1) net deficit | 392,813 units |
+| Origin 25 full supply in sc2 | 869,636 units |
+| C_cost[water][25→hub0] | 89.85 per unit |
+| **MILP binary cost** (pays for full supply) | **7,813,453** |
+| **Decoder MCF cost** (pays for deficit only) | **≈ 3,529,321** |
+| Binary overpayment | **4,284,132** |
+
+The MILP residual (supply + transshipment + reactive) = 7,813,453 ≈ exactly one binary z_jks assignment in sc2. In scenarios 0 and 1 the pre-positioned inventory covers all demand so no supply routing is triggered. In scenario 2 the deficit forces one binary origin assignment paying for 869k units when only 393k are needed.
+
+**Full Z1 gap breakdown (MILP 11,077,463 vs NSGA 9,500,081, gap = 1,577,382):**
+
+| Component | MILP | NSGA | MILP − NSGA |
+|---|---|---|---|
+| Fixed hub costs | 869,780 | 869,780 | 0 |
+| Inventory holding | 203,825 | 268,147 | −64,322 |
+| Last-mile theta | 2,190,405 | 3,345,898 | −1,155,493 |
+| Supply + trans + reactive | 7,813,453 | 5,016,256 | +2,797,197 |
+| **Total Z1** | **11,077,463** | **9,500,081** | **+1,577,382** |
+
+The MILP is actually **better** on fixed, holding, and theta (achieves lower last-mile cost). The entire gap — and more — comes from the binary supply routing overpayment.
+
+**Implication for Table 1 comparison:** The NSGA's lower Z1 is **not** evidence that PB-NSGA finds better hub/inventory decisions than the MILP. It reflects that the decoder evaluates supply routing with fractional MCF (pay for need) while the MILP formulation pays for full origin supply (binary). The Z1 comparison is **not apples-to-apples**.
+
+**Severity:** High. Directly explains the Z1 performance gap. The MILP is more constrained (must pay for full supply in binary), making its Z1 values systematically higher than those evaluated by the decoder.
+
+---
+
 ## 3. Summary Table
 
 | ID | Discrepancy | Direction | Severity |
@@ -158,14 +214,15 @@ Total flow through hub $k$ (inventory + incoming supply + incoming transshipment
 | D2 | Origin equality → inequality (can leave unassigned) | Relaxation | Moderate |
 | D3 | Force-safest hub active even if risk > χ | Extension | Minor |
 | D4 | Air-mode quota (15%) — extra heuristic constraint | Tightening | Informational |
-| D5 | Z2 uses min-time mode (air); decoder uses road-first | Model-algorithm gap | **High** ✓ fixed |
+| D5 | Z2 mode formula | Both use utopian min-time — no gap | None |
 | D6 | Throughput capacity (Constraint 9) missing | Omission | Moderate |
+| D7 | Supply routing binary (MILP) vs fractional MCF (decoder) | Formulation gap | **High** |
 
 ---
 
 ## 4. Recommended Actions
 
-**D5 (high priority):** Add a note in the paper that MILP Z2 values represent a lower bound under the assumption that the fastest available mode is always used, while PB-NSGA Z2 values follow the road-first decoder policy. The comparison in Table 1 should acknowledge this mode-policy difference.
+**D5:** No action needed. Both MILP and decoder use the same utopian min-time Z2 formula. The comparison in Table 1 is valid.
 
 **D6 (medium priority):** Add the throughput capacity constraint to `build_and_solve_milp`. Without it, the MILP is solving a relaxation of the paper's model.
 
@@ -176,6 +233,14 @@ solver.Add(
     <= K_hub[ki] * (x[ki] + y[ki, si])
 )
 ```
+
+**D7 (high priority — affects paper claims):** The Z1 comparison in Table 1 should note that MILP and PB-NSGA evaluate supply routing costs differently. Options:
+
+1. **Fix the MILP (recommended):** Replace binary `z_jks ∈ {0,1}` with a continuous variable `z_jks ∈ [0,1]` or a fractional flow variable, mirroring the decoder's MCF. Cost becomes `π × C_cost × O_j × z_jks` where `z_jks` is a fraction of supply routed. This makes MILP and decoder Z1-comparable. Requires adding: `z_jks[ji, ki, si] = solver.NumVar(0, 1, ...)` and changing the flow balance to use proportional supply (`z_jks × O_j` as fractional contribution).
+
+2. **Re-evaluate NSGA with MILP Z1 formula (partial fix):** Re-score NSGA solutions by applying the binary supply routing cost to their (X, R, A) decisions. This shows what NSGA solutions would cost under the MILP's more conservative accounting.
+
+3. **Document in paper (minimum fix):** Add a note to the experimental setup explaining that MILP pays for full origin supply when routing (binary z_jks), while the decoder routes fractional amounts via MCF. Report this as a comparison limitation.
 
 **D1/D2 (medium priority):** Document explicitly that the MILP treats infeasibility via big-M penalty (D1) and allows origin non-assignment (D2). These are standard solver-tractability choices but diverge from the paper's formal statement and should be mentioned in the experimental setup.
 

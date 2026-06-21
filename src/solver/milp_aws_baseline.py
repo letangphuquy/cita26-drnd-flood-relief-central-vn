@@ -54,15 +54,19 @@ def _mode_choice(sc, transport_time, k_node, i_node, num_M, priority_mode):
 
 def build_and_solve_milp(inst, w1=1.0, w2=0.0, eps_z1=None, eps_z2=None,
                          limit_z1=None, limit_z2=None, time_limit_s=600,
-                         priority_mode=True):
+                         lp_assignments_priority=True):
     """
     Builds and solves the MO-IHLNDP MILP.
     Includes weights and optional objective limits (inequality constraints) for AWS.
 
-    priority_mode=True  (default): Z2 deprivation time uses road→water→air priority,
-                        matching decoder.hpp. Produces Z2 values comparable to PB-NSGA.
-    priority_mode=False: Z2 uses min over all accessible modes (paper's utopian Ω
-                        formula — optimistic lower bound, used for linearization reference).
+    Z2 always uses min_m τ_kim (utopian min-time across all modes) — this is the
+    paper's formula and matches what decoder.hpp computes for Z2 (decoder.hpp lines
+    383-391 loop all modes and take the minimum, regardless of logistics mode choice).
+
+    lp_assignments_priority=True  (default): after solving, mode selected for each
+                        z_iks assignment follows road→water→air priority, matching
+                        decoder.hpp best_mode_time() for logistics.
+    lp_assignments_priority=False: lp_assignments use utopian min-time mode selection.
     """
     solver = pywraplp.Solver.CreateSolver('SCIP')
     if not solver:
@@ -187,7 +191,7 @@ def build_and_solve_milp(inst, w1=1.0, w2=0.0, eps_z1=None, eps_z2=None,
             solver.Add(z2_max_s[si] >= u_is[ii, si] * penalty)
             for ki in range(num_H):
                 k_node = inst["nodes"]["hub_indices"][ki]
-                min_t = _mode_time(sc, inst["transport"]["time"], k_node, i_node, num_M, priority_mode)
+                min_t = _mode_time(sc, inst["transport"]["time"], k_node, i_node, num_M, False)  # utopian min-time per paper; priority_mode is for lp_assignments only
                 if min_t is not None:
                     c_dep = float(sc["demand"][str(i_node)]) * math.expm1(min(lam_is * (sc["hub_process_time"][str(k_node)] + 2.0 * min_t), 20.0))
                     solver.Add(z2_max_s[si] >= c_dep * z_iks[ii, ki, si])
@@ -244,7 +248,7 @@ def build_and_solve_milp(inst, w1=1.0, w2=0.0, eps_z1=None, eps_z2=None,
                 for ki in range(num_H):
                     if z_iks[ii, ki, si].solution_value() > 0.5:
                         k_node = inst["nodes"]["hub_indices"][ki]
-                        best_m, _ = _mode_choice(sc, inst["transport"]["time"], k_node, i_node, num_M, priority_mode)
+                        best_m, _ = _mode_choice(sc, inst["transport"]["time"], k_node, i_node, num_M, lp_assignments_priority)
                         per_sc[str(ii)] = {"hub": ki, "mode": best_m if best_m >= 0 else 0}
                         break
             lp_assignments[str(si)] = per_sc
@@ -259,14 +263,14 @@ def build_and_solve_milp(inst, w1=1.0, w2=0.0, eps_z1=None, eps_z2=None,
         }
     return {"status": "INFEASIBLE"}
 
-def run_aws(inst, n_initial=5, delta_j_target=0.1, C=1.5, time_limit=600, priority_mode=True):
+def run_aws(inst, n_initial=5, delta_j_target=0.1, C=1.5, time_limit=600, lp_assignments_priority=True):
     """
     AWS Algorithm implementation following Step 1-8 of the paper.
 
-    priority_mode is forwarded to every build_and_solve_milp call.
+    lp_assignments_priority is forwarded to every build_and_solve_milp call.
     """
-    print(f"Step 1: Calculating Anchor Points and Normalization Factors (priority_mode={priority_mode})")
-    kw = dict(time_limit_s=time_limit, priority_mode=priority_mode)
+    print(f"Step 1: Calculating Anchor Points and Normalization Factors (lp_assignments_priority={lp_assignments_priority})")
+    kw = dict(time_limit_s=time_limit, lp_assignments_priority=lp_assignments_priority)
     p1 = build_and_solve_milp(inst, w1=1.0, w2=0.0, **kw)  # Min Z1
     if not p1 or p1["status"] == "INFEASIBLE": return []
     # Lexicographic for p1 (Min Z2 given Min Z1)
@@ -395,15 +399,15 @@ def main():
     parser.add_argument("--n_initial", type=int, default=5, help="Number of initial divisions.")
     parser.add_argument("--delta_j", type=float, default=0.1, help="Target segment length (normalized).")
     parser.add_argument("--time_limit", type=int, default=300, help="Time limit per solve.")
-    parser.add_argument("--no-priority-mode", dest="priority_mode", action="store_false",
-                        help="Use utopian min-time Z2 (paper's Ω formula) instead of road→water→air priority.")
-    parser.set_defaults(priority_mode=True)
+    parser.add_argument("--no-lp-assignments-priority", dest="lp_assignments_priority", action="store_false",
+                        help="Use utopian min-time mode selection for lp_assignments instead of road→water→air priority.")
+    parser.set_defaults(lp_assignments_priority=True)
     args = parser.parse_args()
 
     inst = load_instance(args.instance)
     t_start = time.time()
     pareto = run_aws(inst, n_initial=args.n_initial, delta_j_target=args.delta_j,
-                     time_limit=args.time_limit, priority_mode=args.priority_mode)
+                     time_limit=args.time_limit, lp_assignments_priority=args.lp_assignments_priority)
     t_total = time.time() - t_start
 
     out_data = {
@@ -413,7 +417,7 @@ def main():
             "total_elapsed_s": t_total,
             "n_initial": args.n_initial,
             "delta_j": args.delta_j,
-            "priority_mode": args.priority_mode,
+            "lp_assignments_priority": args.lp_assignments_priority,
         },
         "pareto_front": pareto
     }
