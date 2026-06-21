@@ -311,11 +311,11 @@ def main() -> None:
     # ════════════════════════════════════════════════════════════════════════
     with tab_exp:
         try:
-            from visualizer.experiments_view import render as render_experiments  # noqa: PLC0415
+            from visualizer.experiments_tab import render as render_experiments  # noqa: PLC0415
             render_experiments(dataset_name, version_name, inst_raw, node_info)
         except ImportError:
             st.info(
-                "Experiments view (`visualizer/experiments_view.py`) is not yet available. "
+                "Experiments tab (`visualizer/experiments_tab.py`) is not yet available. "
                 "It will be added in the next implementation step.",
                 icon="🔧",
             )
