@@ -21,6 +21,7 @@ from solution_loader import Solution, SolverResult  # noqa: E402
 from visualizer.config import (  # noqa: E402
     DATASETS, VERSIONS,
     SC_NAMES, SC_PROBS, SC_ICONS,
+    ALGO_LABELS, available_algorithms,
     get_explorer_config,
 )
 from visualizer.loaders import (  # noqa: E402
@@ -65,6 +66,7 @@ def main() -> None:
     ss.setdefault("selected_idx",      0)
     ss.setdefault("dataset",           DATASETS[0])
     ss.setdefault("dataset_version",   "v1")
+    ss.setdefault("algorithm",         "pb_nsga")
     ss.setdefault("scenario_idx",      0)
     ss.setdefault("map_mode",          "Single scenario")
     ss.setdefault("min_demand_filter", 0)
@@ -94,8 +96,24 @@ def main() -> None:
         )
         ss["dataset_version"] = version_name
 
-    paths = get_explorer_config(dataset_name, version_name)
-    dataset_label = f"{dataset_name} ({version_name})"
+        avail_algos = available_algorithms(dataset_name, version_name)
+        if ss["algorithm"] not in avail_algos:
+            ss["algorithm"] = avail_algos[0] if avail_algos else "pb_nsga"
+        if len(avail_algos) > 1:
+            algo_name = st.radio(
+                "Algorithm",
+                avail_algos,
+                format_func=lambda a: ALGO_LABELS.get(a, a),
+                index=avail_algos.index(ss["algorithm"]),
+                horizontal=True,
+                key="algorithm_radio",
+            )
+            ss["algorithm"] = algo_name
+        else:
+            algo_name = ss["algorithm"]
+
+    paths = get_explorer_config(dataset_name, version_name, algo_name)
+    dataset_label = f"{dataset_name} ({version_name}) · {ALGO_LABELS.get(algo_name, algo_name)}"
 
     # ── Load data ─────────────────────────────────────────────────────────────
     try:
@@ -182,6 +200,12 @@ def main() -> None:
     # ── Sidebar Part 3 — Flow status + solver ────────────────────────────────
     with st.sidebar:
         st.divider()
+        if algo_name != "pb_nsga":
+            st.caption(
+                f"ℹ️ **{ALGO_LABELS.get(algo_name, algo_name)}** flows are "
+                "postprocessor estimates — hub/stock decisions (X, R) are exact; "
+                "routing lines are approximated."
+            )
         if paths.get("result"):
             avail  = flows_available(flows_dir=paths.get("flows_dir"))
             n_sols = len(solutions)
@@ -219,8 +243,9 @@ def main() -> None:
                 st.warning(no_feasible_msg)
             else:
                 st.info(
-                    f"**{dataset_label}** has no solver output yet. "
-                    "Switch to v1 to explore solutions, or run the solver via the sidebar."
+                    f"No **{ALGO_LABELS.get(algo_name, algo_name)}** result found for "
+                    f"**{dataset_name} ({version_name})**. "
+                    "Run the experiment from the Experiments tab to generate one."
                 )
         else:
             render_solution_tab(

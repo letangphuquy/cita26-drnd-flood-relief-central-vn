@@ -184,12 +184,36 @@ def build_and_solve_milp(inst, w1=1.0, w2=0.0, eps_z1=None, eps_z2=None,
 
     status = solver.Solve()
     if status in [pywraplp.Solver.OPTIMAL, pywraplp.Solver.FEASIBLE]:
+        # Extract exact LP demand-to-hub assignments (z_iks) and best mode per pair
+        lp_assignments: dict = {}
+        for si in range(num_S):
+            sc = inst["scenarios"][si]
+            per_sc: dict = {}
+            for ii in range(num_I):
+                i_node = inst["nodes"]["demand_indices"][ii]
+                if float(sc["demand"].get(str(i_node), 0)) <= 1e-6:
+                    continue
+                for ki in range(num_H):
+                    if z_iks[ii, ki, si].solution_value() > 0.5:
+                        k_node = inst["nodes"]["hub_indices"][ki]
+                        best_m, best_t = -1, float("inf")
+                        for m in range(num_M):
+                            if sc["accessibility"][m][k_node][i_node]:
+                                t = float(inst["transport"]["time"][m][k_node][i_node])
+                                if t < best_t:
+                                    best_t = t
+                                    best_m = m
+                        per_sc[str(ii)] = {"hub": ki, "mode": best_m if best_m >= 0 else 0}
+                        break
+            lp_assignments[str(si)] = per_sc
+
         return {
             "status": "OPTIMAL" if status == pywraplp.Solver.OPTIMAL else "FEASIBLE",
             "Z1": z1_expr.solution_value(), "Z2": z2_expr.solution_value(),
             "X": [int(x[ki].solution_value() > 0.5) for ki in range(num_H)],
             "R": [q[ki].solution_value() / K_hub[ki] if K_hub[ki] > 0 else 0.0 for ki in range(num_H)],
-            "CV": sum(u_is[ii, si].solution_value() for ii in range(num_I) for si in range(num_S))
+            "CV": sum(u_is[ii, si].solution_value() for ii in range(num_I) for si in range(num_S)),
+            "lp_assignments": lp_assignments,
         }
     return {"status": "INFEASIBLE"}
 
