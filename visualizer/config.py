@@ -62,7 +62,7 @@ INF_SENTINEL: float = 1e9
 
 
 def _find_best_result(results_dir: Path, dataset_name: str) -> Optional[Path]:
-    """Return first existing seed file in *results_dir* for *dataset_name*."""
+    """Return first existing PB-NSGA seed file in *results_dir* for *dataset_name*."""
     if dataset_name == "CV Large":
         candidates = [results_dir / f"CV_large_seed{s}.json" for s in range(20)]
     else:
@@ -73,16 +73,58 @@ def _find_best_result(results_dir: Path, dataset_name: str) -> Optional[Path]:
     return next((p for p in candidates if p.exists()), None)
 
 
-def get_explorer_config(dataset_name: str, version: str) -> Dict[str, Any]:
+# ── Algorithm catalogue ───────────────────────────────────────────────────────
+
+ALGO_LABELS: Dict[str, str] = {
+    "pb_nsga":  "PB-NSGA",
+    "milp_aws": "MILP-AWS",
+}
+
+# Filename for each non-PB-NSGA algorithm, keyed by (algo, dataset_name).
+# CV-Large has no MILP result (solver doesn't scale); omit it here.
+_ALGO_FILE: Dict[str, Dict[str, str]] = {
+    "milp_aws": {"CV Small": "cv_small_milp_aws.json"},
+}
+
+
+def available_algorithms(dataset_name: str, version: str) -> List[str]:
+    """Return ordered list of algorithm keys that have result files on disk."""
+    p = PATHS[dataset_name][version]
+    algos: List[str] = []
+    if _find_best_result(p["results"], dataset_name):
+        algos.append("pb_nsga")
+    for algo, ds_map in _ALGO_FILE.items():
+        fname = ds_map.get(dataset_name)
+        if fname and (p["results"] / fname).exists():
+            algos.append(algo)
+    return algos
+
+
+def get_explorer_config(
+    dataset_name: str,
+    version: str,
+    algorithm: str = "pb_nsga",
+) -> Dict[str, Any]:
     """
     Return paths dict for the Solution Explorer.
 
     Keys: ``instance`` (str), ``result`` (str | None), ``flows_dir`` (Path).
+    Each algorithm gets its own flows dir so PB-NSGA and MILP-AWS flows
+    never overwrite each other.
     """
     p = PATHS[dataset_name][version]
-    result = _find_best_result(p["results"], dataset_name)
+
+    if algorithm == "pb_nsga":
+        result   = _find_best_result(p["results"], dataset_name)
+        flows_dir = p["flows"]
+    else:
+        fname  = _ALGO_FILE.get(algorithm, {}).get(dataset_name)
+        candidate = p["results"] / fname if fname else None
+        result    = candidate if (candidate and candidate.exists()) else None
+        flows_dir = p["flows"].parent / f"flows_{algorithm}"
+
     return {
         "instance":  str(p["instance"]),
         "result":    str(result) if result else None,
-        "flows_dir": p["flows"],
+        "flows_dir": flows_dir,
     }

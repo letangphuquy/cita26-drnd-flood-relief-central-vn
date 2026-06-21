@@ -179,6 +179,15 @@ panels as needed.
 The scenario toggle and map-view toggle move from sidebar to **above the map**,
 so the audience sees them without needing to look at the sidebar.
 
+> **[IMPL NOTE — 2026-06-21]** Map is at the top and scenario selector is above
+> the map in `solution_tab.py` ✅. The three panels (Stage-2, Stage-1, Pareto)
+> are implemented as `st.subheader` sections rather than `st.expander` — a FAB
+> scroll button replaces the collapse affordance. The map-view toggle
+> ("Single / Compare all 3") remains in the sidebar rather than above the map.
+> These are intentional deviations; the net UX is equivalent for presentation
+> use. No further change required unless a future pass specifically targets
+> the sidebar-to-inline migration.
+
 ### 3.2 Feature D1 — Stage-2 Scenario Response Panel `[P0]`
 
 Replaces the current KPI column. Framed as a **situational briefing**:
@@ -223,6 +232,25 @@ trip. Do NOT label this "travel distance" or "routing distance" — it is a time
 metric (hours) weighted by vulnerability $\lambda_{is} = \lambda_0(1 + r_{is})$
 in the deprivation cost Z2. Display avg $\Omega$ per mode group as "avg response
 latency (hrs)" if $\tau$ values are accessible from the instance.
+
+> **[IMPL NOTE — 2026-06-21]** Full Ω is computable from the instance:
+> - `τ_ks` = `instance["scenarios"][s]["hub_process_time"][str(hub_global_idx[k])]`
+>   (per-hub, per-scenario, in hours — risk-inflated, range 0.4–1.5 × (1 + 0.5r))
+> - `τ_kim` = `instance["transport"]["time"][mode][hub_global][demand_global]`
+>   (3×N×N matrix, hours)
+> - `λ_is` = `instance["lambda"]["{demand_local_idx}_{scenario_idx}"]`
+>
+> The solver's Z2 formula (from `decoder.hpp`) is the exponential deprivation:
+> `Z2 = max over demand of  D_is × (exp(λ_is × Ω_is) − 1)`  where
+> `Ω_is = τ_ks + 2 × min_m(C_time[m][hub][demand])`.
+>
+> Note: **theta (Daganzo CA dollar cost) is added to Z1, not Z2** — it is the
+> last-mile logistics routing cost component. Z2 is purely time-based deprivation.
+>
+> Display in D1: compute avg Ω per mode group from `flow.demand_assignments`
+> (hub_idx, mode) + `hub_process_time` + `transport.time`. Label as
+> **"avg response latency (hrs)"** — this is exactly what the solver optimises.
+> **This sub-feature is not yet implemented in `_render_stage2_panel`.**
 
 **Equity framing (from `narrative_data.json` when available):**
 ```
@@ -349,6 +377,13 @@ regardless of which view is active. No scrolling to the tab bar needed.
 The map in Solution view and the map in Input Dataset view are both rendered at
 the same location on screen (top of content area) so the audience can directly
 compare.
+
+> **[IMPL NOTE — 2026-06-21]** Not yet implemented. `app.py` still uses
+> `st.tabs` as the primary nav. The current tabs render at the top of the page
+> and require only one click to switch — in practice the scrolling concern is
+> minor. If the presentation use-case makes this a priority, implement by
+> replacing `st.tabs(...)` with a `st.radio` and conditional rendering blocks.
+> Estimate: 30–45 min. Deferred pending explicit user request.
 
 ### 3.8 Feature D7 — Static Input Layers `[P1]`
 
