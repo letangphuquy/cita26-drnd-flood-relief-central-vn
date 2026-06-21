@@ -126,7 +126,7 @@ def build_and_solve_milp(inst, w1=1.0, w2=0.0, eps_z1=None, eps_z2=None,
             for ii in range(num_I):
                 z_iks[ii, ki, si] = solver.IntVar(0, 1, f'z_i{ii}_k{ki}_s{si}')
             for ji in range(num_J):
-                z_jks[ji, ki, si] = solver.IntVar(0, 1, f'z_j{ji}_k{ki}_s{si}')
+                z_jks[ji, ki, si] = solver.NumVar(0, 1, f'z_j{ji}_k{ki}_s{si}')  # continuous: fraction of O_js routed
             for hi in range(num_H):
                 for m in range(num_M):
                     f_khms[ki, hi, m, si] = solver.NumVar(0, tot_cap, f'f_k{ki}h{hi}m{m}s{si}')
@@ -150,7 +150,8 @@ def build_and_solve_milp(inst, w1=1.0, w2=0.0, eps_z1=None, eps_z2=None,
         for ji in range(num_J):
             j_node = inst["nodes"]["origin_indices"][ji]
             if sc["supply"][str(j_node)] > 1e-6:
-                # Match decoder semantics: origins may remain unused if no beneficial/reachable assignment exists.
+                # z_jks is continuous: fraction of O_js routed to hub k. Sum ≤ 1 means at most
+                # 100% of origin supply is dispatched (LP routes only what hubs need — mirrors decoder MCF).
                 solver.Add(sum(z_jks[ji, ki, si] for ki in range(num_H)) <= 1)
                 for ki in range(num_H):
                     solver.Add(z_jks[ji, ki, si] <= x_act[ki, si] + y[ki, si])
@@ -253,6 +254,23 @@ def build_and_solve_milp(inst, w1=1.0, w2=0.0, eps_z1=None, eps_z2=None,
                         break
             lp_assignments[str(si)] = per_sc
 
+        # Extract fractional origin→hub flows (z_jks now continuous)
+        lp_origin_flows: dict = {}
+        for si in range(num_S):
+            per_sc: dict = {}
+            for ji in range(num_J):
+                j_node = inst["nodes"]["origin_indices"][ji]
+                flows_to = {}
+                for ki in range(num_H):
+                    frac = z_jks[ji, ki, si].solution_value()
+                    if frac > 1e-6:
+                        best_m, _ = _mode_choice(inst["scenarios"][si], inst["transport"]["time"],
+                                                  j_node, inst["nodes"]["hub_indices"][ki], num_M, lp_assignments_priority)
+                        flows_to[str(ki)] = {"frac": round(frac, 6), "mode": best_m if best_m >= 0 else 0}
+                if flows_to:
+                    per_sc[str(ji)] = flows_to
+            lp_origin_flows[str(si)] = per_sc
+
         return {
             "status": "OPTIMAL" if status == pywraplp.Solver.OPTIMAL else "FEASIBLE",
             "Z1": z1_expr.solution_value(), "Z2": z2_expr.solution_value(),
@@ -260,6 +278,7 @@ def build_and_solve_milp(inst, w1=1.0, w2=0.0, eps_z1=None, eps_z2=None,
             "R": [q[ki].solution_value() / K_hub[ki] if K_hub[ki] > 0 else 0.0 for ki in range(num_H)],
             "CV": sum(u_is[ii, si].solution_value() for ii in range(num_I) for si in range(num_S)),
             "lp_assignments": lp_assignments,
+            "lp_origin_flows": lp_origin_flows,
         }
     return {"status": "INFEASIBLE"}
 

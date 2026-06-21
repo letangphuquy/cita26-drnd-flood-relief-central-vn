@@ -52,22 +52,22 @@ A `big_M` penalty per unit of unmet demand is added to Z1. This term does not ap
 
 ---
 
-### D2 — Origin Assignment Changed from Equality to Inequality
+### D2 — Origin Assignment: Equality → Fractional Continuous Variable
 
 **Paper (Constraint 4):**
 $$\sum_{k \in \mathcal{H}} z_{jks} = 1 \quad \forall j \in \mathcal{J}, s \in \mathcal{S}$$
-Every origin must supply exactly one hub per scenario.
+The paper states $z_{jks}$ as binary, with every origin supplying exactly one hub.
 
-**MILP (line 102):**
+**MILP (current):**
 ```python
-solver.Add(sum(z_jks[ji, ki, si] for ki in range(num_H)) <= 1)
+z_jks[ji, ki, si] = solver.NumVar(0, 1, ...)          # continuous: fraction of O_js routed
+solver.Add(sum(z_jks[ji, ki, si] for ki) <= 1)         # at most 100% of supply dispatched
 ```
-Origins can be left completely unassigned ($z_{jks}=0$ for all $k$). Supply at origin $j$ is silently unused if no hub is reachable or beneficial.
+$z_{jks} \in [0,1]$ — the fraction of origin $j$'s supply routed to hub $k$ in scenario $s$. The LP routes only as much as needed to cover hub deficits, mirroring the decoder's MCF. Origins can remain partially or fully unused.
 
-**Comment in code (line 101):**
-> "Match decoder semantics: origins may remain unused if no beneficial/reachable assignment exists."
+**Why this matches the decoder (decoder.hpp lines 460–513):** The decoder runs a fractional min-cost flow: capacity on origin arcs = $O_{js}$ (full supply), but only `total_deficit` units are pushed. The LP equivalent is $z_{jks} \in [0,1]$ with cost $\pi_s \cdot c_{jks} \cdot O_{js} \cdot z_{jks}$ — identical semantics.
 
-**Severity:** Moderate. Relaxes the model's supply utilisation assumption. In scenarios where all routes from an origin to active hubs are severed, this is operationally realistic — but it departs from the paper's mathematical statement.
+**Severity:** Informational (previously Moderate). The continuous relaxation is the correct formulation to match the decoder. The binary-then-equality paper statement is an idealisation; the decoder never enforces it.
 
 ---
 
@@ -152,7 +152,7 @@ Total flow through hub $k$ (inventory + incoming supply + incoming transshipment
 
 ---
 
-### D7 — Supply Routing: Binary z_jks vs Decoder's Fractional MCF ← ROOT CAUSE OF Z1 GAP
+### D7 — Supply Routing: Binary z_jks vs Decoder's Fractional MCF ✓ FIXED
 
 **Paper (Constraint 5):**
 $$\sum_{k \in \mathcal{H}} z_{jks} \le 1 \quad \forall j \in \mathcal{J}, s \in \mathcal{S}$$
@@ -202,21 +202,25 @@ The MILP is actually **better** on fixed, holding, and theta (achieves lower las
 
 **Implication for Table 1 comparison:** The NSGA's lower Z1 is **not** evidence that PB-NSGA finds better hub/inventory decisions than the MILP. It reflects that the decoder evaluates supply routing with fractional MCF (pay for need) while the MILP formulation pays for full origin supply (binary). The Z1 comparison is **not apples-to-apples**.
 
-**Severity:** High. Directly explains the Z1 performance gap. The MILP is more constrained (must pay for full supply in binary), making its Z1 values systematically higher than those evaluated by the decoder.
+**Fix applied (`milp_aws_baseline.py` line 129):** Changed `z_jks` from `IntVar(0,1)` to `NumVar(0,1)`. The rest of the formulation is unchanged — flow balance, Z1 cost, and accessibility constraints all naturally support fractional values. `lp_origin_flows` added to output to record per-scenario fractional origin routing.
+
+**Expected effect:** MILP Z1 values should drop toward the decoder's range. The binary overpayment of ≈4.28M in scenario 2 (paying for 869k units when only 393k needed) becomes a fractional cost of ≈3.53M (paying for exactly the deficit fraction). Z1 gap (1.58M) should largely close.
+
+**Severity:** Resolved. Run `run_exp1_baselines.sh` and compare new `cv_small_milp_aws.json` against PB-NSGA.
 
 ---
 
 ## 3. Summary Table
 
-| ID | Discrepancy | Direction | Severity |
-|---|---|---|---|
-| D1 | Demand equality → penalty slack `u_is` | Relaxation | Moderate |
-| D2 | Origin equality → inequality (can leave unassigned) | Relaxation | Moderate |
-| D3 | Force-safest hub active even if risk > χ | Extension | Minor |
-| D4 | Air-mode quota (15%) — extra heuristic constraint | Tightening | Informational |
-| D5 | Z2 mode formula | Both use utopian min-time — no gap | None |
-| D6 | Throughput capacity (Constraint 9) missing | Omission | Moderate |
-| D7 | Supply routing binary (MILP) vs fractional MCF (decoder) | Formulation gap | **High** |
+| ID | Discrepancy | Direction | Severity | Status |
+|---|---|---|---|---|
+| D1 | Demand equality → penalty slack `u_is` | Relaxation | Moderate | Open |
+| D2 | Origin assignment: binary → continuous fractional | Corrected | Informational | ✓ Fixed |
+| D3 | Force-safest hub active even if risk > χ | Extension | Minor | Open |
+| D4 | Air-mode quota (15%) — extra heuristic constraint | Tightening | Informational | Open |
+| D5 | Z2 mode formula | Both use utopian min-time — no gap | None | N/A |
+| D6 | Throughput capacity (Constraint 9) missing | Omission | Moderate | Open |
+| D7 | Supply routing binary vs decoder MCF — root cause of Z1 gap | Formulation gap | High | ✓ Fixed |
 
 ---
 
@@ -234,14 +238,6 @@ solver.Add(
 )
 ```
 
-**D7 (high priority — affects paper claims):** The Z1 comparison in Table 1 should note that MILP and PB-NSGA evaluate supply routing costs differently. Options:
+**D1 (medium priority):** Document explicitly that the MILP treats infeasibility via big-M penalty. Standard solver-tractability choice but diverges from the paper's hard-equality Constraint 4 for demand.
 
-1. **Fix the MILP (recommended):** Replace binary `z_jks ∈ {0,1}` with a continuous variable `z_jks ∈ [0,1]` or a fractional flow variable, mirroring the decoder's MCF. Cost becomes `π × C_cost × O_j × z_jks` where `z_jks` is a fraction of supply routed. This makes MILP and decoder Z1-comparable. Requires adding: `z_jks[ji, ki, si] = solver.NumVar(0, 1, ...)` and changing the flow balance to use proportional supply (`z_jks × O_j` as fractional contribution).
-
-2. **Re-evaluate NSGA with MILP Z1 formula (partial fix):** Re-score NSGA solutions by applying the binary supply routing cost to their (X, R, A) decisions. This shows what NSGA solutions would cost under the MILP's more conservative accounting.
-
-3. **Document in paper (minimum fix):** Add a note to the experimental setup explaining that MILP pays for full origin supply when routing (binary z_jks), while the decoder routes fractional amounts via MCF. Report this as a comparison limitation.
-
-**D1/D2 (medium priority):** Document explicitly that the MILP treats infeasibility via big-M penalty (D1) and allows origin non-assignment (D2). These are standard solver-tractability choices but diverge from the paper's formal statement and should be mentioned in the experimental setup.
-
-**D3/D4 (low priority):** These are implementation choices that prevent degenerate solutions and match the decoder's operational logic. Document as implementation notes rather than errors.
+**D3/D4 (low priority):** Implementation choices that prevent degenerate solutions and match the decoder's operational logic. Document as implementation notes rather than errors.

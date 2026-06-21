@@ -172,6 +172,22 @@ Detailed command-line arguments for the solvers and reproduction scripts.
 | `--tourney` | Int | `2` | Tournament selection size. |
 | `--out` | Path | `stdout` | Destination path for the result JSON. |
 
+### 6.1b. MILP Adaptive Weighted-Sum Baseline (`src/solver/milp_aws_baseline.py`)
+
+The AWS baseline solves the bi-objective MO-IHLNDP exactly using SCIP via OR-Tools.
+
+**Supply routing formulation note.** The paper defines $z_{jks} \in \{0,1\}$ as a binary origin-to-hub indicator. The implementation uses $z_{jks} \in [0,1]$ (continuous), where $z_{jks}$ is the *fraction* of origin $j$'s supply $O_{js}$ routed to hub $k$ in scenario $s$. This mirrors the decoder's min-cost flow (MCF), which pushes only as many units as the hub deficit requires. A binary $z_{jks}$ would charge the full origin supply even when only a small fraction is needed, inflating Z1 values relative to what the decoder reports. The fractional formulation makes MILP and PB-NSGA Z1 values directly comparable.
+
+**CLI flags:**
+| Flag | Default | Description |
+| :--- | :------ | :---------- |
+| `--instance` | (Required) | Path to DRND instance JSON. |
+| `--out` | (Required) | Destination path for result JSON. |
+| `--n_initial` | `5` | Initial weighted-sum divisions. |
+| `--delta_j` | `0.1` | Target Pareto segment length (normalised). |
+| `--time_limit` | `300` | Seconds per SCIP sub-problem. |
+| `--no-lp-assignments-priority` | off | Use utopian min-time mode for logistics display instead of road→water→air. |
+
 ### 6.2. MILP Epsilon-Constraint Baseline (`src/solver/milp_epsilon.py`)
 | Argument | Type | Default | Description |
 | :------- | :--- | :------ | :---------- |

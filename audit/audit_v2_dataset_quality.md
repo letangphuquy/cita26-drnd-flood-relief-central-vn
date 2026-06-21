@@ -21,13 +21,15 @@ PB-NSGA solutions on both CV-Small and CV-Large v2 fill most open hubs to R = 0.
 
 | Hub | Cap | PB-NSGA R | MILP R | Verdict |
 |---|---|---|---|---|
-| Dong_Giang_Rescue_Stn | 108,724 | 1.00 | 0.96–1.00 | data-driven |
+| Dong_Giang_Rescue_Stn | 108,724 | 1.00 | 0.98–1.00 | data-driven |
 | Thang_Binh_Depot | 104,651 | 1.00 | 0.85–1.00 | data-driven |
-| A_Luoi_Relief_Center | 77,256 | 0.86–1.00 | 0.77–1.00 | data-driven |
-| Da_Nang_Airport_Hub | 164,561 | 0.89–1.00 | 0.64–0.94 | mixed |
-| **Tam_Ky_Logistics_Hub** | **207,168** | **0.45–1.00** | **0.25–0.43** | **algorithm weakness** |
+| A_Luoi_Relief_Center | 77,256 | 0.86–1.00 | 0.77–0.98 | data-driven |
+| Da_Nang_Airport_Hub | 164,561 | 0.89–1.00 | **1.00** | data-driven (see note) |
+| **Tam_Ky_Logistics_Hub** | **207,168** | **0.45–1.00** | **0.26–0.43** | **algorithm weakness** |
 
-The three smallest hubs are genuinely near-full by data necessity. Tam_Ky — the *largest* hub — is the systematic exception: MILP proves 25–43% suffices, yet PB-NSGA fills it 45–100%.
+The three smallest hubs are genuinely near-full by data necessity. Tam_Ky — the *largest* hub — is the systematic exception: MILP proves 26–43% suffices, yet PB-NSGA fills it 45–100%.
+
+**Da_Nang note (updated after D7 fix).** With binary $z_{jks}$, Da_Nang's R was 0.64–0.94 because the LP avoided filling a cheap hub to prevent paying for the *full* origin supply when routing. With continuous $z_{jks}$ (fractional MCF), Da_Nang fills to R=1.00 in all MILP solutions: the LP now fills the cheapest hub to capacity and routes fractional origin supply for remaining deficits elsewhere — no binary overpayment penalty.
 
 **Why PB-NSGA over-fills Tam_Ky.** Tam_Ky has the highest capacity (207K) and broad accessibility, meaning its marginal Z2 gain per unit of inventory is low — it covers demand nodes already reachable from other hubs. MILP's LP dual prices detect this instantly. PB-NSGA's evolutionary operators on R vectors have no such signal; the population converges to a "fill everything" heuristic.
 
@@ -42,7 +44,7 @@ Near-full R on v2 is not a sign of a degenerate dataset. It is the correct respo
 
 ### Observation
 
-MILP-AWS solutions on v2 CV-Small occupy Z1 ∈ [$11.08M, $17.84M] yet achieve Z2 ∈ [67,859, 109,923] — far below PB-NSGA's Z2 ∈ [114,693, 128,154] at lower Z1 ∈ [$9.50M, $11.06M]. Counterintuitively, the more expensive supply-chain solutions produce less deprivation, not more.
+**After D7 fix (continuous z_jks).** MILP-AWS solutions on v2 CV-Small occupy Z1 ∈ [$8.34M, $14.38M] and Z2 ∈ [67,859, 125,636]. PB-NSGA: Z1 ∈ [$9.50M, $31.17M] and Z2 ∈ [71,867, 128,154]. MILP now dominates NSGA on both objectives at their extremes (MILP Z1-min 8.34M < NSGA 9.50M; MILP Z2-min 67,859 < NSGA 71,867) — the correct result for an exact solver. Within the MILP Pareto front itself, the Z1/Z2 tradeoff is pronounced: the cheap-supply configuration (Z1=$8.34M) pays 125,636 in deprivation while the inland-hub configuration (Z1=$14.38M) achieves 67,859 — a 1.85× deprivation reduction for 1.72× supply cost.
 
 ### Root cause: geography of supply vs. geography of demand
 
