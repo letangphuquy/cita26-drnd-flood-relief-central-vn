@@ -109,7 +109,7 @@ Limits the fraction of *exclusively air-accessible* assignments (demand nodes an
 
 ---
 
-### D5 — Z2 Uses Fastest Mode (Air); Decoder Uses Road-First
+### D5 — Z2 Uses Fastest Mode (Air); Decoder Uses Road-First ✓ ADDRESSED
 
 **Paper (Equation for $\Omega_{is}$):**
 $$\Omega_{is} = \sum_{k} z_{iks} \left( \tau_{ks} + 2 \cdot \min_{m \mid a_{ikms}=1} \tau_{kim} \right)$$
@@ -130,7 +130,11 @@ Road (0) → Water (1) → Air (2) priority. Air is last resort.
 - All `lp_assignments` show mode=2 for nodes where air is fastest — this is correct per the paper's $\Omega$ formula, but contradicts the decoder's road-first policy.
 - The Pareto front comparison in Table 1 (MILP vs. PB-NSGA) uses Z2 values computed under different mode assumptions. The MILP's Z2 is more optimistic.
 
-**Severity:** High — affects the validity of quantitative comparison between MILP and PB-NSGA in the experiments. Should be noted as a limitation or the $\Omega$ formula should be aligned.
+**Fix applied (`src/solver/milp_aws_baseline.py`):** `build_and_solve_milp` now accepts `priority_mode=True` (default). When True, `_mode_time()` selects road→water→air in priority order for both the Z2 C_dep computation and the `lp_assignments` mode extraction. Pass `--no-priority-mode` at the CLI to restore the utopian min-time behaviour for reference.
+
+**Thesis framing:** The paper's Ω formula uses `min_m τ_kim` as an optimistic lower bound that enables clean linearisation. The solver's road-first policy is a deliberate operational constraint — helicopters are scarce and expensive in practice — justified in §X as an intentional decoder design choice rather than a modelling error. When comparing MILP vs PB-NSGA, both use the road-first policy so Z2 values are on the same scale.
+
+**Severity:** High — affects validity of Z2 comparison. Now addressed by default.
 
 ---
 
@@ -154,7 +158,7 @@ Total flow through hub $k$ (inventory + incoming supply + incoming transshipment
 | D2 | Origin equality → inequality (can leave unassigned) | Relaxation | Moderate |
 | D3 | Force-safest hub active even if risk > χ | Extension | Minor |
 | D4 | Air-mode quota (15%) — extra heuristic constraint | Tightening | Informational |
-| D5 | Z2 uses min-time mode (air); decoder uses road-first | Model-algorithm gap | **High** |
+| D5 | Z2 uses min-time mode (air); decoder uses road-first | Model-algorithm gap | **High** ✓ fixed |
 | D6 | Throughput capacity (Constraint 9) missing | Omission | Moderate |
 
 ---
