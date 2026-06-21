@@ -19,16 +19,15 @@ sys.path.insert(0, str(_ROOT / "src" / "visualizer"))
 
 from solution_loader import Solution, SolverResult  # noqa: E402
 from visualizer.config import (  # noqa: E402
-    PATHS, DATASETS, VERSIONS,
+    DATASETS, VERSIONS,
     SC_NAMES, SC_PROBS, SC_ICONS,
-    DEFAULT_GEN, SOLVER_BIN,
     get_explorer_config,
 )
 from visualizer.loaders import (  # noqa: E402
     cached_load_result, cached_load_instance, cached_load_instance_raw,
     get_solutions,
 )
-from visualizer.solver_runner import run_solver_pipeline  # noqa: E402
+from visualizer.solver_runner import run_preprocess_flows  # noqa: E402
 from visualizer.widgets import compute_knee, scenario_selector  # noqa: E402
 from visualizer.pareto_view import build_pareto_fig  # noqa: E402
 from visualizer.flow_loader import flows_available  # noqa: E402
@@ -123,7 +122,7 @@ def main() -> None:
             best_cv  = min((s.CV for s in all_sols), default=0.0)
             no_feasible_msg = (
                 f"**{dataset_label}** has no zero-violation (CV=0) solutions — "
-                f"best CV found: **{best_cv:,.2f}**. Try a different seed/algo via Run Solver."
+                f"best CV found: **{best_cv:,.2f}**. Try re-running EXP-1 or EXP-2 from the Experiments tab."
             )
 
     # ── Sidebar Part 2 — Mini Pareto + map controls ───────────────────────────
@@ -184,45 +183,29 @@ def main() -> None:
     with st.sidebar:
         st.divider()
         if paths.get("result"):
-            avail = flows_available(flows_dir=paths.get("flows_dir"))
-            if avail:
-                st.success(f"Flow data: {len(avail)} solution(s) pre-computed")
+            avail  = flows_available(flows_dir=paths.get("flows_dir"))
+            n_sols = len(solutions)
+            flows_ok = avail and (n_sols == 0 or len(avail) >= n_sols)
+
+            if not avail:
+                st.info("No flow data yet.")
+                btn_label = "⚙️ Generate Flows"
+            elif not flows_ok:
+                st.warning(f"Flow data: **{len(avail)}/{n_sols}** solutions — stale.")
+                btn_label = "⚙️ Regenerate Flows"
             else:
-                st.info("No per-solution flows found.\n\n```\npython visualizer/preprocess_flows.py\n```")
+                st.success(f"Flow data: {len(avail)} solution(s) pre-computed")
+                btn_label = "⚙️ Regenerate Flows"
+
+            if st.button(btn_label, use_container_width=True, key="regen_flows"):
+                if run_preprocess_flows(
+                    paths["instance"], paths["result"], paths["flows_dir"]
+                ):
+                    st.cache_data.clear()
+                    st.rerun()
         else:
             st.info(f"No solver output for **{dataset_label}** yet.")
 
-        st.divider()
-        with st.expander("⚙️ Run Solver", expanded=(paths.get("result") is None)):
-            st.caption(f"Runs PB-NSGA-II on **{dataset_label}**, then regenerates flow data.")
-            c1, c2 = st.columns(2)
-            pop  = c1.number_input("--pop",  min_value=10, value=200, step=10)
-            gen  = c2.number_input("--gen",  min_value=10, value=DEFAULT_GEN[dataset_name], step=10)
-            c3, c4 = st.columns(2)
-            seed = c3.number_input("--seed", min_value=0, value=0, step=1)
-            algo = c4.selectbox("--algo", ["nsga2", "nsma"], index=0)
-
-            overwrite_ok = True
-            if version_name == "v1":
-                st.warning("v1 result already exists. Re-running will overwrite it.")
-                overwrite_ok = st.checkbox("Overwrite existing v1 result", value=False)
-
-            if not SOLVER_BIN.exists():
-                st.error(f"Solver binary not found: `{SOLVER_BIN.relative_to(_ROOT)}`. Run compile.sh first.")
-            elif st.button("▶ Run Solver", use_container_width=True,
-                           disabled=(version_name == "v1" and not overwrite_ok)):
-                p = PATHS[dataset_name][version_name]
-                if dataset_name == "CV Large":
-                    target_result = p["results"] / f"CV_large_seed{int(seed)}.json"
-                else:
-                    target_result = p["results"] / f"cv_small_pb_nsga_seed{int(seed)}.json"
-                if run_solver_pipeline(
-                    paths["instance"], target_result, p["flows"],
-                    int(pop), int(gen), int(seed), algo
-                ):
-                    st.cache_data.clear()
-                    ss["selected_idx"] = 0
-                    st.rerun()
 
     # ── Global tabs ───────────────────────────────────────────────────────────
     tab_sol, tab_ds, tab_exp = st.tabs(["🗺️ Solution", "📊 Input Dataset", "📈 Experiments"])

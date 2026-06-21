@@ -22,7 +22,7 @@ sys.path.insert(0, str(_ROOT))
 sys.path.insert(0, str(_ROOT / "src" / "visualizer"))
 
 from solution_loader import NodeInfo  # noqa: E402
-from visualizer.config import PATHS, SOLVER_BIN  # noqa: E402
+from visualizer.config import PATHS, SOLVER_BIN, _find_best_result  # noqa: E402
 
 
 # ── Experiment definitions ────────────────────────────────────────────────────
@@ -204,6 +204,37 @@ def _stream_run(cmd: List[str], label: str) -> bool:
         return ok
 
 
+# ── Shared: flow postprocessing for any PB-NSGA result ───────────────────────
+
+def _postprocess_flows(dataset: str, version: str) -> None:
+    """Regenerate flow files for the best available PB-NSGA result in the results dir."""
+    p = _p(dataset, version)
+    result_file = _find_best_result(p["results"], dataset)
+    if result_file is None:
+        st.warning("No PB-NSGA result file found — skipping flow preprocessing.")
+        return
+    st.info(f"Preprocessing flows for `{result_file.name}`…")
+    ok = _stream_run(
+        [sys.executable, str(Path(__file__).parent / "preprocess_flows.py"),
+         "--result",   str(result_file),
+         "--instance", str(p["instance"]),
+         "--out-dir",  str(p["flows"]),
+         "--force"],
+        "Flow preprocessing",
+    )
+    if ok:
+        st.success(f"Flows written to `{p['flows'].relative_to(_ROOT)}`")
+
+
+# ── EXP-1 special handler — baseline run + flow preprocessing ────────────────
+
+def _run_exp1(dataset: str, version: str) -> None:
+    """Run all baselines via run_exp1_baselines.sh, then preprocess flows for PB-NSGA result."""
+    ok = _stream_run(_exp1_cmd(dataset, version), "CV-Small baseline comparison")
+    if ok:
+        _postprocess_flows(dataset, version)
+
+
 # ── EXP-2 multi-seed special handler ─────────────────────────────────────────
 
 def _run_exp2(dataset: str, version: str, max_seed: int) -> None:
@@ -230,6 +261,8 @@ def _run_exp2(dataset: str, version: str, max_seed: int) -> None:
         if not ok:
             st.error(f"Seed {seed} failed — stopping multi-seed run.")
             return
+
+    _postprocess_flows(dataset, version)
 
 
 # ── Status check ─────────────────────────────────────────────────────────────
@@ -368,7 +401,9 @@ def render(
                 btn_disabled = True
                 c3.markdown("_CV-Large only_")
             elif c3.button(btn_label, key=f"run_{exp.id}", disabled=btn_disabled):
-                if exp.id == "EXP-2":
+                if exp.id == "EXP-1":
+                    _run_exp1(dataset_name, version_name)
+                elif exp.id == "EXP-2":
                     max_seed = st.number_input(
                         "Run seeds 0 –", min_value=0, max_value=19, value=19,
                         key="exp2_max_seed",
