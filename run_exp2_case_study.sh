@@ -17,31 +17,50 @@
 # ============================================================
 
 PROJECT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DATA_CV="$PROJECT/data/cv/cv_large_drnd.json"
+# legacy defaults (do not restore — pass explicitly):
+#   DATA_CV="$PROJECT/data/cv/cv_large_drnd.json"
+#   RES2="$PROJECT/results/exp2"
 DATA_PREP="$PROJECT/data/prep"
 SAA_DATA="$DATA_PREP/cv_large_saa100.json"
 OOS_DATA="$DATA_PREP/cv_large_oos10.json"
-RES2="$PROJECT/results/exp2"
 SOLVER_DIR="$PROJECT/src/solver"
 PAPER_FIG_DIR="$PROJECT/paper/figures"
 
+DATA_CV=""
+RES2=""
 ANALYZE_ONLY=0
-for arg in "$@"; do
-    case "$arg" in
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --instance)
+            DATA_CV="$2"; shift 2 ;;
+        --results-dir)
+            RES2="$2"; shift 2 ;;
         --analyze-only)
-            ANALYZE_ONLY=1
-            ;;
+            ANALYZE_ONLY=1; shift ;;
         --help|-h)
-            echo "Usage: ./run_exp2_case_study.sh [--analyze-only]"
+            echo "Usage: ./run_exp2_case_study.sh --instance <cv_large.json> --results-dir <dir> [--analyze-only]"
+            echo ""
+            echo "Required:"
+            echo "  --instance <path>     CV-Large instance JSON"
+            echo "  --results-dir <path>  Output directory for result files"
             echo ""
             echo "Flags:"
             echo "  --analyze-only  Skip solver runs; only perform analysis on existing results/"
             exit 0
             ;;
         *)
+            echo "[Error] Unknown argument: $1"
+            echo "Run with --help for usage."
+            exit 1
             ;;
     esac
 done
+
+if [ -z "$DATA_CV" ] || [ -z "$RES2" ]; then
+    echo "[Error] --instance and --results-dir are required."
+    echo "Run with --help for usage."
+    exit 1
+fi
 
 if [ "$ANALYZE_ONLY" -eq 1 ]; then
     echo ""

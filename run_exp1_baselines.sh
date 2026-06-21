@@ -15,22 +15,31 @@
 # ============================================================
 
 PROJECT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DATA_CV="$PROJECT/data/cv/cv_small_drnd.json"
-RES1="$PROJECT/results/exp1"
+# legacy defaults (do not restore — pass explicitly):
+#   DATA_CV="$PROJECT/data/cv/cv_small_drnd.json"
+#   RES1="$PROJECT/results/exp1"
 SOLVER_DIR="$PROJECT/src/solver"
 
+DATA_CV=""
+RES1=""
 SKIP_UNCHANGED=0
 ANALYZE_ONLY=0
-for arg in "$@"; do
-    case "$arg" in
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --instance)
+            DATA_CV="$2"; shift 2 ;;
+        --results-dir)
+            RES1="$2"; shift 2 ;;
         --skip-unchanged)
-            SKIP_UNCHANGED=1
-            ;;
+            SKIP_UNCHANGED=1; shift ;;
         --analyze-only)
-            ANALYZE_ONLY=1
-            ;;
+            ANALYZE_ONLY=1; shift ;;
         --help|-h)
-            echo "Usage: ./run_exp1_baselines.sh [--skip-unchanged] [--analyze-only]"
+            echo "Usage: ./run_exp1_baselines.sh --instance <cv_small.json> --results-dir <dir> [--skip-unchanged] [--analyze-only]"
+            echo ""
+            echo "Required:"
+            echo "  --instance <path>     CV-Small instance JSON"
+            echo "  --results-dir <path>  Output directory for result files and metrics CSV"
             echo ""
             echo "Flags:"
             echo "  --skip-unchanged  Skip compile/run steps whose outputs are newer than inputs"
@@ -38,9 +47,18 @@ for arg in "$@"; do
             exit 0
             ;;
         *)
+            echo "[Error] Unknown argument: $1"
+            echo "Run with --help for usage."
+            exit 1
             ;;
     esac
 done
+
+if [ -z "$DATA_CV" ] || [ -z "$RES1" ]; then
+    echo "[Error] --instance and --results-dir are required."
+    echo "Run with --help for usage."
+    exit 1
+fi
 
 if [ "$ANALYZE_ONLY" -eq 1 ]; then
     echo ""
