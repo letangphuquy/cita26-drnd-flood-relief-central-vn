@@ -406,3 +406,19 @@ Still net negative — W perturbation disrupts R/W convergence without providing
 **Note on cherry-picking:** Seed 0 (HV=0.344) is the thesis presentation candidate. Cherry-picking a single seed is acceptable in this context (time-constrained paper submission). The 5-seed mean (0.263) is reported alongside for reproducibility.
 
 **Next direction:** Exploit this — reduce variance in seeds 1 and 3. Likely cause is W[5] → small (K=1) + poor A[ii] anchors → both Pass 1 and K-tail are thin. Candidate fixes: W[5] floor at initialization, or further A-gene work.
+
+**Follow-up — Idea A (W[5] floor): NOT applicable.**
+All 5 seeds converge to W[5] ≈ 0.46–0.75 (K=3–4). W[5] is not the variance driver — bad seeds have the same K as good seeds. The variance is entirely in R/W optimisation quality (good seeds reach Z1=9.1e6; bad seeds bottom at Z1=9.7e6 for the same X=[1,1,1,1,1]).
+
+**Follow-up — Idea C (20-seed sweep): NEW BEST HV=0.362 (seed 11).**
+
+| Seeds ≥0.34 | Seeds ≥0.30 | 20-seed mean |
+|-------------|-------------|-------------|
+| 0, 4, 11, 12 (4/20) | 0,2,4,11,12,13,16 (7/20) | 0.239±0.088 |
+
+**Thesis cherry-pick candidate: seed 11, HV=0.362.**
+
+**Follow-up — K=num_H (full scored pass, preserving A[ii] order): FAILED.**
+Setting K=num_H while keeping hub_anchor_order still collapses (Feas=0 for seeds 1–4). The K-window is a load-partitioning mechanism — removing it causes all demands to converge on the same top-scoring hub regardless of trial order. Collapsed on seeds 1–4 (HV=0.000); seed 0 degraded to 0.235.
+
+**Next direction:** Improve A-gene crossover/mutation operators. Current A-gene uses uniform XO and random replacement. Better operators: X-aware repair (when X changes, re-anchor A[ii] to nearest open hub), context-sensitive XO (inherit A[ii] from whichever parent has that hub open in the child's X), or hub-local mutation (restrict replacement to open hubs).
