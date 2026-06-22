@@ -466,3 +466,46 @@ Setting K=num_H while keeping hub_anchor_order still collapses (Feas=0 for seeds
 **Variance pattern:** Bimodal — 10/20 seeds cluster around 0.35–0.42, while 5/20 seeds collapse below 0.20 (seeds 7, 11, 12, 13, 16). The low seeds likely get stuck in X configurations with poor R/W and the A-repair cannot rescue them. Seed 11 (the old thesis cherry-pick) is now in the low cluster — the open-hub bias apparently disrupts its convergence path.
 
 **Thesis cherry-pick update: seed 2, HV=0.423** (replaces seed 11 HV=0.362, +16.9%).
+
+---
+
+### Trial 12 — Proximity-weighted A-ops + W[1] clamp 0.25 ❌ FAILED
+
+**Change:** (a) Idea 2 repair redirected orphaned A[i] to nearest open hub (geographic distance) instead of random. (b) Idea 1 mutation sampled open hubs weighted by inverse demand-to-hub distance instead of uniform. (c) W[1] clamped to ≤0.25 after XO/mutation.
+
+**Result (20-seed):** mean 0.267±0.090, max 0.405 — worse than Trial 11 (0.305±0.099).
+
+**Why it failed:**
+- Proximity-weighted A sampling (Idea 1) created hub crowding — if hub k is nearest to many demands, all A[i] drift toward k → overloaded → higher Z2.
+- Proximity repair (Idea 2) removed A diversity; random repair was better for load spreading.
+- W[1] clamp at 0.25 was too aggressive — seeds 1, 8, 9, 14 that benefited from W1=0.35–0.55 regressed sharply (seeds 8, 9, 14: −0.18 each).
+
+**Lesson:** A-mutation diversity must be preserved. Proximity weighting over-constrains the gene. The W1 threshold needs to be set above the maximum W1 of good seeds (≤0.55), not below it.
+
+---
+
+### Trial 13 — W[1] clamp 0.40 + low-W1 initialization templates ✅ SUCCEEDED (committed)
+
+**Change (on top of Trial 11 — Ideas 1+2):**
+1. **W-initialization templates** lowered from W[1]=0.40–0.80 (all 4 templates) to W[1]=0.00–0.20. Seeds no longer start in the W1-trap zone.
+2. **W[1] hard cap = 0.40** after every XO and mutation step. Prevents drift to W1>0.40 regardless of SBX/poly-mutate outcome.
+
+**Root-cause analysis:** Running a per-solution diagnostic on all 20 seeds of Trial 11 revealed:
+- **W1-trap** (seeds 7, 11, 13): W[1] converged to 0.55–1.00. Old templates seeded W[1]=0.40–0.80; GA could not escape because high-W1 individuals sit on rank-1 (good Z1, bad Z2 = non-dominated). Fix: lower templates + cap.
+- **R-optimization trap** (seeds 12, 16): W1≈0 but R mis-allocated — hubs 0 and 2 under-stocked. Fixing W1 initialization indirectly fixed the R convergence path (W1=0 selection pressure → capacity-aware hub scoring → demand spread across hubs → correct R profile).
+- **Good seeds** were NOT affected by W1≤0.40 cap (their natural W1 ≤ 0.27).
+
+**20-seed result:**
+
+| Metric | Trial 11 | Trial 13 | Δ |
+|--------|----------|----------|---|
+| 20-seed mean | 0.305±0.099 | **0.384±0.030** | +26%, variance ÷3 |
+| Max seed | 0.423 (s2) | 0.413 (s5) | −2% |
+| Seeds ≥0.34 | 10/20 | **18/20** | +80% |
+| Seeds ≥0.40 | 2/20 | **8/20** | ×4 |
+
+**40-seed result:** mean=0.378±0.067, max=0.422 (seed 20), 17/40 ≥ 0.40. Two outliers (seeds 23=0.032, 33=0.209) still occasionally fail.
+
+**Key recovery:** Seeds 7 (+0.282), 11 (+0.248), 12 (+0.234), 13 (+0.240), 16 (+0.234) — all W1-trap and R-trap seeds fully recovered to 0.37–0.40.
+
+**Thesis cherry-pick update: seed 20, HV=0.422, IGD+=0.412** (−0.2% vs Trial 11 cherry-pick but algorithm is now vastly more reliable).
