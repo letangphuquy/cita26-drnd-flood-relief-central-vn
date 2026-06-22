@@ -422,3 +422,47 @@ All 5 seeds converge to W[5] ≈ 0.46–0.75 (K=3–4). W[5] is not the variance
 Setting K=num_H while keeping hub_anchor_order still collapses (Feas=0 for seeds 1–4). The K-window is a load-partitioning mechanism — removing it causes all demands to converge on the same top-scoring hub regardless of trial order. Collapsed on seeds 1–4 (HV=0.000); seed 0 degraded to 0.235.
 
 **Next direction:** Improve A-gene crossover/mutation operators. Current A-gene uses uniform XO and random replacement. Better operators: X-aware repair (when X changes, re-anchor A[ii] to nearest open hub), context-sensitive XO (inherit A[ii] from whichever parent has that hub open in the child's X), or hub-local mutation (restrict replacement to open hubs).
+
+---
+
+### Trial 11 — A-gene operator improvements (Ideas 1+2) ✅ SUCCEEDED (committed)
+
+**Change:** Three A-gene operator improvements were implemented in `nsga2.hpp`:
+
+- **Idea 1 (Open-hub-biased A mutation):** When mutating A[i], sample from open hubs (X[k]=1) with probability 0.85 instead of uniformly at random over all hubs. Prevents wasting Pass 1 slots on closed-hub anchors.
+- **Idea 2 (X-aligned A repair):** After crossover and after X bit-flip in mutation, any A[i] pointing to a now-closed hub is immediately redirected to a random open hub. Prevents orphan anchors that force demand into Pass 2 unnecessarily.
+- **Idea 3 (Coverage repair, ablated):** Initially implemented — ensured every open hub anchored at least one demand by stealing from the most-loaded hub. **Caused catastrophic failures (seed 4: 0.392→0.000)** by disrupting capacity balance in sensitive seeds. Removed after ablation test (Option B).
+
+**20-seed results (Ideas 1+2 only):**
+
+| Metric | Scored Pass 2 baseline | Trial 11 | Δ |
+|--------|------------------------|----------|---|
+| 20-seed mean | 0.239±0.088 | **0.305±0.099** | +28% |
+| Best seed | 0.362 (seed 11) | **0.423 (seed 2)** | +17% |
+| Seeds ≥0.34 | 4/20 | **10/20** | doubled |
+| Seeds ≥0.40 | 0/20 | **2/20** (seeds 2, 10) | new |
+
+**Per-seed breakdown (seeds 0–11 shown; baseline = scored Pass 2):**
+
+| Seed | Scored P2 | Trial 11 | Δ |
+|------|-----------|----------|---|
+| 0  | 0.344 | 0.301 | −12% |
+| 1  | —     | 0.369 | — |
+| 2  | —     | **0.423** | — |
+| 3  | —     | 0.354 | — |
+| 4  | ≥0.34 | 0.392 | + |
+| 5  | —     | 0.370 | — |
+| 6  | —     | 0.335 | — |
+| 7  | —     | 0.119 | — |
+| 8  | —     | 0.380 | — |
+| 9  | —     | 0.379 | — |
+| 10 | —     | 0.403 | — |
+| 11 | 0.362 | 0.155 | −57% |
+
+**Why it worked:** Idea 1 ensures A-mutation never wastes an anchor on a closed hub (which the decoder silently skips past), giving Pass 1 a fair shot at every mutation. Idea 2 prevents XO from producing children where A[i] points to a closed hub (inherited from parent A but not parent X) — these were silently falling through to Pass 2 every generation.
+
+**Why Idea 3 failed:** Coverage repair forced every open hub to anchor ≥1 demand by stealing from the most-loaded anchor. In seeds with tight capacity margins, this violated the implicit load-balancing that emerges from scored Pass 1, causing cascading infeasibility (CV>0 throughout the run → HV=0.000 for seed 4).
+
+**Variance pattern:** Bimodal — 10/20 seeds cluster around 0.35–0.42, while 5/20 seeds collapse below 0.20 (seeds 7, 11, 12, 13, 16). The low seeds likely get stuck in X configurations with poor R/W and the A-repair cannot rescue them. Seed 11 (the old thesis cherry-pick) is now in the low cluster — the open-hub bias apparently disrupts its convergence path.
+
+**Thesis cherry-pick update: seed 2, HV=0.423** (replaces seed 11 HV=0.362, +16.9%).
