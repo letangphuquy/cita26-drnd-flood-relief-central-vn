@@ -121,7 +121,8 @@ double poly_mutate(double x, double eta, double lo = 0.0, double hi = 1.0) {
 
 // ── Crossover ────────────────────────────────────────────────────────────────
 pair<Individual, Individual>
-crossover(const Individual &p1, const Individual &p2, const NSGAConfig &cfg) {
+crossover(const Individual &p1, const Individual &p2, const NSGAConfig &cfg,
+          const DRNDInstance &inst) {
   Individual c1 = p1, c2 = p2;
   int num_H = (int)p1.X.size();
   int num_I = (int)p1.A.size();
@@ -152,6 +153,12 @@ crossover(const Individual &p1, const Individual &p2, const NSGAConfig &cfg) {
     c1.W[w] = w1;
     c2.W[w] = w2;
   }
+  // Clamp W[1] (speed weight) — W1>0.4 consistently hurts Z2; good seeds converge
+  // to W1<=0.27; bad seeds get trapped at W1=0.55–1.0. Cap at 0.40 prevents the
+  // W1-trap while allowing the 0.27–0.40 range that mid-performing seeds benefit from.
+  c1.W[1] = std::min(c1.W[1], 0.40);
+  c2.W[1] = std::min(c2.W[1], 0.40);
+
   // Repair: ensure at least one open hub
   auto repair = [&](Individual &ind) {
     bool any_open = false;
@@ -186,7 +193,7 @@ crossover(const Individual &p1, const Individual &p2, const NSGAConfig &cfg) {
 // This ensures X (5 genes) and W (6 genes) are mutated as frequently as A (20 genes)
 // in terms of expected mutations per segment per offspring.
 // w_scale: multiplier for W-segment mutation (1.0 normally, 2.0 on stagnation).
-void mutate(Individual &ind, const NSGAConfig &cfg,
+void mutate(Individual &ind, const NSGAConfig &cfg, const DRNDInstance &inst,
             double current_pm_base = -1.0, double w_scale = 1.0) {
   int num_H = (int)ind.X.size();
   int num_I = (int)ind.A.size();
@@ -215,7 +222,7 @@ void mutate(Individual &ind, const NSGAConfig &cfg,
   if (!any_open)
     ind.X[(int)rand_int(0, num_H - 1)] = 1;
 
-  // Collect open hubs once — reused by Ideas 1, 2, 3 below.
+  // Collect open hubs once — reused below.
   vector<int> open_hubs;
   open_hubs.reserve(num_H);
   for (int k = 0; k < num_H; k++)
@@ -236,7 +243,6 @@ void mutate(Individual &ind, const NSGAConfig &cfg,
 
   // Idea 1: open-hub-biased A mutation.
   // With prob 0.85, replace A[i] with a random *open* hub; otherwise any hub.
-  // Prevents wasting Pass-1 window slots on closed hubs.
   for (int i = 0; i < num_I; i++) {
     if (rand01() < pm_a) {
       if (!open_hubs.empty() && rand01() < 0.85)
@@ -246,13 +252,15 @@ void mutate(Individual &ind, const NSGAConfig &cfg,
     }
   }
 
-
   // W: polynomial mutation with low η [F2] + optional hyper-scale (stagnation)
   double pm_w = std::min(pm_w_base * w_scale, 1.0);
   for (int w = 0; w < num_W; w++) {
     if (rand01() < pm_w)
       ind.W[w] = poly_mutate(ind.W[w], cfg.pm_eta_rw);
   }
+  // Clamp W[1] (speed weight) — W1>0.4 consistently hurts Z2; good seeds converge
+  // naturally to W1<=0.27. Cap prevents W1-trap while allowing beneficial W1<=0.40.
+  ind.W[1] = std::min(ind.W[1], 0.40);
 }
 
 // ── Fast non-dominated sort
@@ -565,11 +573,13 @@ vector<Individual> run_nsga2(const DRNDInstance &inst, const NSGAConfig &cfg) {
       ind.A[ii] = chosen;
     }
 
+    // W[1]=speed weight; empirically, good seeds converge to W[1]<=0.27.
+    // All templates now start with W[1]<=0.20 to avoid the W1-trap.
     const vector<vector<double>> w_templates = {
-        {0.75, 0.65, 0.50, 0.70, 0.35, 0.45},
-        {0.55, 0.80, 0.75, 0.40, 0.60, 0.35},
-        {0.85, 0.40, 0.35, 0.80, 0.50, 0.60},
-        {0.45, 0.55, 0.85, 0.55, 0.70, 0.30},
+        {0.70, 0.00, 0.90, 0.60, 0.70, 0.45},
+        {0.55, 0.20, 0.85, 0.40, 0.65, 0.50},
+        {0.80, 0.10, 0.95, 0.75, 0.55, 0.55},
+        {0.45, 0.15, 0.80, 0.50, 0.75, 0.40},
     };
     const vector<double> &wt = w_templates[(size_t)(sample_tick % (int)w_templates.size())];
     for (int t = 0; t < (int)ind.W.size(); t++) {
@@ -676,7 +686,7 @@ vector<Individual> run_nsga2(const DRNDInstance &inst, const NSGAConfig &cfg) {
       const Individual &p2 = tournament(pop, tourney);
       Individual c1, c2;
       if (rand01() < cfg.pc) {
-        auto [cx1, cx2] = crossover(p1, p2, cfg);
+        auto [cx1, cx2] = crossover(p1, p2, cfg, inst);
         c1 = cx1;
         c2 = cx2;
       } else {
@@ -687,8 +697,8 @@ vector<Individual> run_nsga2(const DRNDInstance &inst, const NSGAConfig &cfg) {
       double w_scale = w_hyper ? cfg.hyper_w_scale : 1.0;
       // Apply mutation with per-offspring probability proportional to cur_pm
       // (we always mutate now; pm_base is baked into per-gene probability)
-      mutate(c1, cfg, cur_pm, w_scale);
-      mutate(c2, cfg, cur_pm, w_scale);
+      mutate(c1, cfg, inst, cur_pm, w_scale);
+      mutate(c2, cfg, inst, cur_pm, w_scale);
       decode_in_place(c1);
       decode_in_place(c2);
       offspring.push_back(c1);
