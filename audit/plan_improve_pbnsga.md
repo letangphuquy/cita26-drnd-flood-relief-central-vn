@@ -509,3 +509,73 @@ Setting K=num_H while keeping hub_anchor_order still collapses (Feas=0 for seeds
 **Key recovery:** Seeds 7 (+0.282), 11 (+0.248), 12 (+0.234), 13 (+0.240), 16 (+0.234) — all W1-trap and R-trap seeds fully recovered to 0.37–0.40.
 
 **Thesis cherry-pick update: seed 20, HV=0.422, IGD+=0.412** (−0.2% vs Trial 11 cherry-pick but algorithm is now vastly more reliable).
+
+### Trial 14 — Idea A (aging W-shake, T_age=25) + K-varied templates ❌ FAILED
+
+**Change:** Individual aging counter (`ind.age`); W-shake every T_age=25 gens for oldest rank-1 individual; 12 W-templates with K-variation (W[5]=0.20–0.85).
+
+**Failure modes:**
+- T_age=25 fires ~12× per 300-gen run — disrupts solutions before they converge
+- K-variation templates (W[5]<0.35 or W[5]>0.70 → K=1 or K≥4) steer seeds into non-optimal K basins from which they cannot recover in 300 gens
+- Seeds 5, 7, 8, 15, 18 regressed −0.12 to −0.20 vs Trial 13
+
+**Decision:** Reverted Idea A entirely. K-variation templates removed.
+
+---
+
+### Trial 15 — Idea D: 8 K-fixed templates (planned-dominant + balanced) ❌ FAILED
+
+**Change:** Expanded from 4 to 8 W-templates, adding planned-hub-dominant (W[4]=0.90–0.95, W[2]=0.55–0.60) and W4-W2-balanced groups. W[5] fixed at 0.45–0.55 throughout (K=3).
+
+**20-seed result:**
+
+| Metric | Trial 13 | Trial 15 | Δ |
+|--------|----------|----------|---|
+| Mean | 0.384±0.030 | 0.374±0.059 | −0.010, std doubled |
+| Max | 0.413 | 0.418 | +0.005 |
+| Seeds ≥0.38 | 13/20 | 13/20 | same |
+| Seeds ≥0.40 | 8/20 | 8/20 | same |
+| Outliers | none | s3=0.231, s5=0.181 | 2 catastrophic |
+
+**Failure mode:** Planned-dominant templates (W[4]≥0.90) seed some populations into a capacity-starvation plateau. For seeds 3 and 5, this basin wins the early tournament rounds and locks in. Seed 5 was the BEST seed in Trial 13 (0.413) and collapsed to 0.181.
+
+**Per-seed:** 4 seeds improved (+0.024 to +0.081); 6 seeds regressed (−0.021 to −0.232). Net negative because the catastrophic collapses outweigh the moderate gains.
+
+**Decision:** Idea D abandoned. Template diversity outside the capacity-dominant basin is harmful. Reverted to Trial 13's 4 templates.
+
+---
+
+### Trial 16 — Idea A (aging W-shake, T_age=60, gen≥150) ❌ FAILED
+
+**Change:** Conservative implementation of Idea A: increment `ind.age` each generation; once per generation after gen 150, shake the single most-aged rank-1 individual (if age≥60) by ±0.20 on W[1], ±0.25 on W[2] and W[4]; reset its age to 0; re-decode. W[5] untouched (K=3 preserved). This fires at most ~2–3 times per run.
+
+**Templates:** Reverted to Trial 13's 4 capacity-dominant templates (from Trial 15 revert).
+
+**20-seed result:**
+
+| Metric | Trial 13 | Trial 16 | Δ |
+|--------|----------|----------|---|
+| Mean | 0.384±0.030 | 0.361±0.073 | −0.023, std more than doubled |
+| Max | 0.413 | 0.413 | same |
+| Seeds ≥0.38 | 13/20 | 11/20 | −2 |
+| Seeds ≥0.40 | 8/20 | 8/20 | same |
+| Outliers | none | s12=0.151, s14=0.175 | 2 catastrophic |
+
+**Pattern:** 15/20 seeds are IDENTICAL between T13 and T16 (delta=0.000). The W-shake happened not to fire (or fired after convergence was complete) for most seeds. For seeds 12 and 14, the shake hit a load-bearing Pareto-front individual, destroyed its Z1/Z2 profile, and the recovered HV was catastrophically lower.
+
+**Root-cause insight:** A rank-1 individual that has survived 60+ generations is a GOOD SOLUTION — it is not stagnating, it is stably non-dominated. Shaking it replaces an incumbent with a weakened variant that competes for the same Pareto-front slot and fails to hold it. The W-perturbation strategies (Ideas A and D across Trials 14–16) all share this defect: they destabilize incumbents in a setting where the capacity-dominant basin is the correct attractor.
+
+**Decision:** Idea A abandoned permanently. `ind.age` field retained in `representation.hpp` (harmless) but no shake logic added.
+
+---
+
+### Final State — Trial 13 configuration (FINAL, no further W-perturbation)
+
+**Algorithm state:** Trial 11 (Ideas 1+2) + Trial 13 (W1 clamp + 4 low-W1 templates). No W-shake, no template diversity beyond 4 capacity-dominant templates.
+
+**Empirical HV ceiling:** ~0.41–0.42 on CV-Small v2. All W-perturbation strategies explored (T14, T15, T16) failed to raise it and introduced catastrophic outliers.
+
+**Thesis numbers (final):**
+- Cherry-pick: **seed 20, HV=0.422, IGD+=0.412** (from 40-seed sweep under Trial 13)
+- 20-seed mean: **0.384±0.030**
+- 40-seed mean: **0.378±0.067**
