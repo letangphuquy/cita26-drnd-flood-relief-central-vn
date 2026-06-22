@@ -119,6 +119,41 @@ commit as the code change.** The sections to check:
 The doc must never lag the code. A reviewer reading the doc should be able to
 reproduce the dataset exactly from it.
 
+## 10. Decoder iteration protocol
+
+Whenever `src/solver/decoder.hpp` or `audit/decode_trace.py` is changed:
+
+1. **Recompile immediately:**
+   ```
+   bash compile.sh
+   ```
+
+2. **Re-run PB-NSGA on CV-Small v2** (fast, ~1–2 s):
+   ```
+   ./src/solver/solver data/cv/v2/cv_small_drnd.json \
+       --pop 150 --gen 300 --seed 0 \
+       --out results/exp1/v2/cv_small_pb_nsga.json
+   ```
+
+3. **Re-run the official metrics script** to get the canonical HV:
+   ```
+   ./.venv/bin/python3 src/scripts/exp1_evaluate_cv_small.py \
+       --results-exp1 results/exp1/v2 \
+       --ours   results/exp1/v2/cv_small_pb_nsga.json \
+       --greedy results/exp1/v2/cv_small_greedy.json \
+       --milp   results/exp1/v2/cv_small_milp_aws.json
+   ```
+
+4. **Report only the HV from `results/exp1/v2/cv_small_metrics.csv`.**
+   Never report a custom-computed HV (e.g. against a hand-picked reference
+   point). The official script uses the combined non-dominated front of all
+   algorithms as the reference — any other calculation is not comparable and
+   will be misleadingly optimistic or pessimistic.
+
+This loop must complete before claiming any improvement. Do not describe a
+change as "promising" or report intermediate HV estimates as evidence of
+progress.
+
 ## 9. Running the solver
 
 ```bash

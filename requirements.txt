@@ -1,16 +1,17 @@
-numpy
-ortools
-matplotlib
-pandas
-scipy
-cartopy
-geopandas
-pyproj
-contextily
-pymoo
+# Core scientific stack
+numpy==2.4.3
+pandas==3.0.1
+scipy==1.17.1
+matplotlib==3.10.8
+ortools==9.15.6755
 
-# visualizer
-streamlit>=1.35
-folium>=0.16
-streamlit-folium>=0.20
-plotly>=5.20
+# Visualizer (Streamlit app)
+streamlit==1.58.0
+folium==0.20.0
+streamlit-folium==0.27.2
+plotly==6.8.0
+
+# Experiment scripts
+pymoo==0.6.1.6
+contextily==1.7.0
+pyproj==3.7.2
