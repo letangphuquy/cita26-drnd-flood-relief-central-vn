@@ -165,6 +165,19 @@ crossover(const Individual &p1, const Individual &p2, const NSGAConfig &cfg) {
   };
   repair(c1);
   repair(c2);
+  // Idea 2: X-aligned A repair — redirect any A[i] that now points to a closed
+  // hub (because the child got a different X from the other parent).
+  auto repair_a = [&](Individual &ind) {
+    vector<int> open;
+    for (int k = 0; k < num_H; k++)
+      if (ind.X[k]) open.push_back(k);
+    if (open.empty()) return;
+    for (int i = 0; i < num_I; i++)
+      if (!ind.X[ind.A[i]])
+        ind.A[i] = open[(int)rand_int(0, (int)open.size() - 1)];
+  };
+  repair_a(c1);
+  repair_a(c2);
   return {c1, c2};
 }
 
@@ -202,16 +215,38 @@ void mutate(Individual &ind, const NSGAConfig &cfg,
   if (!any_open)
     ind.X[(int)rand_int(0, num_H - 1)] = 1;
 
+  // Collect open hubs once — reused by Ideas 1, 2, 3 below.
+  vector<int> open_hubs;
+  open_hubs.reserve(num_H);
+  for (int k = 0; k < num_H; k++)
+    if (ind.X[k]) open_hubs.push_back(k);
+
+  // Idea 2 in mutation: after X bit-flip, any A[i] pointing to a now-closed
+  // hub is immediately redirected to a random open hub.
+  if (!open_hubs.empty())
+    for (int i = 0; i < num_I; i++)
+      if (!ind.X[ind.A[i]])
+        ind.A[i] = open_hubs[(int)rand_int(0, (int)open_hubs.size() - 1)];
+
   // R: polynomial mutation with low η [F2]
   for (int k = 0; k < num_H; k++) {
     if (rand01() < pm_r)
       ind.R[k] = poly_mutate(ind.R[k], cfg.pm_eta_rw);
   }
-  // A: random replacement
+
+  // Idea 1: open-hub-biased A mutation.
+  // With prob 0.85, replace A[i] with a random *open* hub; otherwise any hub.
+  // Prevents wasting Pass-1 window slots on closed hubs.
   for (int i = 0; i < num_I; i++) {
-    if (rand01() < pm_a)
-      ind.A[i] = (int)rand_int(0, num_H - 1);
+    if (rand01() < pm_a) {
+      if (!open_hubs.empty() && rand01() < 0.85)
+        ind.A[i] = open_hubs[(int)rand_int(0, (int)open_hubs.size() - 1)];
+      else
+        ind.A[i] = (int)rand_int(0, num_H - 1);
+    }
   }
+
+
   // W: polynomial mutation with low η [F2] + optional hyper-scale (stagnation)
   double pm_w = std::min(pm_w_base * w_scale, 1.0);
   for (int w = 0; w < num_W; w++) {
