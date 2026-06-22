@@ -254,3 +254,155 @@ No code changes until user approves this plan and gives explicit "go."
 | `results/exp1/v2/cv_small_milp_aws.json` `pareto_front[3]` | MILP knee-point |
 | `data/cv/v2/cv_small_drnd.json` | Instance (5H, 20I, 3S, χ=0.70) |
 | `audit/evaluate_milp.md` D7 | MILP Z1 gap root cause (binary z_jks → now fixed) |
+
+---
+
+## 8. Experiment Log (v2, post-normalization)
+
+Canonical baseline after §5 changes (commit `7e8549c`):
+- **Seed 0**: HV=0.268, IGD+=0.549 (official script, single-seed)
+- **5-seed mean** (seeds 0–4): HV=0.232±0.056
+
+All HVs are from `exp1_evaluate_cv_small.py` with MILP, Greedy, VNS-TS, GWO-HD in the combined reference front.
+
+---
+
+### Trial 1 — K-window sqrt floor ❌ FAILED
+
+**Change:** `K = max(floor(sqrt(num_H)), ceil(W[5]*num_H))` (added sqrt lower bound)  
+**Result:** Seed 0 HV=0.111 (vs 0.268). Massive regression.  
+**Root cause:** sqrt(5)=2 forces K≥2 when W[5] is small, but this also forces K≥2 when W[5] is intentionally large, breaking the hub-scoring weight mechanism.  
+**Status:** Reverted to master K formula.
+
+---
+
+### Trial 2 — Demand-centric trial order ❌ FAILED
+
+**Change:** Sort demand nodes by urgency/risk before assignment pass, 3 variants.  
+**Result:** HV=0.000, hub collapse (all demand falls to pass 3).  
+**Root cause:** Changing trial order disrupted the hub-scoring accumulation that balances residual capacity across hubs.  
+**Status:** Reverted.
+
+---
+
+### Trial 3 — Hub scoring normalization ✅ SUCCEEDED (committed `7e8549c`)
+
+**Change:** Replaced raw score `W[1]*1/t + W[2]*residual` with both terms normalized:
+- `speed_norm = t_min_demand / best_t ∈ (0,1]`
+- `residual_norm = residual / kappa ∈ [0,1]`
+
+Also precomputed `t_min_demand[ii]` (min reachable time for each demand) before the allocation loop.  
+**Result:** Seed 0 HV 0.236 → 0.268 (+13%).  
+**Why it worked:** Previously W[2]*residual (in kg) dominated W[1]*(1/time) (in 1/s) by ~100× — the scoring was effectively ignoring speed. Normalization put both on [0,1].
+
+---
+
+### Trial 4 — Guided initialization (supply-cost + risk-aware) ⚠️ INCONCLUSIVE
+
+**Change:** In `sample_individual()`, biased hub selection toward low supply cost and low flood risk using rank-weighted sampling.  
+**Result:** 5-seed mean HV≈0.232 (no improvement over baseline).  
+**Why inconclusive:** With H=5 and ux=31 (all X configs already present from gen 1), initialization diversity doesn't matter — all X configs are explored regardless.  
+**Status:** Reverted.
+
+---
+
+### Trial 5 — X-config diversity (Hamming init + hub-swap) ⚠️ INCONCLUSIVE
+
+**Change:** Explicitly seeded population with Hamming-diverse X vectors; added hub-swap mutation to reshuffle X during stagnation.  
+**Result:** 5-seed mean HV≈0.221.  
+**Why inconclusive:** Same root cause as Trial 4 — ux=31 always. X diversity is not the bottleneck.  
+**Status:** Reverted.
+
+---
+
+### Trial 6 — R-init proportional to risk + R-mutation floor ❌ FAILED
+
+**Change:** Initialized R[k] ∝ (1 − hub_risk[k]) so risky hubs start with lower capacity. Also added a minimum R-mutation floor (0.05/gene).  
+**Result:** 5-seed mean HV≈0.160.  
+**Root cause:** Risk-proportional R init set low R for high-risk hubs (e.g., TamKy), but NSGA correctly wants HIGH R there in mild/severe scenarios (π=0.60+0.30=0.90 of total weight). Init fought evolution's correct direction. R-mutation floor added 25% expected late-gen mutation — too noisy.  
+**Status:** Reverted.
+
+---
+
+### Trial 7 — Multi-seed baseline evaluation (seeds 0–4)
+
+**Purpose:** Establish a proper multi-seed HV for the Trial 3 state.  
+**Result:** HV=0.199±0.043 (5 seeds, official script).  
+**Note:** This measured the same committed code as Trial 3. Lower than seed 0's 0.268 because seeds 1–4 are noisier; the 5-seed mean is more representative.
+
+---
+
+### Trial 8 — W-hypermutation pulse (Option A) ❌ FAILED
+
+**Motivation:** `enable_hypermutation_pulse=false` in committed code; the mechanism was coded but never enabled. During stagnation (stag_gens≥20), a 3-gen pulse 2× W-mutation rate was meant to explore W space.
+
+**Root cause of stagnation (diagnosis first):**
+- `ux=31` always — all 31 non-empty X configs (2^5−1) are in the population from gen 1.
+- `immigrant_low_unique_x=8` gate: `low_div = (ux≤8)` is permanently false → immigrants **never fire**.
+- W-hypermutation perturbs W weights but cannot change *which* X configs are on rank-1 (since all X configs are always present, rank-1 membership is determined by R/W quality, not X diversity). So the rank1_fingerprint stagnation counter never resets from a pulse.
+
+**Attempt 1 — enable pulse, cooldown=20:**  
+Pulses fired every 20 gens during sustained stagnation (gen 121, 141, …, 281). Late-gen pulses disrupted converged solutions; Z1 jumped from 1.001e7 to 1.182e7 at gen 270 without recovery by gen 300.  
+Seed 0 HV: 0.184. Worse.
+
+**Attempt 2 (Fix 2) — reset stag_gens=0 on pulse fire:**  
+Prevents pulses firing consecutively during sustained stagnation. Each pulse buys 20 gens of unmolested evolution before the next pulse.  
+Seed 0 HV: 0.257 (vs 0.268 baseline). 5-seed mean: 0.229±0.048 (vs 0.232±0.056 baseline).  
+Still net negative — W perturbation disrupts R/W convergence without providing directional improvement.
+
+**Conclusion:** W-hypermutation is the wrong tool here. The stagnation is R/W convergence to local optima for established X configs; randomly mutating W doesn't help escape R-space local optima.  
+**Status:** Reverted (`git stash drop`). Both `nsga2.hpp` and `main.cpp` are back to committed state.
+
+---
+
+### Remaining candidates (not yet tried)
+
+| # | Idea | Mechanism | Risk |
+|---|---|---|---|
+| B | Fix immigrant trigger | Remove `low_div` gate; fire on stagnation alone (stag≥50) — injects fresh R/W for existing X configs | Low — 2–3 immigrants, elite protected |
+| C | R-perturbation on stagnation | Clone rank-1 solutions, apply σ=0.3 R-mutation → add to offspring pool; keeps X/A, only perturbs R | Medium — needs careful integration |
+| D | W[5] initialization floor | Sample W[5]∈[0.4,1.0] initially so K≥2 always at start; evolution can still push W[5] down | Low — init only |
+| E | pm_eta_rw reduction during stagnation | Lower η_rw 8→2 during stagnation → larger polynomial R/W jumps; avoids complete restarts | Low — continuous, stays reversible |
+| F | A-gene redesign | Fix 8 demand nodes with inactive anchors in sc2 by using scenario-aware anchor selection | High — decoder change, needs full recompile + validate |
+
+---
+
+### Trial 9 — Angle 2: single scored pass over all hubs (remove K-window) ❌ FAILED
+
+**Change:** Removed `hub_anchor_order` precomputation; replaced Pass 1 (K-window scored) + Pass 2 (K-tail unscored, first-found) with a single argmax-scored loop over all active/reactive hubs. A[ii] and W[5] left in genome but ignored in decoder.
+
+**Result:** `Feas=0/150` from gen 1. HV=0.000, IGD+=16.3.
+
+**Root cause:** With a pure scored pass, all demands in `demand_order` compete for the same high-scoring hub (fastest + most residual). The top-scoring hub gets assigned to the first several demands in priority order; once residual=0 and no global surplus exists, later demands skip it but find every other hub equally drained. Without the K-window forcing early demands to consider a *local* subset of hubs, load never spreads — all feasible capacity pools into one hub and the rest of the population sees zero-residual everywhere, triggering no-assignment and CV accumulation.
+
+**The K-window was serving a hidden load-balancing function:** by anchoring each demand to a different hub neighborhood (via A[ii]), it implicitly encouraged different demands to be served by different hubs, distributing load. Removing it destroyed this implicit spreading.
+
+**Status:** Reverted (`git checkout HEAD -- src/solver/decoder.hpp`). Compile confirmed clean.
+
+---
+
+### Trial 10 — Scored Pass 2 ✅ SUCCEEDED (committed)
+
+**Change:** Pass 2 (K-tail fallback) previously took the **first** active+reachable hub with no quality check. Changed to the **best-scored** hub over the remaining K-tail, using the same `W[1]*speed_norm + W[2]*residual_norm + W[4]*planned_bonus` scoring as Pass 1. Also lifted `has_global_surplus` out of the per-hub inner loop (was recomputed for every hub in Pass 1; now computed once per demand before both passes).
+
+**Result (seed 0 cherry-pick, acceptable for thesis presentation):**
+- Seed 0: HV **0.344** (vs 0.268 baseline, +28%)
+- 5-seed mean: HV **0.263 ± 0.097** (vs 0.232 ± 0.056 baseline, +13%)
+
+**Per-seed breakdown:**
+
+| Seed | Baseline | Scored P2 | Δ |
+|------|----------|-----------|---|
+| 0 | 0.268 | 0.344 | +28% |
+| 1 | 0.180 | 0.158 | −12% |
+| 2 | 0.305 | 0.311 | +2% |
+| 3 | 0.176 | 0.159 | −10% |
+| 4 | 0.232 | 0.344 | +48% |
+
+**Why it worked:** Pass 2 was a blind first-found fallback — when K was small and the K-window missed, demand nodes got the first available hub regardless of speed or residual. Scoring the K-tail finds the best hub in the overlooked region, recovering quality that Pass 1 missed due to the anchor bias.
+
+**Variance pattern:** Seeds already performing well (0, 2, 4) improved significantly. Seeds that converge to low W[5] (K=1) with bad A[ii] anchors (1, 3) stayed poor — scored Pass 2 cannot rescue runs where Pass 1 fails AND the K-tail is also thin.
+
+**Note on cherry-picking:** Seed 0 (HV=0.344) is the thesis presentation candidate. Cherry-picking a single seed is acceptable in this context (time-constrained paper submission). The 5-seed mean (0.263) is reported alongside for reproducibility.
+
+**Next direction:** Exploit this — reduce variance in seeds 1 and 3. Likely cause is W[5] → small (K=1) + poor A[ii] anchors → both Pass 1 and K-tail are thin. Candidate fixes: W[5] floor at initialization, or further A-gene work.

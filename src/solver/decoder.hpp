@@ -277,6 +277,15 @@ void decode(Individual &ind, const DRNDInstance &inst,
       double best_hub_score = -1e18;
       int chosen_m = -1;
 
+      // Lifted once per demand — same answer for every hub in both passes.
+      bool has_global_surplus = false;
+      for (int kj = 0; kj < num_H; kj++) {
+        if ((active[kj] || y[kj]) && (inventory[kj] - hub_load[kj] > EPS)) {
+          has_global_surplus = true;
+          break;
+        }
+      }
+
       // ── Pass 1: best-scoring hub in first K candidates ────────────────
       for (int j = 0; j < K; j++) {
         int ki = trial_order[j];
@@ -287,14 +296,6 @@ void decode(Individual &ind, const DRNDInstance &inst,
         if (b_m == -1)
           continue;
         double residual = inventory[ki] - hub_load[ki];
-
-        bool has_global_surplus = false;
-        for (int kj = 0; kj < num_H; kj++) {
-          if ((active[kj] || y[kj]) && (inventory[kj] - hub_load[kj] > EPS)) {
-            has_global_surplus = true;
-            break;
-          }
-        }
         if (residual <= 0.0 && !has_global_surplus)
           continue;
 
@@ -312,7 +313,7 @@ void decode(Individual &ind, const DRNDInstance &inst,
         }
       }
 
-      // ── Pass 2: remaining candidates, first active+reachable ──────────
+      // ── Pass 2: remaining candidates, best-scored (not first-found) ───
       if (best_ki == -1) {
         for (int j = K; j < num_H; j++) {
           int ki = trial_order[j];
@@ -320,12 +321,23 @@ void decode(Individual &ind, const DRNDInstance &inst,
             continue;
           int k = inst.hub_idx[ki];
           auto [b_m, best_t] = best_mode_time(i, k);
-          (void)best_t;
           if (b_m == -1)
             continue;
-          best_ki = ki;
-          chosen_m = b_m;
-          break;
+          double residual = inventory[ki] - hub_load[ki];
+          if (residual <= 0.0 && !has_global_surplus)
+            continue;
+          double speed_norm = (t_min_demand[ii] < inst.big_M)
+                            ? t_min_demand[ii] / (best_t + EPS) : 1.0;
+          double residual_norm = (inst.kappa[ki] > EPS)
+                               ? std::max(0.0, residual) / inst.kappa[ki] : 0.0;
+          double score = ind.W[1] * speed_norm
+                       + ind.W[2] * residual_norm
+                       + ind.W[4] * (x[ki] ? 1.0 : 0.0);
+          if (score > best_hub_score) {
+            best_hub_score = score;
+            best_ki = ki;
+            chosen_m = b_m;
+          }
         }
       }
 
