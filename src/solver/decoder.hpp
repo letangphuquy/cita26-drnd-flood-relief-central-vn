@@ -96,10 +96,9 @@ void decode(Individual &ind, const DRNDInstance &inst,
   }
 
   // ── Pre-compute anchor-based hub order ────────────────────────────────
-  // hub_anchor_order[ki][j] = local hub index of the j-th closest hub to hub
-  // ki. Scenario-independent; built once.  A[ii] selects the anchor hub ki =
-  // A[ii], and the trial order for demand ii is
-  // hub_anchor_order[ki][0..num_H-1].
+  // hub_anchor_order[ki][j] = local index of the j-th closest hub to hub ki
+  // (Euclidean in lat/lon).  A[ii] selects the anchor hub; trial order for
+  // demand ii is hub_anchor_order[A[ii] % num_H].
   vector<vector<int>> hub_anchor_order(num_H, vector<int>(num_H));
   for (int ki = 0; ki < num_H; ki++) {
     int hi = inst.hub_idx[ki];
@@ -248,28 +247,37 @@ void decode(Individual &ind, const DRNDInstance &inst,
     vector<int> z_ik(num_I, -1);
     vector<double> hub_load(num_H, 0.0);
 
-    // W[5] controls the Pass-1 window depth: how many anchor-proximate hubs
-    // are evaluated before falling back to the overflow pass.
-    // K = max(1, ceil(W[5] * num_H)).  High W[5] → larger window → more
-    // planned-hub candidates tried; low W[5] → reactive fallback sooner.
-    const int K = std::max(1, (int)std::ceil(ind.W[5] * num_H));
+    // Precompute per-demand minimum travel time to any active hub (for score normalization).
+    // t_min_demand[ii] anchors speed_norm = t_min/best_t ∈ (0,1] so that the speed
+    // term and the residual_norm term are on the same [0,1] scale.
+    vector<double> t_min_demand(num_I, inst.big_M);
+    for (int ii = 0; ii < num_I; ii++) {
+      int i = inst.demand_idx[ii];
+      for (int ki = 0; ki < num_H; ki++) {
+        if (!active[ki] && !y[ki]) continue;
+        int k = inst.hub_idx[ki];
+        auto [bm, bt] = best_mode_time(i, k);
+        if (bm != -1) umin(t_min_demand[ii], bt);
+      }
+    }
 
     for (int ii : demand_order) {
       int i = inst.demand_idx[ii];
       double D = sc.demand[i];
       double D_kg = inst.gamma * D;
 
-      // Trial order for demand ii: hubs sorted by ascending distance from
-      // anchor hub A[ii].  The anchor hub itself is first (distance = 0).
+      // Trial order: hubs sorted by proximity to anchor hub A[ii].
       const int anchor = ind.A[ii] % num_H;
       const vector<int> &trial_order = hub_anchor_order[anchor];
+
+      // K-window: how many anchor-proximate hubs to score in Pass 1.
+      const int K = std::max(1, (int)std::ceil(ind.W[5] * num_H));
 
       int best_ki = -1;
       double best_hub_score = -1e18;
       int chosen_m = -1;
 
-      // ── Pass 1: first K candidates in anchor-proximity order ──────────
-      // Selects the best-scoring active+reachable hub with positive residual.
+      // ── Pass 1: best-scoring hub in first K candidates ────────────────
       for (int j = 0; j < K; j++) {
         int ki = trial_order[j];
         if (!active[ki] && !y[ki])
@@ -279,11 +287,7 @@ void decode(Individual &ind, const DRNDInstance &inst,
         if (b_m == -1)
           continue;
         double residual = inventory[ki] - hub_load[ki];
-        
-        // Pass 1: Traditionally requires positive residual capacity.
-        // FIX (trans-shipment awareness): Allow hubs with 0 stock (like reactive hubs)
-        // to be considered in Pass 1 if there is surplus available elsewhere in the 
-        // network that could be trans-shipped here in Step 6.
+
         bool has_global_surplus = false;
         for (int kj = 0; kj < num_H; kj++) {
           if ((active[kj] || y[kj]) && (inventory[kj] - hub_load[kj] > EPS)) {
@@ -291,12 +295,16 @@ void decode(Individual &ind, const DRNDInstance &inst,
             break;
           }
         }
-
         if (residual <= 0.0 && !has_global_surplus)
-            continue; // No stock here and no surplus elsewhere to trans-ship
+          continue;
 
-        double score = ind.W[1] * (1.0 / (best_t + EPS)) + ind.W[2] * std::max(0.0, residual) +
-                       ind.W[4] * (x[ki] ? 1.0 : 0.0);
+        double speed_norm = (t_min_demand[ii] < inst.big_M)
+                          ? t_min_demand[ii] / (best_t + EPS) : 1.0;
+        double residual_norm = (inst.kappa[ki] > EPS)
+                             ? std::max(0.0, residual) / inst.kappa[ki] : 0.0;
+        double score = ind.W[1] * speed_norm
+                     + ind.W[2] * residual_norm
+                     + ind.W[4] * (x[ki] ? 1.0 : 0.0);
         if (score > best_hub_score) {
           best_hub_score = score;
           best_ki = ki;
@@ -305,7 +313,6 @@ void decode(Individual &ind, const DRNDInstance &inst,
       }
 
       // ── Pass 2: remaining candidates, first active+reachable ──────────
-      // Ignores residual capacity; may incur a constraint violation.
       if (best_ki == -1) {
         for (int j = K; j < num_H; j++) {
           int ki = trial_order[j];
