@@ -365,9 +365,7 @@ def _fig_paths(dataset: str, version: str) -> Dict[str, Path]:
         "sol_map":  fig_v / "cv_large_map_detailed.pdf",
         "saa_conv": _ROOT / "results" / "saa_convergence" / version / "saa_convergence.pdf",
         "hub_freq": res / "CV_large_hub_freq.pdf",
-        "metrics":  p["results"].parent / "exp1" / version / "cv_small_metrics.csv"
-                    if dataset == "CV Large"
-                    else res / "cv_small_metrics.csv",
+        "metrics":  _p("CV Small", version)["results"] / "cv_small_metrics.csv",
     }
 
 
@@ -442,10 +440,13 @@ def render(
         try:
             import pandas as pd  # noqa: PLC0415
             df = pd.read_csv(metrics_path)
-            numeric_cols = df.select_dtypes("number").columns.tolist()
             styled = df.style
-            for col in numeric_cols:
-                styled = styled.highlight_min(subset=[col], color="#c8e6c9")
+            if "hv_mean" in df.columns:
+                styled = styled.highlight_max(subset=["hv_mean"], color="#c8e6c9")
+            for col in ("igd_mean", "wall_s", "cpu_s"):
+                if col in df.columns:
+                    styled = styled.highlight_min(subset=[col], color="#c8e6c9",
+                                                  props="color: inherit")
             st.markdown("**Table 4-1 — Algorithm comparison (CV-Small)**")
             st.dataframe(styled, use_container_width=True)
         except Exception as e:
