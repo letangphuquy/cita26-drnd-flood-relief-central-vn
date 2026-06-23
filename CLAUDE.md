@@ -131,7 +131,7 @@ Whenever `src/solver/decoder.hpp` or `audit/decode_trace.py` is changed:
 2. **Re-run PB-NSGA on CV-Small v2** (fast, ~1–2 s):
    ```
    ./src/solver/solver data/cv/v2/cv_small_drnd.json \
-       --pop 150 --gen 300 --seed 0 \
+       --pop 200 --gen 300 --seed 0 \
        --out results/exp1/v2/cv_small_pb_nsga.json
    ```
 
@@ -160,8 +160,8 @@ progress.
 ./src/solver/solver <instance.json> --pop 200 --gen 500 --seed 0 --out <result.json>
 ```
 
-- Use `--pop 200 --gen 500` for CV Large (Exp 2) and `--pop 150 --gen 300`
-  for CV Small (Exp 1) to match paper reproduction settings.
+- Use `--pop 200 --gen 300` for CV Small (Exp 1) and `--pop 200 --gen 500`
+  for CV Large (Exp 2) to match paper reproduction settings (N=200 for both).
 - After a solver run, immediately regenerate flow files and run the validator.
 - v1 result files are canonical. Re-running v1 requires explicit intent;
   the UI enforces an overwrite checkbox for this reason.

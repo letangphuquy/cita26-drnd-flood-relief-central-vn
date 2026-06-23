@@ -55,6 +55,7 @@ struct Individual {
   double crowding = 0.0;
   int hamming_diversity =
       0; // min Hamming distance to nearest neighbour in X space
+  int age = 0; // generations this individual has survived in the population
 
   // ── Constructor ────────────────────────────────────────────────────────
   Individual() = default;

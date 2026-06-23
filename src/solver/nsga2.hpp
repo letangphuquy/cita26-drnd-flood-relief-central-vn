@@ -573,13 +573,17 @@ vector<Individual> run_nsga2(const DRNDInstance &inst, const NSGAConfig &cfg) {
       ind.A[ii] = chosen;
     }
 
-    // W[1]=speed weight; empirically, good seeds converge to W[1]<=0.27.
-    // All templates now start with W[1]<=0.20 to avoid the W1-trap.
+    // 4 capacity-dominant templates (Trial 13 — stable mean=0.384±0.030).
+    // W[1] capped at 0.20 to avoid the speed-bias trap; W[5] fixed at
+    // 0.40-0.55 → K=3 (empirically optimal). Trial 15 tested 8 templates
+    // including planned-dominant (W[4]≥0.90) and balanced groups — they
+    // caused catastrophic outliers (seeds 3,5: HV=0.231/0.181) and were
+    // reverted. Idea D (template diversity) is abandoned.
     const vector<vector<double>> w_templates = {
-        {0.70, 0.00, 0.90, 0.60, 0.70, 0.45},
-        {0.55, 0.20, 0.85, 0.40, 0.65, 0.50},
-        {0.80, 0.10, 0.95, 0.75, 0.55, 0.55},
-        {0.45, 0.15, 0.80, 0.50, 0.75, 0.40},
+      {0.70, 0.00, 0.90, 0.60, 0.70, 0.45},
+      {0.55, 0.20, 0.85, 0.40, 0.65, 0.50},
+      {0.80, 0.10, 0.95, 0.75, 0.55, 0.55},
+      {0.45, 0.15, 0.80, 0.50, 0.75, 0.40},
     };
     const vector<double> &wt = w_templates[(size_t)(sample_tick % (int)w_templates.size())];
     for (int t = 0; t < (int)ind.W.size(); t++) {
@@ -699,6 +703,8 @@ vector<Individual> run_nsga2(const DRNDInstance &inst, const NSGAConfig &cfg) {
       // (we always mutate now; pm_base is baked into per-gene probability)
       mutate(c1, cfg, inst, cur_pm, w_scale);
       mutate(c2, cfg, inst, cur_pm, w_scale);
+      c1.age = 0;  // offspring always born fresh
+      c2.age = 0;
       decode_in_place(c1);
       decode_in_place(c2);
       offspring.push_back(c1);
