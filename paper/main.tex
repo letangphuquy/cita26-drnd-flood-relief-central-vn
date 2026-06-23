@@ -404,7 +404,71 @@ Constraints~\eqref{eq:hub_type}--\eqref{eq:hub_safety} govern hub establishment 
 %  REPLACE YOUR EXISTING \section{Proposed Algorithm: PB-NSGA}
 % ============================================================
 
-\section{Proposed Algorithm: PB-NSGA}
+% \section{Proposed Algorithm: PB-NSGA}
+
+% % Preamble requirements:
+% % \usepackage{algorithm}
+% % \usepackage{algpseudocode}
+% % \algrenewcommand\algorithmiccomment[1]{\hfill\(\triangleright\) \textit{#1}}
+
+% \begin{algorithm}[htbp]
+% \caption{Priority-Based Decoder (single scenario $s$)}
+% \label{alg:decoder}
+% \small
+% \begin{algorithmic}[1]
+% \Require Chromosome $\mathbf{C}=(X,R,A,W)$, scenario $s$, instance data
+% \Ensure $(Z_1^s,\;Z_2^s,\;\mathrm{CV}^s)$
+
+% \Statex \textit{--- Stage-1 decoding and hub activation ---}
+% \State $x_k \!\leftarrow\! X_k$;\enspace $q_k \!\leftarrow\! R_k \cdot \kappa_k$ \enspace $\forall k\!\in\!\mathcal{H}$
+% \State $\mathcal{H}_{\mathrm{act}} \!\leftarrow\! \{k : X_k\!=\!1,\; r_{ks} \!\leq\! \chi\}$
+% \If{$\mathcal{H}_{\mathrm{act}} = \emptyset$}
+%     \State force-activate $k^* \!\leftarrow\! \arg\min_{k:\, X_k=1} r_{ks}$;\enspace $\mathcal{H}_{\mathrm{act}} \!\leftarrow\! \{k^*\}$
+% \EndIf
+
+% \Statex \textit{--- Demand priority scoring ---}
+% \For{each $i \!\in\! \mathcal{I}$}
+%     \State $\mathrm{score}_i \!\leftarrow\! W_0\!\cdot\!\mathrm{urgency}^*_i + W_3\!\cdot\!\mathrm{isolation}^*_i - W_1\!\cdot\!\mathrm{dist}^*_i$
+%     \hfill \Comment{${}^*$ denotes min-max normalised to $[0,1]$}
+% \EndFor
+% \State Sort $\mathcal{I}$ descending by $\mathrm{score}_i$
+
+% \Statex \textit{--- Three-pass tiered allocation ---}
+% \For{each demand $i$ (in priority order)}
+%     \State $K \!\leftarrow\! \max\!\left(1,\,\left\lceil W_5 \cdot |\mathcal{H}|\right\rceil\right)$;\enspace
+%            trial order $\pi_{A_i} \leftarrow$ hubs sorted by proximity to anchor $A_i$
+%     \Statex \hspace{\algorithmicindent}\hspace{\algorithmicindent}%
+%            $\mathrm{HubScore}(k) \;=\; W_1\!\cdot\!\mathrm{speed}^*_k + W_2\!\cdot\!\mathrm{residual}^*_k + W_4\!\cdot\!\mathbf{1}[X_k\!=\!1]$
+%     \State \textit{Pass 1:}\enspace $k^* \!\leftarrow\! \arg\max\;\mathrm{HubScore}(k)$
+%            over first $K$ hubs in $\pi_{A_i}$, active, reachable, residual $>0$
+%     \If{Pass~1 succeeds}
+%         \State Assign $i \!\rightarrow\! k^*$;\enspace deduct $\gamma D_{is}$ from residual of $k^*$
+%     \Else
+%         \State \textit{Pass 2:}\enspace $k^* \!\leftarrow\! \arg\max\;\mathrm{HubScore}(k)$
+%                over remaining $|\mathcal{H}|\!-\!K$ hubs in $\pi_{A_i}$, active, reachable
+%         \If{Pass~2 succeeds}
+%             \State Assign $i \!\rightarrow\! k^*$;\enspace record CV penalty if residual $\leq 0$
+%         \Else
+%             \State \textit{Pass 3 -- Reactive fallback:}\enspace
+%                    find $k' \!\notin\! \mathcal{H}_{\mathrm{act}}$ nearest to $i$, reachable, $r_{k's} \!\leq\! \chi$
+%             \State $y_{k's} \!\leftarrow\! 1$;\enspace
+%                    $\mathcal{H}_{\mathrm{act}} \!\leftarrow\! \mathcal{H}_{\mathrm{act}} \cup \{k'\}$;\enspace
+%                    $Z_1^s \mathrel{+}= F^a_{k's}$;\enspace
+%                    $\mathrm{CV}^s \mathrel{+}= 1$;\enspace
+%                    assign $i \!\rightarrow\! k'$
+%         \EndIf
+%     \EndIf
+% \EndFor
+
+% \Statex \textit{--- Supply routing and objective accumulation ---}
+% \State Solve exact MCF: origins $\to$ active hubs; surplus redistributed via
+%        lateral transshipment arcs at discounted cost $\alpha C_{khms}$
+% \State Accumulate supply-flow costs into $Z_1^s$;\enspace
+%        $Z_2^s \!\leftarrow\! \max_{i\in\mathcal{I}}\!\left[C^{\mathrm{dep}}_{ik^*(i)s}\right]$
+%        \hfill \Comment{$C^{\mathrm{dep}}_{iks}=D_{is}(e^{\lambda_{is}\Omega_{is}}-1)$}
+% \State \Return $(Z_1^s,\;Z_2^s,\;\mathrm{CV}^s)$
+% \end{algorithmic}
+% \end{algorithm}
 
 The MO-IHLNDP is NP-hard, as its single-objective, single-scenario relaxation subsumes the uncapacitated facility location problem~\cite{mirchandani1990discrete}. 
 We therefore propose \textbf{PB-NSGA} (Priority-Based Nondominated Sorting Genetic Algorithm), which embeds the NSGA-II framework~\cite{deb2002fast} with a custom heuristic decoder.
