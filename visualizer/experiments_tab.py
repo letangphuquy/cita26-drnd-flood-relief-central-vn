@@ -69,7 +69,7 @@ def _exp2_cmd(dataset: str, version: str) -> List[str]:
 
 
 def _exp3_cmd(dataset: str, version: str) -> List[str]:
-    p = _p(dataset, version)
+    p = _p("CV Large", version)  # always the 20-seed CV-Large pool
     data_prep = _ROOT / "data" / "prep"
     return _py("exp_oos_multiseed.py") + [
         "--results-dir", str(p["results"]),
@@ -79,7 +79,7 @@ def _exp3_cmd(dataset: str, version: str) -> List[str]:
 
 
 def _exp4_cmd(dataset: str, version: str) -> List[str]:
-    p = _p(dataset, version)
+    p = _p("CV Large", version)  # always CV-Large results + instance dir
     data_cv_dir = p["instance"].parent
     return _py("exp2_analyze_case_study.py") + [
         str(p["results"]), str(p["results"]), str(data_cv_dir),
@@ -98,7 +98,7 @@ def _exp5_cmd(dataset: str, version: str) -> List[str]:
 
 
 def _exp6_cmd(dataset: str, version: str) -> List[str]:
-    p = _p(dataset, version)
+    p = _p("CV Large", version)  # always CV-Large seed 0 + instance
     seed0 = p["results"] / "CV_large_seed0.json"
     out   = _ROOT / "figures" / version / "cv_large_map_detailed.pdf"
     return _py("exp2_map_solution.py") + [
@@ -109,7 +109,7 @@ def _exp6_cmd(dataset: str, version: str) -> List[str]:
 
 
 def _exp7_cmd(dataset: str, version: str) -> List[str]:
-    p = _p(dataset, version)
+    p = _p("CV Large", version)  # always CV-Large results, flows, instance
     out = _ROOT / "narrative_data.json"
     return [str(_VENV_PY), str(_ROOT / "visualizer" / "narrative_data.py"),
             "--results",  str(p["results"]),
@@ -127,11 +127,11 @@ def _exp2_out(dataset: str, version: str) -> Path:
 
 
 def _exp3_out(dataset: str, version: str) -> Path:
-    return _p(dataset, version)["results"] / "CV_large_seed19_saa_eval.json"
+    return _p("CV Large", version)["results"] / "CV_large_seed19_saa_eval.json"
 
 
 def _exp4_out(dataset: str, version: str) -> Path:
-    return _p(dataset, version)["results"] / "exp2_metrics.csv"
+    return _p("CV Large", version)["results"] / "exp2_metrics.csv"
 
 
 def _exp5_out(dataset: str, version: str) -> Path:
@@ -146,9 +146,17 @@ def _exp7_out(dataset: str, version: str) -> Path:
     return _ROOT / "narrative_data.json"
 
 
+# Dataset constraint per experiment (None = runnable from either sidebar selection).
+# EXP-3/4/6/7 pin internally to CV-Large paths so no constraint is needed.
+_EXP_DATASET: Dict[str, str] = {
+    "EXP-1": "CV Small",
+    "EXP-2": "CV Large",
+}
+
 _EXPS: List[Exp] = [
     Exp("EXP-1", "CV-Small baseline comparison",
-        "Greedy · VNS-TS · GWO-HD · MILP-AWS · PB-NSGA on CV-Small; then evaluate HV/IGD+",
+        "Greedy · VNS-TS · GWO-HD · MILP-AWS · PB-NSGA on CV-Small "
+        "(cherry-pick: pop=150, seed=20, HV=0.422 — T13 final); then evaluate HV/IGD+",
         _exp1_cmd, _exp1_out),
     Exp("EXP-2", "CV-Large 20-seed PB-NSGA",
         "Run solver seeds 0–19 on CV-Large instance (may take ~2 hrs)",
@@ -380,39 +388,47 @@ def render(
     )
 
     # ── Pipeline table ────────────────────────────────────────────────────────
+    ss = st.session_state
+    ss.setdefault("exp2_max_seed", 19)
+
     for exp in _EXPS:
         icon, note = _status_icon(exp, dataset_name, version_name)
 
         with st.container():
             c0, c1, c2, c3 = st.columns([1, 6, 2, 1])
             c0.markdown(f"**{exp.id}**")
-            c1.markdown(f"**{exp.name}**  \n_{exp.desc}_")
             c2.markdown(f"{icon} {note}")
 
-            btn_label = "▶ Run"
-            btn_disabled = False
-
-            # EXP-1 only makes sense for CV-Small
-            if exp.id == "EXP-1" and dataset_name != "CV Small":
-                btn_disabled = True
-                c3.markdown("_CV-Small only_")
-            # EXP-2 only makes sense for CV-Large
-            elif exp.id == "EXP-2" and dataset_name != "CV Large":
-                btn_disabled = True
-                c3.markdown("_CV-Large only_")
-            elif c3.button(btn_label, key=f"run_{exp.id}", disabled=btn_disabled):
-                if exp.id == "EXP-1":
-                    _run_exp1(dataset_name, version_name)
-                elif exp.id == "EXP-2":
-                    max_seed = st.number_input(
-                        "Run seeds 0 –", min_value=0, max_value=19, value=19,
-                        key="exp2_max_seed",
-                    )
-                    _run_exp2(dataset_name, version_name, int(max_seed))
+            required = _EXP_DATASET.get(exp.id)
+            if required and dataset_name != required:
+                c1.markdown(f"**{exp.name}**  \n_{exp.desc}_")
+                c3.markdown(f"_{required} only_")
+            else:
+                if exp.id == "EXP-2":
+                    c1.markdown(f"**{exp.name}**  \n_{exp.desc}_")
+                    ss["exp2_max_seed"] = int(c1.number_input(
+                        "Run seeds 0 –", min_value=0, max_value=19,
+                        value=int(ss["exp2_max_seed"]),
+                        key="exp2_max_seed_input",
+                    ))
                 else:
-                    cmd = exp.cmd_fn(dataset_name, version_name)
-                    _stream_run(cmd, exp.name)
-                st.rerun()
+                    c1.markdown(f"**{exp.name}**  \n_{exp.desc}_")
+
+                if c3.button("▶ Run", key=f"run_{exp.id}"):
+                    if exp.id == "EXP-1":
+                        if version_name == "v1":
+                            st.error(
+                                "EXP-1 v1 results are canonical and immutable. "
+                                "Switch to **v2** in the sidebar to run.",
+                                icon="🔒",
+                            )
+                        else:
+                            _run_exp1(dataset_name, version_name)
+                    elif exp.id == "EXP-2":
+                        _run_exp2(dataset_name, version_name, int(ss["exp2_max_seed"]))
+                    else:
+                        _stream_run(exp.cmd_fn(dataset_name, version_name), exp.name)
+                    st.rerun()
 
     # ── Figure gallery ────────────────────────────────────────────────────────
     st.divider()

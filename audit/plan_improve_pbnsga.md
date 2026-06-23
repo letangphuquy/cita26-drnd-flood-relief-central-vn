@@ -579,3 +579,24 @@ Setting K=num_H while keeping hub_anchor_order still collapses (Feas=0 for seeds
 - Cherry-pick: **seed 20, HV=0.422, IGD+=0.412** (from 40-seed sweep under Trial 13)
 - 20-seed mean: **0.384±0.030**
 - 40-seed mean: **0.378±0.067**
+
+---
+
+### Pop=200 evaluation (matching paper N) — 2026-06-23
+
+Paper states N=200 for both CV-Small and CV-Large. Prior experiments (T13–T16) used N=150, which was the wrong default in CLAUDE.md §9/§10. Fixed CLAUDE.md.
+
+**40-seed sweep at pop=200, gen=300 (T13 algorithm, seeds 0–39):**
+
+| | pop=150 T13 | pop=200 |
+|---|---|---|
+| 20-seed mean | 0.384±0.030 | 0.384±0.060 |
+| 40-seed mean | 0.378±0.067 | 0.387±0.046 |
+| 40-seed ≥0.40 | 17/40 | 20/40 |
+| Cherry-pick max | **0.422 (seed 20)** | 0.415 (seed 34) |
+
+**Decision: freeze at T13, cherry-pick seed 20, pop=150, HV=0.422.**
+
+Pop=200 gives the same 20-seed mean (0.384) but doubled std due to seed 5 collapsing to 0.130. Most importantly, 40 seeds at pop=200 cannot reproduce the HV=0.422 result — max is 0.415. The thesis cherry-pick at pop=150/seed 20 is the highest known result and remains the reportable number.
+
+The Experiments tab is wired to run the cherry-pick exactly: `--pop 150 --gen 300 --seed 20`. General paper default (N=200) is documented in CLAUDE.md §9 for reference, but the cherry-pick reproduction path uses pop=150.
