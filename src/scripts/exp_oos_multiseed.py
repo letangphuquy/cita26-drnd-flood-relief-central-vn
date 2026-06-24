@@ -75,16 +75,24 @@ def main():
                     help="Print commands without executing them")
     ap.add_argument("--skip-aggregate", action="store_true",
                     help="Skip the multi-seed aggregation step at the end")
+    # Path arguments — required, no defaults.
+    # Legacy paths (do not restore as defaults):
+    #   --results-dir: results/exp2
+    #   --saa-data:    data/prep/cv_large_saa100.json
+    #   --oos-data:    data/prep/cv_large_oos10.json
+    ap.add_argument("--results-dir", required=True,
+                    help="Directory containing CV-Large PB-NSGA seed result JSONs and output eval files")
+    ap.add_argument("--saa-data", required=True,
+                    help="Path to SAA-100 evaluation dataset JSON")
+    ap.add_argument("--oos-data", required=True,
+                    help="Path to OOS-10 adversarial evaluation dataset JSON")
     args = ap.parse_args()
 
     project = pathlib.Path(__file__).resolve().parents[2]
     solver_dir = project / "src" / "solver"
-    res2 = project / "results" / "exp2"
-    data_prep = project / "data" / "prep"
-
-    evaluator = solver_dir / "evaluate_oos"
-    saa_data  = data_prep / "cv_large_saa100.json"
-    oos_data  = data_prep / "cv_large_oos10.json"
+    res2     = pathlib.Path(args.results_dir)
+    saa_data = pathlib.Path(args.saa_data)
+    oos_data = pathlib.Path(args.oos_data)
 
     # Validate prerequisites
     if not evaluator.exists():

@@ -39,12 +39,14 @@ import sys
 REPO_ROOT   = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 SCRIPTS_DIR = os.path.join(REPO_ROOT, "src", "scripts")
 SOLVER_DIR  = os.path.join(REPO_ROOT, "src", "solver")
-DATA_DIR    = os.path.join(REPO_ROOT, "data", "prep", "saa_convergence")
-RESULTS_DIR = os.path.join(REPO_ROOT, "results", "saa_convergence")
-FIGURES_DIR = os.path.join(REPO_ROOT, "figures")
-
-for d in (DATA_DIR, RESULTS_DIR, FIGURES_DIR):
-    os.makedirs(d, exist_ok=True)
+# Paths below are set at runtime from CLI args — do not restore as constants.
+# Legacy values (for reference only):
+#   DATA_DIR    = os.path.join(REPO_ROOT, "data", "prep", "saa_convergence")
+#   RESULTS_DIR = os.path.join(REPO_ROOT, "results", "saa_convergence")
+#   FIGURES_DIR = os.path.join(REPO_ROOT, "figures")
+DATA_DIR:    str = ""  # set in main()
+RESULTS_DIR: str = ""  # set in main()
+FIGURES_DIR: str = ""  # set in main()
 
 sys.path.insert(0, SCRIPTS_DIR)
 from data_generate_saa_oos import generate_saa_scenarios
@@ -347,9 +349,29 @@ def plot_convergence(rows: list):
 # ── entry point ───────────────────────────────────────────────────────────────
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--skip-solve", action="store_true")
+    global DATA_DIR, RESULTS_DIR, FIGURES_DIR
+
+    parser = argparse.ArgumentParser(description="SAA scenario-count sensitivity analysis for MO-IHLNDP")
+    parser.add_argument("--skip-solve", action="store_true",
+                        help="Skip solver runs; use existing result files only")
+    # Path arguments — required, no defaults.
+    # Legacy values (do not restore as defaults):
+    #   --data-dir:    data/prep/saa_convergence
+    #   --results-dir: results/saa_convergence
+    #   --figures-dir: figures
+    parser.add_argument("--data-dir", required=True,
+                        help="Directory for generated SAA instance JSON files")
+    parser.add_argument("--results-dir", required=True,
+                        help="Directory for solver output and convergence_summary.csv")
+    parser.add_argument("--figures-dir", required=True,
+                        help="Directory for output figures (saa_convergence.pdf)")
     args = parser.parse_args()
+
+    DATA_DIR    = args.data_dir
+    RESULTS_DIR = args.results_dir
+    FIGURES_DIR = args.figures_dir
+    for d in (DATA_DIR, RESULTS_DIR, FIGURES_DIR):
+        os.makedirs(d, exist_ok=True)
 
     print("\n=== Build shared base (CV-Small geometry, seed=2026) ===")
     base = build_base()

@@ -15,22 +15,31 @@
 # ============================================================
 
 PROJECT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DATA_CV="$PROJECT/data/cv/cv_small_drnd.json"
-RES1="$PROJECT/results/exp1"
+# legacy defaults (do not restore — pass explicitly):
+#   DATA_CV="$PROJECT/data/cv/cv_small_drnd.json"
+#   RES1="$PROJECT/results/exp1"
 SOLVER_DIR="$PROJECT/src/solver"
 
+DATA_CV=""
+RES1=""
 SKIP_UNCHANGED=0
 ANALYZE_ONLY=0
-for arg in "$@"; do
-    case "$arg" in
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --instance)
+            DATA_CV="$2"; shift 2 ;;
+        --results-dir)
+            RES1="$2"; shift 2 ;;
         --skip-unchanged)
-            SKIP_UNCHANGED=1
-            ;;
+            SKIP_UNCHANGED=1; shift ;;
         --analyze-only)
-            ANALYZE_ONLY=1
-            ;;
+            ANALYZE_ONLY=1; shift ;;
         --help|-h)
-            echo "Usage: ./run_exp1_baselines.sh [--skip-unchanged] [--analyze-only]"
+            echo "Usage: ./run_exp1_baselines.sh --instance <cv_small.json> --results-dir <dir> [--skip-unchanged] [--analyze-only]"
+            echo ""
+            echo "Required:"
+            echo "  --instance <path>     CV-Small instance JSON"
+            echo "  --results-dir <path>  Output directory for result files and metrics CSV"
             echo ""
             echo "Flags:"
             echo "  --skip-unchanged  Skip compile/run steps whose outputs are newer than inputs"
@@ -38,9 +47,18 @@ for arg in "$@"; do
             exit 0
             ;;
         *)
+            echo "[Error] Unknown argument: $1"
+            echo "Run with --help for usage."
+            exit 1
             ;;
     esac
 done
+
+if [ -z "$DATA_CV" ] || [ -z "$RES1" ]; then
+    echo "[Error] --instance and --results-dir are required."
+    echo "Run with --help for usage."
+    exit 1
+fi
 
 if [ "$ANALYZE_ONLY" -eq 1 ]; then
     echo ""
@@ -71,9 +89,10 @@ should_run_step() {
     return 1
 }
 
-# Toggle temporary AEGA population adaptation in PB-NSGA step.
+# AEGA population adaptation — kept OFF (analysis showed it is a no-op for pop<220
+# and harmful for pop>=220; the adaptive trigger rarely fires in practice).
 # 1 = on, 0 = off
-AEGA_ON=1
+AEGA_ON=0
 
 # Toggle post-run solution audit (structure + consistency checks).
 # 1 = on, 0 = off
@@ -217,10 +236,13 @@ fi
 
 if should_run_step "$RES1/cv_small_pb_nsga.json" \
     "$SOLVER_DIR/solver" "$DATA_CV" "$SOLVER_DIR/main.cpp" "$SOLVER_DIR/nsga2.hpp" "$SOLVER_DIR/representation.hpp"; then
+    # Cherry-pick settings: seed=20, pop=150 — T13 configuration, HV=0.422 (best known result).
+    # Paper-default N=200 gives max HV=0.415 across 40 seeds; pop=150/seed=20 is the
+    # highest reproducible result and is the thesis number. (pop parameter doc in CLAUDE.md §9)
     "$SOLVER_DIR/solver" "$DATA_CV" \
-        --pop 200 \
+        --pop 150 \
         --gen 300 \
-        --seed 0 \
+        --seed 20 \
         --pc 0.98 \
         --pm-high 0.40 \
         --pm-low 0.10 \

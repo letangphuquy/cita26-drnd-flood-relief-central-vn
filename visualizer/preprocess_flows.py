@@ -420,6 +420,29 @@ def _derive_inventory_held(
     return held
 
 
+# ── LP fast-path: exact MILP-AWS demand assignments ──────────────────────────
+
+def _derive_demand_assignments_from_lp(
+    lp_sc: Dict[str, Dict[str, int]],
+    node_info: NodeInfo,
+) -> List[Dict[str, Any]]:
+    """
+    Convert exact LP z_iks assignments (local indices) to flow-file format
+    (global node indices).  Used when solution.lp_assignments is present.
+    """
+    assignments = []
+    for ii_str, assign in lp_sc.items():
+        ii = int(ii_str)
+        ki = assign["hub"]
+        if ii < len(node_info.demand_indices) and ki < len(node_info.hub_indices):
+            assignments.append({
+                "demand_idx": node_info.demand_indices[ii],
+                "hub_idx":    node_info.hub_indices[ki],
+                "mode":       assign["mode"],
+            })
+    return assignments
+
+
 # ── Top-level solution processor ──────────────────────────────────────────────
 
 def process_solution(
@@ -436,16 +459,24 @@ def process_solution(
     kappa  = instance_raw.get("hub_params", {}).get("capacity", {})
     lambda_table: Dict[str, float] = instance_raw.get("lambda", {})
 
-    hub_anchor_order = _build_hub_anchor_order(node_info)
+    use_lp = solution.lp_assignments is not None
+    hub_anchor_order = _build_hub_anchor_order(node_info) if not use_lp else []
 
     scenarios_out = []
     for si, sc_raw in enumerate(instance_raw.get("scenarios", [])):
         is_active = _derive_active_hubs(solution, node_info, sc_raw, chi)
 
-        demand_asgn = _derive_demand_assignments(
-            solution, node_info, is_active, sc_raw, c_time,
-            hub_anchor_order, lambda_table, si, kappa, gamma,
-        )
+        if use_lp:
+            demand_asgn = _derive_demand_assignments_from_lp(
+                solution.lp_assignments.get(str(si), {}),  # type: ignore[union-attr]
+                node_info,
+            )
+        else:
+            demand_asgn = _derive_demand_assignments(
+                solution, node_info, is_active, sc_raw, c_time,
+                hub_anchor_order, lambda_table, si, kappa, gamma,
+            )
+
         origin_asgn = _derive_origin_assignments(
             node_info, is_active, sc_raw, c_time
         )
@@ -460,6 +491,18 @@ def process_solution(
             "inventory_held": inventory_held,
         })
 
+    if use_lp:
+        note = (
+            "LP-exact assignments — demand routing (z_iks) and hub/stock decisions "
+            "(X, R) are exact MILP-AWS solver output. Origin routing is a "
+            "postprocessor estimate. Transshipment omitted."
+        )
+    else:
+        note = (
+            "Postprocessor estimate — mirrors decoder.hpp v3 (anchor-based "
+            "3-pass, W-weighted). Transshipment omitted. NOT solver ground truth."
+        )
+
     return {
         "meta": {
             "Z1": solution.Z1,
@@ -469,10 +512,7 @@ def process_solution(
             "R": solution.R,
             "W": solution.W,
             "solution_idx": sol_idx,
-            "note": (
-                "Postprocessor estimate — mirrors decoder.hpp v3 (anchor-based "
-                "3-pass, W-weighted). Transshipment omitted. NOT solver ground truth."
-            ),
+            "note": note,
         },
         "scenarios": scenarios_out,
     }
