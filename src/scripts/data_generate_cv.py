@@ -706,15 +706,6 @@ def generate_scenarios(coords, aux_risk, r_intervals,
         ])
     # RNG state after last warmup flows forward into disruption/demand draws.
 
-    # Pre-compute once: union of all direct edges across road + geo graphs.
-    # WARNING — known asymmetry: pairs in _all_direct are EXCLUDED from BFS
-    # reachability updates even when their direct edge is disrupted in a scenario.
-    # A pair with no direct edge gets multi-hop BFS rescue; a pair whose direct
-    # edge is blocked does NOT. This means having a direct edge that gets disrupted
-    # is strictly worse than having no direct edge at all (paper should note this).
-    _all_direct = {(min(u, v), max(u, v))
-                   for u, v in list(_road_edges) + list(_edges)}
-
     scenarios = []
     for si, (name, prob, n_epi, I_lo, I_hi, sev_mult, beta, phi) in enumerate(SCENARIO_DEFS):
 
@@ -743,8 +734,8 @@ def generate_scenarios(coords, aux_risk, r_intervals,
 
         # -- Accessibility a[m][u][v]
         # Stage 1: direct edges — disruption applied per mode-specific graph.
-        # Stage 2: BFS extends path-reachability to non-adjacent pairs without
-        #   overwriting direct-edge values.
+        # Stage 2: BFS sets a[m][src][dst]=1 for any pair reachable via an intact
+        #   multi-hop path, including pairs whose direct edge was disrupted in Stage 1.
         a = [[[0]*n for _ in range(n)] for _ in range(NUM_MODES)]
 
         # Road (m=0): complementary-power disruption
@@ -779,7 +770,8 @@ def generate_scenarios(coords, aux_risk, r_intervals,
                         a[1][u][v] = a[1][v][u] = 1
                         a[2][u][v] = a[2][v][u] = 1
 
-        # BFS: extend path-reachability to non-direct pairs (preserves direct values)
+        # BFS: extend path-reachability via multi-hop for all pairs (overwrites direct values
+        # only upward — a disrupted direct edge can be rescued via an intact multi-hop path)
         for m in range(NUM_MODES):
             direct_m = _road_edges if m == 0 else _edges
             adj_m = [[] for _ in range(n)]
@@ -797,7 +789,7 @@ def generate_scenarios(coords, aux_risk, r_intervals,
                             visited.add(v)
                             queue.append(v)
                 for dst in visited:
-                    if dst != src and (min(src, dst), max(src, dst)) not in _all_direct:
+                    if dst != src:
                         a[m][src][dst] = 1
 
         # -- Demand D_{is}: epicenter-exposure-driven (Change 2)

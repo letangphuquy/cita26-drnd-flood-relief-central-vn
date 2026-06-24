@@ -121,7 +121,8 @@ double poly_mutate(double x, double eta, double lo = 0.0, double hi = 1.0) {
 
 // ── Crossover ────────────────────────────────────────────────────────────────
 pair<Individual, Individual>
-crossover(const Individual &p1, const Individual &p2, const NSGAConfig &cfg) {
+crossover(const Individual &p1, const Individual &p2, const NSGAConfig &cfg,
+          const DRNDInstance &inst) {
   Individual c1 = p1, c2 = p2;
   int num_H = (int)p1.X.size();
   int num_I = (int)p1.A.size();
@@ -152,6 +153,12 @@ crossover(const Individual &p1, const Individual &p2, const NSGAConfig &cfg) {
     c1.W[w] = w1;
     c2.W[w] = w2;
   }
+  // Clamp W[1] (speed weight) — W1>0.4 consistently hurts Z2; good seeds converge
+  // to W1<=0.27; bad seeds get trapped at W1=0.55–1.0. Cap at 0.40 prevents the
+  // W1-trap while allowing the 0.27–0.40 range that mid-performing seeds benefit from.
+  c1.W[1] = std::min(c1.W[1], 0.40);
+  c2.W[1] = std::min(c2.W[1], 0.40);
+
   // Repair: ensure at least one open hub
   auto repair = [&](Individual &ind) {
     bool any_open = false;
@@ -165,6 +172,19 @@ crossover(const Individual &p1, const Individual &p2, const NSGAConfig &cfg) {
   };
   repair(c1);
   repair(c2);
+  // Idea 2: X-aligned A repair — redirect any A[i] that now points to a closed
+  // hub (because the child got a different X from the other parent).
+  auto repair_a = [&](Individual &ind) {
+    vector<int> open;
+    for (int k = 0; k < num_H; k++)
+      if (ind.X[k]) open.push_back(k);
+    if (open.empty()) return;
+    for (int i = 0; i < num_I; i++)
+      if (!ind.X[ind.A[i]])
+        ind.A[i] = open[(int)rand_int(0, (int)open.size() - 1)];
+  };
+  repair_a(c1);
+  repair_a(c2);
   return {c1, c2};
 }
 
@@ -173,7 +193,7 @@ crossover(const Individual &p1, const Individual &p2, const NSGAConfig &cfg) {
 // This ensures X (5 genes) and W (6 genes) are mutated as frequently as A (20 genes)
 // in terms of expected mutations per segment per offspring.
 // w_scale: multiplier for W-segment mutation (1.0 normally, 2.0 on stagnation).
-void mutate(Individual &ind, const NSGAConfig &cfg,
+void mutate(Individual &ind, const NSGAConfig &cfg, const DRNDInstance &inst,
             double current_pm_base = -1.0, double w_scale = 1.0) {
   int num_H = (int)ind.X.size();
   int num_I = (int)ind.A.size();
@@ -202,22 +222,45 @@ void mutate(Individual &ind, const NSGAConfig &cfg,
   if (!any_open)
     ind.X[(int)rand_int(0, num_H - 1)] = 1;
 
+  // Collect open hubs once — reused below.
+  vector<int> open_hubs;
+  open_hubs.reserve(num_H);
+  for (int k = 0; k < num_H; k++)
+    if (ind.X[k]) open_hubs.push_back(k);
+
+  // Idea 2 in mutation: after X bit-flip, any A[i] pointing to a now-closed
+  // hub is immediately redirected to a random open hub.
+  if (!open_hubs.empty())
+    for (int i = 0; i < num_I; i++)
+      if (!ind.X[ind.A[i]])
+        ind.A[i] = open_hubs[(int)rand_int(0, (int)open_hubs.size() - 1)];
+
   // R: polynomial mutation with low η [F2]
   for (int k = 0; k < num_H; k++) {
     if (rand01() < pm_r)
       ind.R[k] = poly_mutate(ind.R[k], cfg.pm_eta_rw);
   }
-  // A: random replacement
+
+  // Idea 1: open-hub-biased A mutation.
+  // With prob 0.85, replace A[i] with a random *open* hub; otherwise any hub.
   for (int i = 0; i < num_I; i++) {
-    if (rand01() < pm_a)
-      ind.A[i] = (int)rand_int(0, num_H - 1);
+    if (rand01() < pm_a) {
+      if (!open_hubs.empty() && rand01() < 0.85)
+        ind.A[i] = open_hubs[(int)rand_int(0, (int)open_hubs.size() - 1)];
+      else
+        ind.A[i] = (int)rand_int(0, num_H - 1);
+    }
   }
+
   // W: polynomial mutation with low η [F2] + optional hyper-scale (stagnation)
   double pm_w = std::min(pm_w_base * w_scale, 1.0);
   for (int w = 0; w < num_W; w++) {
     if (rand01() < pm_w)
       ind.W[w] = poly_mutate(ind.W[w], cfg.pm_eta_rw);
   }
+  // Clamp W[1] (speed weight) — W1>0.4 consistently hurts Z2; good seeds converge
+  // naturally to W1<=0.27. Cap prevents W1-trap while allowing beneficial W1<=0.40.
+  ind.W[1] = std::min(ind.W[1], 0.40);
 }
 
 // ── Fast non-dominated sort
@@ -530,11 +573,17 @@ vector<Individual> run_nsga2(const DRNDInstance &inst, const NSGAConfig &cfg) {
       ind.A[ii] = chosen;
     }
 
+    // 4 capacity-dominant templates (Trial 13 — stable mean=0.384±0.030).
+    // W[1] capped at 0.20 to avoid the speed-bias trap; W[5] fixed at
+    // 0.40-0.55 → K=3 (empirically optimal). Trial 15 tested 8 templates
+    // including planned-dominant (W[4]≥0.90) and balanced groups — they
+    // caused catastrophic outliers (seeds 3,5: HV=0.231/0.181) and were
+    // reverted. Idea D (template diversity) is abandoned.
     const vector<vector<double>> w_templates = {
-        {0.75, 0.65, 0.50, 0.70, 0.35, 0.45},
-        {0.55, 0.80, 0.75, 0.40, 0.60, 0.35},
-        {0.85, 0.40, 0.35, 0.80, 0.50, 0.60},
-        {0.45, 0.55, 0.85, 0.55, 0.70, 0.30},
+      {0.70, 0.00, 0.90, 0.60, 0.70, 0.45},
+      {0.55, 0.20, 0.85, 0.40, 0.65, 0.50},
+      {0.80, 0.10, 0.95, 0.75, 0.55, 0.55},
+      {0.45, 0.15, 0.80, 0.50, 0.75, 0.40},
     };
     const vector<double> &wt = w_templates[(size_t)(sample_tick % (int)w_templates.size())];
     for (int t = 0; t < (int)ind.W.size(); t++) {
@@ -641,7 +690,7 @@ vector<Individual> run_nsga2(const DRNDInstance &inst, const NSGAConfig &cfg) {
       const Individual &p2 = tournament(pop, tourney);
       Individual c1, c2;
       if (rand01() < cfg.pc) {
-        auto [cx1, cx2] = crossover(p1, p2, cfg);
+        auto [cx1, cx2] = crossover(p1, p2, cfg, inst);
         c1 = cx1;
         c2 = cx2;
       } else {
@@ -652,8 +701,10 @@ vector<Individual> run_nsga2(const DRNDInstance &inst, const NSGAConfig &cfg) {
       double w_scale = w_hyper ? cfg.hyper_w_scale : 1.0;
       // Apply mutation with per-offspring probability proportional to cur_pm
       // (we always mutate now; pm_base is baked into per-gene probability)
-      mutate(c1, cfg, cur_pm, w_scale);
-      mutate(c2, cfg, cur_pm, w_scale);
+      mutate(c1, cfg, inst, cur_pm, w_scale);
+      mutate(c2, cfg, inst, cur_pm, w_scale);
+      c1.age = 0;  // offspring always born fresh
+      c2.age = 0;
       decode_in_place(c1);
       decode_in_place(c2);
       offspring.push_back(c1);

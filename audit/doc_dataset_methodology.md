@@ -263,7 +263,7 @@ adding inter-hub transfer cost.*
 | Temporal dynamics | Scenarios are peak-flood snapshots; flood rise/fall not modelled |
 | Inland epicenter draws | High-aux_risk river-valley nodes (e.g., Đông Giang, ~50km inland) can be drawn as Extreme epicenters due to their inherently high flood susceptibility despite coastal decay |
 | Delaunay topology | Without OSRM validation, some Delaunay edges may still follow unrealistic routes (known cases excluded via `_FORBIDDEN_ROAD_PAIRS`; others may exist) |
-| BFS asymmetry | If two nodes share a direct Delaunay edge that is blocked in a scenario, BFS will NOT restore reachability between them via an alternative multi-hop route, because `_all_direct` guards all pairs with any direct edge from BFS updates. Pairs without a direct edge correctly get multi-hop reachability via BFS. Having a direct edge is therefore strictly worse than not having one when that edge is blocked. This is a known modeling limitation — paper should note it. |
+| ~~BFS asymmetry~~ | **Fixed 2026-06-22.** The `_all_direct` guard that prevented disrupted direct edges from being rescued via multi-hop BFS has been removed. BFS now correctly sets `a[m][src][dst]=1` for any pair reachable via an intact multi-hop path, regardless of whether they share a direct (disrupted) edge. Datasets must be regenerated after this fix. |
 | Island C_time / accessibility split | Sea-lane override in `generate_scenarios` sets `a[1/2]=1` for island nodes, but `build_transport` Dijkstra overwrites water `C_time` to BIG_M for the same pairs (island excluded from `geo_edges`). Fix applied: haversine water costs are restored for island nodes post-Dijkstra. Without this fix, postprocessor assigns road mode via fallback despite correct accessibility. |
 
 ---
@@ -283,7 +283,8 @@ Two versions exist. Neither uses OSRM validation.
 | Water model | single risk threshold 0.30 | river corridor OR inundation 0.40 |
 | Hub capacity | `uniform(3, 6) × (max_demand/n_H) × terrain_factor` — mountain hubs over-sized; anchor leaks scenario outcomes into Stage-1 | tier-based multipliers × `(sum(base_pop) × GAMMA × max_sev_mult / n_H)`; population-anchored (scenario-independent); 5× max/min spread; total ≈ 0.73× Extreme demand; terrain_factor on cost only |
 | Script | pre-PR `data_generate_cv.py` (K_n loop) | `src/scripts/data_generate_cv.py` |
-| Solver status | **Solved** — `results/exp2/CV_large_seed0.json` | **Solved** — `results/exp2/v2/CV_large_seed2.json` (seed=2; seed=0 sensitive to population-anchored kappas) |
+| BFS accessibility | BFS never used (K_n → all pairs already reachable) | BFS correct as of **2026-06-22** fix: disrupted direct edges can now be rescued via multi-hop; `_all_direct` guard removed |
+| Solver status | **Solved** — `results/exp2/CV_large_seed0.json` | **Must regenerate** after BFS fix before claiming canonical results |
 
 **Critical note on v1 hub assignments in the UI:**
 Because v1 uses K_n (every hub-demand pair has a direct finite road time), hub selection is based on minimum C_time, not road topology. Assignments can appear geographically inconsistent — a distant hub may have lower C_time than a nearby hub due to haversine × tortuosity. The Delaunay edges drawn in the UI are a cosmetic rendering fallback only and do NOT represent the connectivity model. The colored lines on the Solution Explorer map show demand-to-hub **assignments**, not routing paths — routing is not part of the optimization model.

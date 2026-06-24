@@ -58,6 +58,7 @@ class Solution:
     A: List[int]
     W: List[float]
     source: str = "pareto_front"
+    lp_assignments: Optional[Dict] = None  # MILP-AWS only: exact z_iks per scenario
 
     @property
     def open_hubs(self) -> List[int]:
@@ -149,6 +150,7 @@ def _parse_solution(raw: dict, source: str) -> Solution:
         A=list(raw.get("A") or []),
         W=list(raw.get("W") or []),
         source=source,
+        lp_assignments=raw.get("lp_assignments"),
     )
 
 

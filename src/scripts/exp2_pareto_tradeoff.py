@@ -217,9 +217,14 @@ def plot_tradeoff_two_panel(small_panel, large_panel, out_pdf):
 
 def main():
     ap = argparse.ArgumentParser(description="Pareto trade-off comparison: PB-NSGA vs VNS-TS with optional GWO-HD baseline")
-    ap.add_argument("--results-exp2", default="results/exp2", help="Directory containing Exp2 result JSONs")
-    ap.add_argument("--results-exp1", default="results/exp1", help="Directory containing Exp1 result JSONs")
-    ap.add_argument("--out-dir", default="results/exp2", help="Directory for CSV/JSON summary outputs")
+    # Path arguments — required, no defaults.
+    # Legacy values (do not restore as defaults):
+    #   --results-exp2: results/exp2
+    #   --results-exp1: results/exp1
+    #   --out-dir:      results/exp2
+    ap.add_argument("--results-exp2", required=True, help="Directory containing Exp2 result JSONs")
+    ap.add_argument("--results-exp1", required=True, help="Directory containing Exp1 result JSONs")
+    ap.add_argument("--out-dir", required=True, help="Directory for CSV/JSON summary outputs")
     ap.add_argument("--pb-glob", default=None, help="Optional glob override for PB-NSGA result files")
     ap.add_argument("--vns-glob", default=None, help="Optional glob override for VNS-TS result files")
     ap.add_argument("--gwo-glob", default=None, help="Optional glob override for CV-large GWO-HD result files")
