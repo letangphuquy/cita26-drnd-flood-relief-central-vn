@@ -273,12 +273,11 @@ void decode(Individual &ind, const DRNDInstance &inst,
       double D_kg = inst.gamma * D;
       double lam  = inst.lambda[ii][si];  // hoisted — used in depriv_norm (Pass 1/2) and Z2
 
-      // Trial order: hubs sorted by proximity to anchor hub A[ii].
-      const int anchor = ind.A[ii] % num_H;
-      const vector<int> &trial_order = hub_anchor_order[anchor];
-
-      // K-window: how many anchor-proximate hubs to score in Pass 1.
+      // Anchor hub selects the geographic trial order (T19).
+      int anchor = (int)std::round(ind.A[ii]) % num_H;
+      if (anchor < 0) anchor += num_H;
       const int K = std::max(1, (int)std::ceil(ind.W[5] * num_H));
+      const auto& trial_order = hub_anchor_order[anchor];
 
       int best_ki = -1;
       double best_hub_score = -1e18;
@@ -293,20 +292,17 @@ void decode(Individual &ind, const DRNDInstance &inst,
         }
       }
 
-      // ── Pass 1: best-scoring hub in first K candidates ────────────────
+      // ── Pass 1: K-window around anchor ─────────────────────────────────
       for (int j = 0; j < K; j++) {
         int ki = trial_order[j];
-        if (!active[ki] && !y[ki])
-          continue;
+        if (!active[ki] && !y[ki]) continue;
         int k = inst.hub_idx[ki];
-        auto [b_m, best_t] = best_mode_time(i, k);
-        if (b_m == -1)
-          continue;
         double residual = inventory[ki] - hub_load[ki];
         if (residual <= 0.0 && !has_global_surplus)
           continue;
+        auto [b_m, best_t] = best_mode_time(i, k);
+        if (b_m == -1) continue;
 
-        // Exact deprivation norm: acts on the true Z2 response surface (Fix 1)
         double omega_ki   = sc.hub_process_time[ki] + 2.0 * best_t;
         double depriv_ki  = D * std::expm1(std::min(lam * omega_ki, 20.0));
         double depriv_norm = (depriv_min_demand[ii] < inst.big_M)
@@ -325,19 +321,18 @@ void decode(Individual &ind, const DRNDInstance &inst,
         }
       }
 
-      // ── Pass 2: remaining candidates, best-scored (not first-found) ───
+      // ── Pass 2: remaining hubs outside K-window ─────────────────────────
       if (best_ki == -1) {
         for (int j = K; j < num_H; j++) {
           int ki = trial_order[j];
-          if (!active[ki] && !y[ki])
-            continue;
+          if (!active[ki] && !y[ki]) continue;
           int k = inst.hub_idx[ki];
-          auto [b_m, best_t] = best_mode_time(i, k);
-          if (b_m == -1)
-            continue;
           double residual = inventory[ki] - hub_load[ki];
           if (residual <= 0.0 && !has_global_surplus)
             continue;
+          auto [b_m, best_t] = best_mode_time(i, k);
+          if (b_m == -1) continue;
+
           double omega_ki   = sc.hub_process_time[ki] + 2.0 * best_t;
           double depriv_ki  = D * std::expm1(std::min(lam * omega_ki, 20.0));
           double depriv_norm = (depriv_min_demand[ii] < inst.big_M)
