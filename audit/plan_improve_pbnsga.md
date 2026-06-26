@@ -985,3 +985,107 @@ The stop condition (20-seed mean > 0.40, cherry-pick > 0.43) was met at T19-Fix1
 - 20-seed HV: **0.403 ± 0.079**, cherry-pick seed 15 = **0.454**  
 
 Next structural improvement: CCEA (cooperative co-evolution), which decouples W-vector evolution from structure (X, R, A) evolution via a bandit W-pool.
+
+---
+
+## Post-T19 Structural Experiment: CCEA W-Bandit Co-evolution (2026-06-26)
+
+### Motivation
+
+T19 reached the empirical HV ceiling (~0.40–0.42) under the W-decoder paradigm. The fundamental bottleneck is **W-epistasis with X**: when X changes (a hub opens or closes), the previously tuned W becomes suboptimal because hub-scoring weights depend on which hubs are active. The CCEA (Cooperative Co-Evolutionary Algorithm) hypothesis: decouple W evolution from structural (X, R, A) evolution by assigning W from a shared bandit pool rather than evolving it per-individual.
+
+---
+
+### Architecture (implemented in `src/solver/ccea.hpp`)
+
+**Structure population:** `(X, R, A)` evolved via standard NSGA-II operators (crossover, mutate, tournament, elitist_select). All operators reused from `nsga2.hpp`.
+
+**W-pool (UCB1 12-arm bandit):**
+
+| Arm | Purpose | W values |
+|-----|---------|---------|
+| 0 | Speed-first | [0.5, 1.0, 0.0, 0.0, 0.0, 0.5, 0.0] |
+| 1 | Capacity-first | [0.5, 0.0, 1.0, 0.0, 0.0, 0.5, 0.0] |
+| 2 | T19-region | [0.5, 0.8, 0.6, 0.0, 0.5, 0.5, 0.3] |
+| 3–11 | Random uniform | rand01() per weight |
+
+UCB1 selection: `score = reward_sum/pulls + C×sqrt(ln(total_pulls)/pulls)`, C=0.5. Unpulled arms explored first. Hall-of-Fame arm = highest mean reward arm. Every 30 generations: replace lowest-UCB arm with `poly_mutate(hof_arm.W, η=8)`.
+
+**Evaluation (single-arm per offspring):** Each offspring receives the UCB1-selected arm's W, decoded, and the arm's reward updated. No dual-eval (dual-eval was attempted and caused Z1 inflation — see design pitfalls below).
+
+**Reward function:**
+```
+if CV > 0: return -0.5
+else: r = 1.0
+  + 0.5 if Z2 < 90K
+  + 0.5 if Z2 < 75K
+  + 0.5 if Z1 < 14M
+  + 0.5 if Z1 < 11M
+```
+
+**Output:** Final population directly (no archive). Each individual carries Z1/Z2/CV from its last `eval_with_ucb1` call.
+
+**Invocation:** `./src/solver/solver <instance> --pop 200 --gen 300 --seed N --decoder ccea --out <file>`
+
+---
+
+### Design Pitfalls Encountered (Three Iterations)
+
+**Iteration 1 — Dual-eval + archive:**
+Each offspring evaluated against two arms (UCB1 + HoF); best fitness kept; archive of combined non-dominated solutions updated after each generation. **Failure:** Archive bloat (13K–43K solutions, 2–372 s runtime). Root cause: different W arms produce non-dominated (Z1, Z2) pairs from the same (X, R, A) — capacity-first arm gives Z2=72K at Z1=48M, speed-first gives Z1=9M at Z2=99K. Both are non-dominated. Archive grows unboundedly.
+
+**Iteration 2 — Dual-eval + constrained Pareto dominance + archive cap (ARC_CAP=200):**
+`ccea_arm_a_wins` used constrained Pareto dominance with 50/50 random tie-break. Archive capped at 200 via crowding. **Failure:** Z1 inflation persisted (Z1=4.5e7 in Pareto front). Root cause: capacity-first arm (W[2]=1) dominated comparisons for Z2, dragging the HoF toward capacity-first → all future evaluations bias toward high-Z1/low-Z2. Cross-arm Z1/Z2 values are incommensurable in the archive.
+
+**Iteration 3 — Single-arm UCB1, no archive, no final re-eval (final design):**
+Removed dual-eval entirely. Each offspring uses one UCB1-selected arm; bandit rewards update based on that arm's decode result. Archive eliminated; final population returned directly. **Result:** Z1 now in competitive range (9–13M). But HV is still poor (see results below).
+
+---
+
+### Canonical Results (pop=200, gen=300, 20 seeds)
+
+Per-seed HV (selected):
+
+| Seed | Pareto | Z1_best | Z2_best | HV |
+|------|--------|---------|---------|----|
+| 3 | 23 | 9.674e6 | 7.187e4 | 0.076 |
+| 11 | 29 | 9.745e6 | 7.187e4 | 0.081 |
+| 14 | 39 | 9.638e6 | 7.187e4 | 0.089 |
+| 18 | 9 | 9.378e6 | 9.913e4 | 0.391 |
+| 15 | 5 | 1.858e7 | 1.078e5 | 0.000 |
+
+**20-seed mean: HV = 0.049 ± 0.090**
+
+Reference for context:
+
+| Algorithm | HV mean ± std |
+|-----------|--------------|
+| CCEA (this trial) | 0.049 ± 0.090 |
+| T19 baseline | 0.403 ± 0.079 |
+
+CCEA underperforms T19 by **8×** in mean HV. Only seed 18 (HV=0.391) is competitive — 19 of 20 seeds score 0.000–0.089.
+
+---
+
+### Root Cause: W-Decoder Z1/Z2 Coupling
+
+The W-vector simultaneously controls **Z1** (via hub-scoring → assignment → MCF supply routing costs) and **Z2** (via depriv_norm weighting → which hub each demand is assigned to → deprivation time). A global bandit cannot find a single W that is good for both objectives across all (X, R, A) structures:
+
+- Speed-first arm (W[1]=1.0): assigns demand to lowest-tau hub → Z2≈72K but Z1≈13–18M (all demand at one hub → MCF expensive)
+- Capacity-first arm (W[2]=1.0): balances load across hubs → Z1≈9–10M but Z2≈99K
+
+These are structurally incompatible. NSGA-II keeps all non-dominated points from all arms, creating a Pareto envelope that spans the full cross-arm trade-off space — but this envelope is dominated by MILP everywhere because no single W is simultaneously optimal for all structures. T19's per-individual W co-evolution avoids this because each individual tunes its own W toward a coherent (Z1, Z2) point.
+
+Seed 18's anomalous HV=0.391 occurs because the bandit happened to converge to a balanced W arm that produced a compact Pareto front (9 solutions vs 23–176 for other seeds). The remaining 19 seeds got wide fronts from W-arm mixing, all dominated by MILP.
+
+---
+
+### Decision
+
+CCEA as implemented (global W-bandit over a fixed decoder) is **not competitive** with T19 on this problem. The W-decoder coupling is structural: the same W affects both objectives through the same decode path. A global bandit cannot decompose this into independent per-objective optimization.
+
+**T19 (HV=0.403±0.079) remains the canonical solver result for the paper.**
+
+`src/solver/ccea.hpp` and the `--decoder ccea` dispatch in `main.cpp` are retained in the codebase as a documented dead-end. The 20-seed result files (`cv_small_ccea_seed*.json`) are archived in `results/exp1/v2/`.
+
+**Possible future fix (not attempted):** Per-X-topology W sub-pools — separate 12-arm bandit per `sum(X)` tier. This might reduce the Z1/Z2 coupling because structures with the same number of open hubs share a similar hub-scoring landscape. Estimated effort: 3–4 hours. Not pursued given the deadline and the sufficiency of T19.
