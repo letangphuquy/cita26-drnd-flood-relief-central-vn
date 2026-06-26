@@ -508,7 +508,7 @@ vector<Individual> run_nsga2(const DRNDInstance &inst, const NSGAConfig &cfg) {
       return random_individual(inst);
 
     Individual ind(inst.num_H, inst.num_I);
-    int max_open = std::max(1, inst.num_H * 3 / 5);
+    int max_open = inst.num_H;  // allow all hubs open; cap lifted so regret decoder can spread load
     int tier = sample_tick++ % 3;
     int lo = 1, hi = max_open;
     if (tier == 0) {
