@@ -34,6 +34,7 @@
 //   g++ -O2 -std=c++17 main.cpp -o solver.exe
 
 #include "nsga2.hpp"
+#include "ccea.hpp"
 
 #include <chrono>
 #include <ctime>
@@ -179,9 +180,10 @@ void write_output(const vector<Individual> &pop, std::ostream &out,
   j["meta"]["tournament_size"] = args.tournament_sz;
   j["meta"]["legacy_seeding"] = args.legacy_seeding;
   j["meta"]["solver"] = args.use_local_search ? "PB-NSMA"
+                      : (args.decoder_type == "ccea"    ? "PB-CCEA"
                       : (args.decoder_type == "pvector" ? "PB-NSGA-PV"
                       : (args.decoder_type == "math"    ? "PB-NSGA-MCF"
-                      : "PB-NSGA"));
+                      : "PB-NSGA")));
 
   // De-duplicate the Pareto front
   vector<Individual> p_front;
@@ -299,7 +301,11 @@ int main(int argc, char *argv[]) {
 
   auto t_start = std::chrono::steady_clock::now();
   std::clock_t c_start = std::clock();
-  auto population = run_nsga2(inst, cfg);
+  vector<Individual> population;
+  if (args.decoder_type == "ccea")
+    population = run_ccea(inst, cfg);
+  else
+    population = run_nsga2(inst, cfg);
   std::clock_t c_end = std::clock();
   auto t_end = std::chrono::steady_clock::now();
   double elapsed_s = std::chrono::duration<double>(t_end - t_start).count();
