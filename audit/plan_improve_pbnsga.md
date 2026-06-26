@@ -898,3 +898,90 @@ Fix 1 alone lifts mean HV to 0.403 (new canonical best) with variance matching T
 ### Canonical cherry-pick: seed 15, HV = 0.454
 
 `run_exp1_baselines.sh` updated to `--pop 200 --gen 300 --seed 15`.
+
+---
+
+## Post-T19 Trials: T20-A / T20-B / T20-C (2026-06-26) — ALL REVERTED
+
+**Date:** 2026-06-26  
+**Status:** Reverted. T19 (exact depriv_norm) remains the final W-based decoder baseline.
+
+---
+
+### Trial 20-A — ω-sorted trial order ❌ FAILED (Feas=0/200)
+
+**Change:** Removed `hub_anchor_order` precompute; replaced per-demand anchor/trial_order/K setup with a local `omega_order` vector (all active+reactive hubs sorted ascending by `ω_ki = τ_ki + 2×t_{i,ki}`). Pass 1 iterated `omega_order[0..K-1]`, Pass 2 iterated the tail. A[ii] kept in chromosome but no longer drove trial order.
+
+**Result:** `Feas=0/200` across all 300 generations on both seed 0 and seed 15. Z1≈9.382e+07 (≈10× normal feasible Z1 of 8–13M). Zero Pareto points.
+
+**Root cause — hub sinkhole (same as Trial 9):** ω-sorted order always places the best-ω hub (lowest ω, e.g. Hub B) at position 0 in `omega_order`. With K=1 (or any K), Pass 1 scores Hub B first. Hub B has `depriv_norm = depriv_min/depriv_B = 1.0` by definition (it is the depriv-minimising hub for every demand). Score = `W[1]×1.0 + W[2]×residual_norm + W[4]×planned`. Hub B always wins in Pass 1 regardless of capacity. `has_global_surplus=true` allows over-assignment → all 20 demands concentrate on Hub B → hub_load >> inventory >> kappa → MCF cannot cover the deficit → CV blowup → BigM penalties → Feas=0.
+
+This is the exact failure mode of **Trial 9** (§8 above): "The K-window was serving a hidden load-balancing function: by anchoring each demand to a different hub neighbourhood via A[ii], it implicitly encouraged different demands to be served by different hubs. Removing it destroyed this implicit spreading."
+
+T20-A destroys the K-window's load-partitioning function just as Trial 9 did, because putting the same hub first for every demand is equivalent to removing geographic diversity from Pass 1.
+
+**Lesson:** Any ordering that produces a **global** best-ω hub at position 0 for all demands simultaneously will create a sinkhole when combined with `depriv_norm` scoring. The K-window's geographic anchor creates *local* diversity (different demands have different anchor hubs → different trial orders → load spreads). This diversity is essential and cannot be replaced by a global quality sort.
+
+**Status:** Reverted to hub_anchor_order trial order (T19 state).
+
+---
+
+### Trial 20-B — Z2-repair post-pass ⚠️ SHIFTS BAD-SEED, NOT STRUCTURAL FIX
+
+**Change (on top of T19, T20-A reverted):** After the demand allocation loop (Step 4) and before MCF (Step 5), inserted a repair block (Step 4.5): up to 3 iterations, each finding the assigned demand with the highest deprivation contribution and trying to reassign it to a lower-ω hub with sufficient residual capacity (`inventory[ki] - hub_load[ki] ≥ D_kg_r`). Accepted only if ω strictly improves. Z2_s recomputed from scratch if any repair occurred. Required adding `vector<int> z_ik_m(num_I, -1)` for mode tracking.
+
+**20-seed results (pop=200, gen=300, seeds 0–19):**
+
+| Metric | T19 baseline | T20-B | Δ |
+|--------|-------------|-------|---|
+| HV mean | 0.403 | 0.431 | +0.028 |
+| HV std  | 0.079 | 0.075 | −0.004 |
+| HV min  | ≈0.25 (est.) | **0.134** (seed 11) | regression |
+| HV max  | 0.454 (seed 15) | 0.512 (seed 12) | +0.058 |
+
+**Why it partially worked:** Repair corrects the K-window lottery's worst victims — demands that ended up at a high-ω hub because their Pass 1 K-window missed the best-ω hub. Up to 3 repairs per scenario improves the minimax Z2.
+
+**Why it is not a structural fix:** Mean improved +0.028, but the bad-seed floor WORSENED (seed 11: T19 ≈ 0.40 → T20-B 0.134). The repair shifts which seeds are bad, not how many are bad. This is the same whack-a-mole pattern seen in T14–T16 (aging shake, template diversity). Each intervention moves catastrophic outliers between seeds without eliminating the underlying cause: the K-window lottery and depriv_norm sinkhole are still the assignment mechanism. **The stop condition (T19, 0.403 mean) was already met; this is an overfit to CV-Small behaviour.**
+
+**Status:** Reverted.
+
+---
+
+### Trial 20-C — τ-biased R-init ⚠️ VARIANCE SHIFT, NOT STRUCTURAL FIX
+
+**Change (on top of T20-B):** In `run_nsga2`, precomputed `mean_tau[ki]` across scenarios. In `sample_individual`, replaced uniform R-init for open hubs with a τ-quality bias:
+```cpp
+double tau_q = tau_min_val / (mean_tau[k] + EPS);
+ind.R[k] = clamp(0.3 + 0.7 * tau_q * rand01(), 0.0, 1.0);
+```
+Low-τ hubs (fast process time) receive higher initial R; high-τ hubs receive R ≈ 0.3 (minimum). Only applied when `decoder_type == "heuristic"`.
+
+**20-seed results (T20-B+C combined, pop=200, gen=300):**
+
+| Metric | T19 baseline | T20-B | T20-B+C | Δ vs T19 |
+|--------|-------------|-------|---------|----------|
+| HV mean | 0.403 | 0.431 | 0.434 | +0.031 |
+| HV std  | 0.079 | 0.075 | **0.063** | −0.016 |
+| HV min  | ≈0.25 (est.) | 0.134 (s11) | 0.206 (s8) | shifted |
+| HV max  | 0.454 (s15) | 0.512 (s12) | 0.493 (s11/17) | −0.019 |
+
+**T20-C's sole contribution:** Rescues seed 11 (0.134 → 0.493) while creating a new bad seed (s8: 0.206). The bad-seed curse moves again. Standard deviation narrows slightly. The mechanism is unchanged.
+
+**Analogy to prior failures:** Trial 6 (R-init proportional to flood risk) also manipulated R initialization and caused regression (HV 0.160) because "init fought evolution's correct direction." T20-C τ-bias is softer but the same category: it constrains the R search space at initialization in ways that help some seeds and hurt others on CV-Small's 5-hub topology. At CV-Large (20 hubs), the generalisation is unverified.
+
+**Status:** Reverted.
+
+---
+
+### Decision: T19 is the final W-based policy decoder
+
+All three T20 variants confirm the **empirical HV ceiling** stated after T16: "~0.41–0.42 on CV-Small v2. All W-perturbation strategies explored failed to raise it and introduced catastrophic outliers." T20-B+C raise mean by +0.031 but maintain the same bimodal structure (≥0.40 cluster + ≤0.21 outlier cluster) and do not generalise beyond the known 5-hub overfitting regime.
+
+The stop condition (20-seed mean > 0.40, cherry-pick > 0.43) was met at T19-Fix1. No further W-decoder tuning is warranted.
+
+**Canonical T19 state:**  
+- `decoder.hpp`: hub_anchor_order precompute + K-window Pass 1/2 + exact depriv_norm + W[6] γ congestion  
+- `nsga2.hpp`: uniform R-init (open hubs: R ∈ [0.45, 0.95])  
+- 20-seed HV: **0.403 ± 0.079**, cherry-pick seed 15 = **0.454**  
+
+Next structural improvement: CCEA (cooperative co-evolution), which decouples W-vector evolution from structure (X, R, A) evolution via a bandit W-pool.
