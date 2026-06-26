@@ -103,8 +103,8 @@ struct Individual {
 // ---------------------------------------------------------------------------
 Individual random_individual(const DRNDInstance &inst) {
   Individual ind(inst.num_H, inst.num_I);
-  // X: randomly open some hubs (at least 1, up to all)
-  int n_open = (int)rand_int(1, inst.num_H);
+  // X: randomly open some hubs (at least 1, at most 60%)
+  int n_open = (int)rand_int(1, std::max(1, inst.num_H * 3 / 5));
   vector<int> perm(inst.num_H);
   std::iota(all(perm), 0);
   shuffle_vec(perm);

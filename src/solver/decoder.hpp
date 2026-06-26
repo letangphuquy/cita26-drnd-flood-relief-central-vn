@@ -95,6 +95,26 @@ void decode(Individual &ind, const DRNDInstance &inst,
     }
   }
 
+  // ── Pre-compute anchor-based hub order ────────────────────────────────
+  // hub_anchor_order[ki][j] = local index of the j-th closest hub to hub ki
+  // (Euclidean in lat/lon).  A[ii] selects the anchor hub; trial order for
+  // demand ii is hub_anchor_order[A[ii] % num_H].
+  vector<vector<int>> hub_anchor_order(num_H, vector<int>(num_H));
+  for (int ki = 0; ki < num_H; ki++) {
+    int hi = inst.hub_idx[ki];
+    vector<pair<double, int>> dists;
+    dists.reserve(num_H);
+    for (int kj = 0; kj < num_H; kj++) {
+      int hj = inst.hub_idx[kj];
+      double dx = inst.lon[hi] - inst.lon[hj];
+      double dy = inst.lat[hi] - inst.lat[hj];
+      dists.push_back({dx * dx + dy * dy, kj});
+    }
+    std::sort(all(dists));
+    for (int j = 0; j < num_H; j++)
+      hub_anchor_order[ki][j] = dists[j].second;
+  }
+
   // ── Per-scenario evaluation ────────────────────────────────────────────
   for (int si = 0; si < num_S; si++) {
     const Scenario &sc = inst.scenarios[si];
@@ -176,369 +196,221 @@ void decode(Individual &ind, const DRNDInstance &inst,
       }
     }
 
-    // ── STEP 3: Demand priority scores (tiebreaker for regret) ──────────
+    // ── STEP 3: Demand priority scores (normalised + stochastic) ──────
+    // Raw components
     vector<double> raw_urgency(num_I), raw_isolation(num_I), raw_dist(num_I);
     for (int ii = 0; ii < num_I; ii++) {
       int i = inst.demand_idx[ii];
       double D = sc.demand[i];
       double lam = inst.lambda[ii][si];
       raw_urgency[ii] = lam * D;
+
       int n_reach = 0;
       double min_t = inst.big_M;
       for (int ki = 0; ki < num_H; ki++) {
-        if (!active[ki]) continue;
+        if (!active[ki])
+          continue;
         int k = inst.hub_idx[ki];
         bool reachable = false;
         for (int m = 0; m < num_M; m++) {
-          if (sc.acc(m, i, k)) { reachable = true; umin(min_t, inst.C_time[m][i][k]); }
+          if (sc.acc(m, i, k)) {
+            reachable = true;
+            umin(min_t, inst.C_time[m][i][k]);
+          }
         }
-        if (reachable) n_reach++;
+        if (reachable)
+          n_reach++;
       }
       raw_isolation[ii] = (n_reach > 0) ? 1.0 / n_reach : 1.0;
-      raw_dist[ii]      = (min_t < inst.big_M) ? min_t : 0.0;
+      raw_dist[ii] = (min_t < inst.big_M) ? min_t : 0.0;
     }
+
+    // Normalise each component to [0,1]
     normalise_inplace(raw_urgency);
     normalise_inplace(raw_isolation);
     normalise_inplace(raw_dist);
+
+    // Weighted score + deterministic index tiebreaker (DECODER_NOISE_SIGMA defined but unused)
     vector<double> demand_score(num_I);
     for (int ii = 0; ii < num_I; ii++) {
-      demand_score[ii] = ind.W[0] * raw_urgency[ii]
-                       + ind.W[3] * raw_isolation[ii]
-                       - ind.W[1] * raw_dist[ii]
-                       + (ii * 1e-6);
+      demand_score[ii] = ind.W[0] * raw_urgency[ii] +
+                         ind.W[3] * raw_isolation[ii] -
+                         ind.W[1] * raw_dist[ii] + (ii * 1e-6);
     }
 
-    // ── STEP 4: Regret-based demand allocation (Z2-cost regret) ────────
-    // Hub cost for assigning demand ii to hub ki = actual Z2 contribution:
-    //   z2_cost[ii][ki] = D * expm1(λ * (τ_k + 2 * min_travel_time[ii][ki]))
-    // This is the exact deprivation term accumulated in Step 7, so minimising
-    // it directly targets Z2. Regret uses Vogel's approximation:
-    //   regret[ii] = z2_cost[ii][2nd_best] − z2_cost[ii][best]
-    // Demands with high regret (large cost gap between hubs) are served first.
-    // When only 1 hub is reachable, second_z2 = 1e18 → huge regret → instant
-    // priority, preventing isolation. R diversifies hub capacities; X diversifies
-    // accessibility; demand_score tiebreaks by W[0]*urgency + W[3]*isolation.
+    // ── STEP 4: Tiered demand allocation ──────────────────────────────
+    vector<int> demand_order(num_I);
+    std::iota(all(demand_order), 0);
+    std::sort(all(demand_order),
+              [&](int a, int b) { return demand_score[a] > demand_score[b]; });
+
     vector<int> z_ik(num_I, -1);
     vector<double> hub_load(num_H, 0.0);
 
-    // min_t[ii][ki]: minimum travel time demand ii → hub ki over ALL modes.
-    // Used for Z2 cost computation (mirrors the formula in Step 7).
-    vector<vector<double>> min_t(num_I, vector<double>(num_H, inst.big_M));
+    // Precompute per-demand minimum travel time to any active hub (for score normalization).
+    // t_min_demand[ii] anchors speed_norm = t_min/best_t ∈ (0,1] so that the speed
+    // term and the residual_norm term are on the same [0,1] scale.
+    vector<double> t_min_demand(num_I, inst.big_M);
     for (int ii = 0; ii < num_I; ii++) {
       int i = inst.demand_idx[ii];
       for (int ki = 0; ki < num_H; ki++) {
+        if (!active[ki] && !y[ki]) continue;
         int k = inst.hub_idx[ki];
-        for (int m = 0; m < num_M; m++)
-          if (sc.acc(m, i, k))
-            umin(min_t[ii][ki], inst.C_time[m][i][k]);
+        auto [bm, bt] = best_mode_time(i, k);
+        if (bm != -1) umin(t_min_demand[ii], bt);
       }
     }
 
-    // Per-demand deprivation cost (needed by Step 4.5 to track Z2_s after swaps).
-    vector<double> depriv_cost(num_I, 0.0);
-    // Per-demand mode used (needed by Step 4.5 to maintain act_heli_links).
-    vector<int> z_ik_m(num_I, -1);
-
-    vector<bool> assigned(num_I, false);
-    int n_assigned = 0;
-
-    while (n_assigned < num_I) {
-      int sel_ii = -1, sel_ki = -1, sel_m = -1;
-      double best_composite = -1e18;
-
-      for (int ii = 0; ii < num_I; ii++) {
-        if (assigned[ii]) continue;
-        int i = inst.demand_idx[ii];
-        double D   = sc.demand[i];
-        double lam = inst.lambda[ii][si];
-
-        double best_z2 = 1e18, second_z2 = 1e18;
-        int top_ki = -1, top_m = -1;
-
-        for (int ki = 0; ki < num_H; ki++) {
-          if (!active[ki] && !y[ki]) continue;
-          int k = inst.hub_idx[ki];
-          auto [b_m, bt] = best_mode_time(i, k);
-          if (b_m == -1) continue;
-          double residual = inventory[ki] - hub_load[ki];
-          // Enforce individual hub capacity: skip full planned hubs so demand
-          // spills to the next-best hub instead of overloading one hub and
-          // forcing MCF to route all supply there from distant origins.
-          // Reactive hubs (y[ki]) are always eligible: MCF brings supply in Step 5.
-          if (!y[ki] && residual <= 0.0) continue;
-
-          double t_ik  = (min_t[ii][ki] < inst.big_M) ? min_t[ii][ki] : 0.0;
-          double omega = sc.hub_process_time[ki] + 2.0 * t_ik;
-          double z2    = D * std::expm1(std::min(lam * omega, 20.0));
-
-          if (z2 < best_z2) {
-            second_z2 = best_z2;
-            best_z2 = z2; top_ki = ki; top_m = b_m;
-          } else if (z2 < second_z2) {
-            second_z2 = z2;
-          }
-        }
-
-        if (top_ki == -1) continue;
-
-        // Vogel regret: cost saved by getting best vs 2nd-best hub.
-        // When only 1 hub reachable, second_z2 = 1e18 → maximum urgency.
-        double regret    = second_z2 - best_z2;
-        double composite = regret + 1e-6 * demand_score[ii];
-
-        if (composite > best_composite) {
-          best_composite = composite;
-          sel_ii = ii; sel_ki = top_ki; sel_m = top_m;
-        }
-      }
-
-      if (sel_ii == -1) {
-        // No demand found a valid hub. Open the first safe inactive hub
-        // reachable by any unassigned demand, then retry.
-        bool opened = false;
-        for (int ii = 0; ii < num_I && !opened; ii++) {
-          if (assigned[ii]) continue;
-          int i = inst.demand_idx[ii];
-          for (int ki = 0; ki < num_H && !opened; ki++) {
-            if (active[ki] || y[ki]) continue;
-            int k = inst.hub_idx[ki];
-            if (sc.risk[k] > inst.chi) continue;
-            auto [b_m, bt] = best_mode_time(i, k);
-            (void)bt;
-            if (b_m == -1) continue;
-            y[ki] = true;
-            inventory[ki] = 0.0;
-            Z1_s += sc.hub_reactive_cost[ki];
-            opened = true;
-          }
-        }
-        if (!opened) {
-          // Truly infeasible — penalise all remaining demands
-          for (int ii = 0; ii < num_I; ii++) {
-            if (assigned[ii]) continue;
-            int i = inst.demand_idx[ii];
-            double D = sc.demand[i];
-            double D_kg = inst.gamma * D;
-            ind.CV += D_kg;
-            Z1_s += inst.big_M;
-            umax(Z2_s, inst.big_M);
-            assigned[ii] = true;
-            n_assigned++;
-          }
-        }
-        continue;
-      }
-
-      // Commit: assign sel_ii → sel_ki
-      assigned[sel_ii] = true;
-      n_assigned++;
-      int i = inst.demand_idx[sel_ii];
+    for (int ii : demand_order) {
+      int i = inst.demand_idx[ii];
       double D = sc.demand[i];
       double D_kg = inst.gamma * D;
-      z_ik[sel_ii] = sel_ki;
-      hub_load[sel_ki] += D_kg;
-      act_num_links++;
-      if (sel_m == 2) act_heli_links++;
 
-      if (flow_out) {
-        flow_out->z_iks[si][sel_ii] = sel_ki;
-        flow_out->z_iks_m[si][sel_ii] = sel_m;
+      // Trial order: hubs sorted by proximity to anchor hub A[ii].
+      const int anchor = ind.A[ii] % num_H;
+      const vector<int> &trial_order = hub_anchor_order[anchor];
+
+      // K-window: how many anchor-proximate hubs to score in Pass 1.
+      const int K = std::max(1, (int)std::ceil(ind.W[5] * num_H));
+
+      int best_ki = -1;
+      double best_hub_score = -1e18;
+      int chosen_m = -1;
+
+      // Lifted once per demand — same answer for every hub in both passes.
+      bool has_global_surplus = false;
+      for (int kj = 0; kj < num_H; kj++) {
+        if ((active[kj] || y[kj]) && (inventory[kj] - hub_load[kj] > EPS)) {
+          has_global_surplus = true;
+          break;
+        }
       }
 
-      // Reactive hub accounting (forced-active unplanned hub edge case)
-      if (!x[sel_ki] && !y[sel_ki]) {
-        y[sel_ki] = true;
-        inventory[sel_ki] = 0.0;
-        Z1_s += sc.hub_reactive_cost[sel_ki];
+      // ── Pass 1: best-scoring hub in first K candidates ────────────────
+      for (int j = 0; j < K; j++) {
+        int ki = trial_order[j];
+        if (!active[ki] && !y[ki])
+          continue;
+        int k = inst.hub_idx[ki];
+        auto [b_m, best_t] = best_mode_time(i, k);
+        if (b_m == -1)
+          continue;
+        double residual = inventory[ki] - hub_load[ki];
+        if (residual <= 0.0 && !has_global_surplus)
+          continue;
+
+        double speed_norm = (t_min_demand[ii] < inst.big_M)
+                          ? t_min_demand[ii] / (best_t + EPS) : 1.0;
+        double residual_norm = (inst.kappa[ki] > EPS)
+                             ? std::max(0.0, residual) / inst.kappa[ki] : 0.0;
+        double score = ind.W[1] * speed_norm
+                     + ind.W[2] * residual_norm
+                     + ind.W[4] * (x[ki] ? 1.0 : 0.0);
+        if (score > best_hub_score) {
+          best_hub_score = score;
+          best_ki = ki;
+          chosen_m = b_m;
+        }
       }
 
-      // Daganzo CA last-mile cost
-      Z1_s += inst.theta[sel_ki][sel_ii][si];
+      // ── Pass 2: remaining candidates, best-scored (not first-found) ───
+      if (best_ki == -1) {
+        for (int j = K; j < num_H; j++) {
+          int ki = trial_order[j];
+          if (!active[ki] && !y[ki])
+            continue;
+          int k = inst.hub_idx[ki];
+          auto [b_m, best_t] = best_mode_time(i, k);
+          if (b_m == -1)
+            continue;
+          double residual = inventory[ki] - hub_load[ki];
+          if (residual <= 0.0 && !has_global_surplus)
+            continue;
+          double speed_norm = (t_min_demand[ii] < inst.big_M)
+                            ? t_min_demand[ii] / (best_t + EPS) : 1.0;
+          double residual_norm = (inst.kappa[ki] > EPS)
+                               ? std::max(0.0, residual) / inst.kappa[ki] : 0.0;
+          double score = ind.W[1] * speed_norm
+                       + ind.W[2] * residual_norm
+                       + ind.W[4] * (x[ki] ? 1.0 : 0.0);
+          if (score > best_hub_score) {
+            best_hub_score = score;
+            best_ki = ki;
+            chosen_m = b_m;
+          }
+        }
+      }
 
-      // Z2 deprivation: Ω = τ_ks + 2 × min travel time over all modes
-      int bk = inst.hub_idx[sel_ki];
-      double min_t = inst.big_M;
-      for (int m = 0; m < num_M; m++)
-        if (sc.acc(m, i, bk))
-          umin(min_t, inst.C_time[m][i][bk]);
-      double omega = sc.hub_process_time[sel_ki] +
-                     2.0 * (min_t < inst.big_M ? min_t : 0.0);
-      double lam = inst.lambda[sel_ii][si];
-      double exp_arg = std::min(lam * omega, 20.0);
-      double depriv = D * std::expm1(exp_arg);
-      umax(Z2_s, depriv);
-      depriv_cost[sel_ii] = depriv;
-      z_ik_m[sel_ii] = sel_m;
-    } // end regret loop
-
-    // ── STEP 4.5: Z2-preserving Z1 local search ──────────────────────────
-    // 1-opt re-assignment: for each demand try relocating to a different
-    // already-open hub.  Accept if: the new hub has capacity, the new
-    // deprivation ≤ current Z2_s, and delta_theta < 0 (Z1 strictly improves).
-    // Skipped for infeasible solutions (CV > 0) — they don't reach the front.
-    if (ind.CV < EPS) {
-      bool ls_improved = true;
-      while (ls_improved) {
-        ls_improved = false;
-        for (int ii = 0; ii < num_I; ii++) {
-          if (z_ik[ii] < 0) continue;
-          int i       = inst.demand_idx[ii];
-          int cur_ki  = z_ik[ii];
-          double D    = sc.demand[i];
-          double D_kg = inst.gamma * D;
-          double lam  = inst.lambda[ii][si];
-
-          double best_delta = 0.0;   // strict improvement only
-          int best_ki_ls = -1, best_m_ls = -1;
-          double best_nd = depriv_cost[ii];
-
+      // ── Pass 3: Truly infeasible — open a safe inactive hub as reactive ──
+      // Only reached when both Pass 1 and Pass 2 found no active/reactive hub.
+      if (best_ki == -1) {
           for (int ki = 0; ki < num_H; ki++) {
-            if (ki == cur_ki) continue;
-            if (!active[ki] && !y[ki]) continue;
-            if (inventory[ki] - hub_load[ki] < D_kg - EPS) continue;
-
+            if (active[ki] || y[ki])
+              continue;
             int k = inst.hub_idx[ki];
-            auto [b_m, bt_ls] = best_mode_time(i, k);
-            (void)bt_ls;
-            if (b_m == -1) continue;
+            if (sc.risk[k] > inst.chi)
+              continue;
 
-            double t_new  = (min_t[ii][ki] < inst.big_M) ? min_t[ii][ki] : 0.0;
-            double om_new = sc.hub_process_time[ki] + 2.0 * t_new;
-            double nd     = D * std::expm1(std::min(lam * om_new, 20.0));
-            if (nd > Z2_s + EPS) continue;   // would worsen deprivation ceiling
+            auto [b_m, best_t] = best_mode_time(i, k);
+            (void)best_t;
+            if (b_m == -1)
+              continue;
 
-            double delta = inst.theta[ki][ii][si] - inst.theta[cur_ki][ii][si];
-            if (delta < best_delta) {
-              best_delta = delta;
-              best_ki_ls = ki; best_m_ls = b_m;
-              best_nd    = nd;
-            }
+            y[ki] = true;
+            inventory[ki] = 0.0; // Reactive hubs carry zero pre-positioned stock
+            Z1_s += sc.hub_reactive_cost[ki];
+            best_ki = ki;
+            chosen_m = b_m;
+            break;
           }
-
-          if (best_ki_ls != -1) {
-            hub_load[cur_ki]     -= D_kg;
-            hub_load[best_ki_ls] += D_kg;
-            Z1_s += best_delta;
-            if (z_ik_m[ii]  == 2) act_heli_links--;
-            if (best_m_ls   == 2) act_heli_links++;
-            if (flow_out) {
-              flow_out->z_iks[si][ii]   = best_ki_ls;
-              flow_out->z_iks_m[si][ii] = best_m_ls;
-            }
-            depriv_cost[ii] = best_nd;
-            z_ik[ii]   = best_ki_ls;
-            z_ik_m[ii] = best_m_ls;
-            // Z2_s can only decrease — recompute
-            Z2_s = *std::max_element(depriv_cost.begin(), depriv_cost.end());
-            ls_improved = true;
-          }
-        }
       }
-    } // end Step 4.5
 
-    // ── STEP 4.6: Z2-preserving Z1 swap-LS (2-opt interchange) ──────────
-    // Swap the hub assignments of two demands (ii ↔ jj) if:
-    //   (a) they are at different hubs,
-    //   (b) both can reach the other's hub (mode feasibility),
-    //   (c) neither new depriv exceeds the current Z2_s ceiling,
-    //   (d) combined delta_theta = (theta_new_ii + theta_new_jj)
-    //                            - (theta_old_ii + theta_old_jj) < 0.
-    // Capacity is conserved exactly — hubs lose and gain the same kg count
-    // only if D_ii == D_jj. For unequal demands we must check capacity too.
-    // Steepest-descent: apply the globally best swap per outer iteration.
-    if (ind.CV < EPS) {
-      bool sw_improved = true;
-      while (sw_improved) {
-        sw_improved = false;
-        double best_delta = 0.0;  // only accept strict improvement
-        int best_ii = -1, best_jj = -1;
-        int best_m_ii = -1, best_m_jj = -1;
-        double best_nd_ii = 0.0, best_nd_jj = 0.0;
+      if (best_ki == -1) {
+        // Truly infeasible — BigM penalty
+        ind.CV += D_kg;
+        Z1_s += inst.big_M;
+        umax(Z2_s, inst.big_M);
 
-        for (int ii = 0; ii < num_I - 1; ii++) {
-          if (z_ik[ii] < 0) continue;
-          int i_ii   = inst.demand_idx[ii];
-          int ki_A   = z_ik[ii];
-          double D_ii   = sc.demand[i_ii];
-          double Dkg_ii = inst.gamma * D_ii;
-          double lam_ii = inst.lambda[ii][si];
+      } else {
+        z_ik[ii] = best_ki;
+        hub_load[best_ki] += D_kg;
+        act_num_links++;
+        if (chosen_m == 2)
+          act_heli_links++;
 
-          for (int jj = ii + 1; jj < num_I; jj++) {
-            if (z_ik[jj] < 0) continue;
-            int ki_B = z_ik[jj];
-            if (ki_A == ki_B) continue;  // same hub — swap is no-op
-
-            int i_jj   = inst.demand_idx[jj];
-            double D_jj   = sc.demand[i_jj];
-            double Dkg_jj = inst.gamma * D_jj;
-            double lam_jj = inst.lambda[jj][si];
-
-            // Capacity check for unequal demands: after swap, both hubs must fit.
-            // Hub A loses Dkg_ii and gains Dkg_jj.
-            // Hub B loses Dkg_jj and gains Dkg_ii.
-            double resA_post = (inventory[ki_A] - hub_load[ki_A]) + Dkg_ii - Dkg_jj;
-            double resB_post = (inventory[ki_B] - hub_load[ki_B]) + Dkg_jj - Dkg_ii;
-            if (resA_post < -EPS || resB_post < -EPS) continue;
-
-            // Mode feasibility: ii must reach ki_B, jj must reach ki_A.
-            int k_B = inst.hub_idx[ki_B];
-            int k_A = inst.hub_idx[ki_A];
-            auto [m_ii_new, bt1] = best_mode_time(i_ii, k_B);
-            (void)bt1;
-            if (m_ii_new == -1) continue;
-            auto [m_jj_new, bt2] = best_mode_time(i_jj, k_A);
-            (void)bt2;
-            if (m_jj_new == -1) continue;
-
-            // Z2 constraint: new depriv for both ≤ current Z2_s.
-            double t_ii_B  = (min_t[ii][ki_B] < inst.big_M) ? min_t[ii][ki_B] : 0.0;
-            double nd_ii   = D_ii * std::expm1(std::min(lam_ii * (sc.hub_process_time[ki_B] + 2.0 * t_ii_B), 20.0));
-            if (nd_ii > Z2_s + EPS) continue;
-
-            double t_jj_A  = (min_t[jj][ki_A] < inst.big_M) ? min_t[jj][ki_A] : 0.0;
-            double nd_jj   = D_jj * std::expm1(std::min(lam_jj * (sc.hub_process_time[ki_A] + 2.0 * t_jj_A), 20.0));
-            if (nd_jj > Z2_s + EPS) continue;
-
-            // Z1 delta (theta change for both demands).
-            double delta = (inst.theta[ki_B][ii][si] - inst.theta[ki_A][ii][si])
-                         + (inst.theta[ki_A][jj][si] - inst.theta[ki_B][jj][si]);
-            if (delta < best_delta) {
-              best_delta  = delta;
-              best_ii = ii; best_jj = jj;
-              best_m_ii = m_ii_new; best_m_jj = m_jj_new;
-              best_nd_ii = nd_ii;   best_nd_jj = nd_jj;
-            }
-          }
+        if (flow_out) {
+          flow_out->z_iks[si][ii] = best_ki;
+          flow_out->z_iks_m[si][ii] = chosen_m;
         }
 
-        if (best_ii != -1) {
-          int ki_A = z_ik[best_ii], ki_B = z_ik[best_jj];
-          double Dkg_ii = inst.gamma * sc.demand[inst.demand_idx[best_ii]];
-          double Dkg_jj = inst.gamma * sc.demand[inst.demand_idx[best_jj]];
-
-          hub_load[ki_A] += Dkg_jj - Dkg_ii;  // net change at A
-          hub_load[ki_B] += Dkg_ii - Dkg_jj;  // net change at B
-
-          Z1_s += best_delta;
-          if (z_ik_m[best_ii] == 2) act_heli_links--;
-          if (best_m_ii        == 2) act_heli_links++;
-          if (z_ik_m[best_jj] == 2) act_heli_links--;
-          if (best_m_jj        == 2) act_heli_links++;
-          if (flow_out) {
-            flow_out->z_iks[si][best_ii]   = ki_B;
-            flow_out->z_iks_m[si][best_ii] = best_m_ii;
-            flow_out->z_iks[si][best_jj]   = ki_A;
-            flow_out->z_iks_m[si][best_jj] = best_m_jj;
-          }
-          depriv_cost[best_ii] = best_nd_ii;
-          depriv_cost[best_jj] = best_nd_jj;
-          z_ik[best_ii]   = ki_B;  z_ik_m[best_ii] = best_m_ii;
-          z_ik[best_jj]   = ki_A;  z_ik_m[best_jj] = best_m_jj;
-          Z2_s = *std::max_element(depriv_cost.begin(), depriv_cost.end());
-          sw_improved = true;
+        // Reactive hub cost (if not already accounted for above)
+        // NOTE: Reactive hubs are second-stage decisions; they carry ZERO
+        // pre-positioned inventory (q_k = 0). Setting inventory from R[best_ki]
+        // here was a bug that (a) inflated reactive-hub inventory filling in
+        // outputs and (b) masked all net deficits, suppressing transhipment.
+        if (!x[best_ki] && !y[best_ki]) {
+          y[best_ki] = true;
+          inventory[best_ki] = 0.0; // no pre-positioned stock at reactive hub
+          Z1_s += sc.hub_reactive_cost[best_ki];
         }
+
+        // Daganzo CA last-mile cost
+        Z1_s += inst.theta[best_ki][ii][si];
+
+        // Deprivation: Ω = τ_ks + 2 × min travel time; cap to prevent overflow
+        int bk = inst.hub_idx[best_ki];
+        double min_t = inst.big_M;
+        for (int m = 0; m < num_M; m++)
+          if (sc.acc(m, i, bk))
+            umin(min_t, inst.C_time[m][i][bk]);
+        double omega = sc.hub_process_time[best_ki] +
+                       2.0 * (min_t < inst.big_M ? min_t : 0.0);
+        double lam = inst.lambda[ii][si];
+        double exp_arg = std::min(lam * omega, 20.0);
+        double depriv = D * std::expm1(exp_arg);
+        umax(Z2_s, depriv);
       }
-    } // end Step 4.6
+    } // end demand loop
 
     // ── STEP 5+6: Supply balancing (global MCMF or legacy greedy) ─────
     vector<double> net_inv(num_H);
