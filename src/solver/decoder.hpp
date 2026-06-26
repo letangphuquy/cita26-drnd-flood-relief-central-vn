@@ -14,7 +14,8 @@
 //
 // WEIGHT SEMANTICS:
 //   W[0]: demand urgency  (λ·D)              — demand sort
-//   W[1]: hub speed       (1/τ)              — hub score
+//   W[1]: ω-proximity (ω_min/ω_ki)          — hub score  [was: speed 1/τ]
+//          ω_ki = τ_ki + 2×t_{ii,ki} — directly proportional to Z2 deprivation
 //   W[2]: residual capacity                  — hub score
 //   W[3]: demand isolation (1/num_reachable) — demand sort
 //   W[4]: planned hub preference bonus       — hub score
@@ -247,17 +248,21 @@ void decode(Individual &ind, const DRNDInstance &inst,
     vector<int> z_ik(num_I, -1);
     vector<double> hub_load(num_H, 0.0);
 
-    // Precompute per-demand minimum travel time to any active hub (for score normalization).
-    // t_min_demand[ii] anchors speed_norm = t_min/best_t ∈ (0,1] so that the speed
-    // term and the residual_norm term are on the same [0,1] scale.
-    vector<double> t_min_demand(num_I, inst.big_M);
+    // Precompute per-demand minimum ω over all active hubs.
+    // ω_ki = τ_ki + 2×t_{ii,ki} is the full deprivation-time for demand ii at hub ki.
+    // omega_min_demand[ii] anchors omega_norm = ω_min/ω_ki ∈ (0,1], keeping W[1]
+    // on the same [0,1] scale as residual_norm and directly targeting Z2.
+    vector<double> omega_min_demand(num_I, inst.big_M);
     for (int ii = 0; ii < num_I; ii++) {
       int i = inst.demand_idx[ii];
       for (int ki = 0; ki < num_H; ki++) {
         if (!active[ki] && !y[ki]) continue;
         int k = inst.hub_idx[ki];
         auto [bm, bt] = best_mode_time(i, k);
-        if (bm != -1) umin(t_min_demand[ii], bt);
+        if (bm != -1) {
+          double omega_ki = sc.hub_process_time[ki] + 2.0 * bt;
+          umin(omega_min_demand[ii], omega_ki);
+        }
       }
     }
 
@@ -299,17 +304,14 @@ void decode(Individual &ind, const DRNDInstance &inst,
         if (residual <= 0.0 && !has_global_surplus)
           continue;
 
-        double speed_norm = (t_min_demand[ii] < inst.big_M)
-                          ? t_min_demand[ii] / (best_t + EPS) : 1.0;
+        double omega_ki = sc.hub_process_time[ki] + 2.0 * best_t;
+        double omega_norm = (omega_min_demand[ii] < inst.big_M)
+                          ? omega_min_demand[ii] / (omega_ki + EPS) : 1.0;
         double residual_norm = (inst.kappa[ki] > EPS)
                              ? std::max(0.0, residual) / inst.kappa[ki] : 0.0;
-        // W[6] = γ: state-dependent congestion multiplier on capacity weight.
-        // exp(γ × load/kappa) × (1 - load/kappa) is monotonically decreasing
-        // for γ ∈ [0,1], so fuller hubs remain less attractive than empty ones
-        // while the GA can tune how non-linearly the capacity score decays.
         double cong = (inst.kappa[ki] > EPS)
             ? std::exp(ind.W[6] * hub_load[ki] / inst.kappa[ki]) : 1.0;
-        double score = ind.W[1] * speed_norm
+        double score = ind.W[1] * omega_norm
                      + ind.W[2] * cong * residual_norm
                      + ind.W[4] * (x[ki] ? 1.0 : 0.0);
         if (score > best_hub_score) {
@@ -332,13 +334,14 @@ void decode(Individual &ind, const DRNDInstance &inst,
           double residual = inventory[ki] - hub_load[ki];
           if (residual <= 0.0 && !has_global_surplus)
             continue;
-          double speed_norm = (t_min_demand[ii] < inst.big_M)
-                            ? t_min_demand[ii] / (best_t + EPS) : 1.0;
+          double omega_ki = sc.hub_process_time[ki] + 2.0 * best_t;
+          double omega_norm = (omega_min_demand[ii] < inst.big_M)
+                            ? omega_min_demand[ii] / (omega_ki + EPS) : 1.0;
           double residual_norm = (inst.kappa[ki] > EPS)
                                ? std::max(0.0, residual) / inst.kappa[ki] : 0.0;
           double cong = (inst.kappa[ki] > EPS)
               ? std::exp(ind.W[6] * hub_load[ki] / inst.kappa[ki]) : 1.0;
-          double score = ind.W[1] * speed_norm
+          double score = ind.W[1] * omega_norm
                        + ind.W[2] * cong * residual_norm
                        + ind.W[4] * (x[ki] ? 1.0 : 0.0);
           if (score > best_hub_score) {
