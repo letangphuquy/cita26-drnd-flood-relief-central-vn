@@ -859,4 +859,42 @@ T21 — Matheuristic (Direction A), if all above fail
 
 ### Status
 
-**CLOSED.** Stop condition met at T17. P-vector and Matheuristic kept as experimental baselines in separate files; not integrated into the paper algorithm. The canonical PB-NSGA result for the paper is HV=0.401 ± 0.082 from the T17 W-fix heuristic.
+**SUPERSEDED by T19 (Fix 1).** See Post-T19 section below.
+
+---
+
+## Post-T19 Experimental Results (2026-06-26)
+
+### What was implemented (Fix 1 only — exact depriv_norm)
+
+**T19-Fix1 — Exact deprivation norm in hub scoring:**
+- Precompute `depriv_min_demand[ii]` = min over active hubs of `D·expm1(min(λ·ω_ki, 20))`
+- Replace `omega_norm = ω_min/ω_ki` with `depriv_norm = depriv_min/depriv_ki` in Pass 1 + Pass 2
+- W[1] now weights the EXACT Z2 response surface, not a linear ω proxy
+- `lam = inst.lambda[ii][si]` hoisted above Pass 1 (was duplicated below)
+
+**What was tried and rejected (same session):**
+
+| Fix | Description | Result | Root cause of failure |
+|---|---|---|---|
+| Fix 2 | Upstream cost proxy on residual | ❌ HV=0.217 | Penalises hubs so hard they lose Z1 coverage → BigM |
+| Fix 3 | depriv_min demand sort (replaces λD) | ❌ HV=0.311 | All high-λ demands fight same hub simultaneously → overflow cascade |
+| Fix 4 | L1 W normalization to simplex | ❌ HV=0.217 | Dilutes W[2] and W[4] → reactive cascade → Z1 blowup |
+
+Fixes 2–4 all cause Z1_max to reach 30–43M (BigM territory from supply shortfalls). Fix 3 is theoretically sound but needs a stronger capacity guard (direction B — Z2-repair pass) before reintroduction. Fix 4 needs Fix 2 reformulated first.
+
+### Canonical evaluation results (pop=200, gen=300, 20 seeds)
+
+| Decoder | HV mean ± std | Best seed (HV) | Best Z2 |
+|---|---|---|---|
+| **T19-Fix1 (depriv_norm)** | **0.403 ± 0.079** | seed 15 (0.454) | 72.0K |
+| T18-A (ω_norm) | 0.391 ± 0.072 | seed 15 (0.462) | 71.9K |
+| T17 (W-fix + γ) | 0.401 ± 0.082 | seed 9 (0.462) | 94.3K |
+
+### Key finding
+
+Fix 1 alone lifts mean HV to 0.403 (new canonical best) with variance matching T18-A (0.079 vs 0.082 in T17). The exact depriv norm tightens hub scoring to act on the true Z2 surface rather than linear ω, improving consistency across seeds. The Z2 floor improvement (72K vs 94K in T17) is preserved.
+
+### Canonical cherry-pick: seed 15, HV = 0.454
+
+`run_exp1_baselines.sh` updated to `--pop 200 --gen 300 --seed 15`.

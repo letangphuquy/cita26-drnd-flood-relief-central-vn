@@ -202,8 +202,6 @@ crossover(const Individual &p1, const Individual &p2, const NSGAConfig &cfg,
     c1.W[w] = w1;
     c2.W[w] = w2;
   }
-  // W[1] clamp removed — γ congestion (W[6]) provides natural sinkhole prevention
-
   // Repair: ensure at least one open hub
   auto repair = [&](Individual &ind) {
     bool any_open = false;
@@ -308,7 +306,6 @@ void mutate(Individual &ind, const NSGAConfig &cfg, const DRNDInstance &inst,
   }
 
   // W: polynomial mutation (all decoders)
-  // W[1] clamp removed — γ congestion (W[6]) replaces it for the heuristic decoder
   double pm_w = std::min(pm_w_base * w_scale, 1.0);
   for (int w = 0; w < num_W; w++) {
     if (rand01() < pm_w)
@@ -640,8 +637,7 @@ vector<Individual> run_nsga2(const DRNDInstance &inst, const NSGAConfig &cfg) {
           chosen = open[(int)rand_int(0, (int)open.size() - 1)];
         ind.A[ii] = chosen;
       }
-      // W: uniform [0,1] — biased templates removed (W[1] clamp was unnatural).
-      // W[6] = γ congestion multiplier provides natural sinkhole prevention instead.
+      // W: uniform [0,1]
       for (auto &w : ind.W) w = rand01();
     }
     return ind;

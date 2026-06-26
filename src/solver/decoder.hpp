@@ -13,12 +13,12 @@
 //   - hub_anchor_order[ki][j] pre-computed once: j-th closest hub to hub ki.
 //
 // WEIGHT SEMANTICS:
-//   W[0]: demand urgency  (λ·D)              — demand sort
-//   W[1]: ω-proximity (ω_min/ω_ki)          — hub score  [was: speed 1/τ]
-//          ω_ki = τ_ki + 2×t_{ii,ki} — directly proportional to Z2 deprivation
-//   W[2]: residual capacity                  — hub score
-//   W[3]: demand isolation (1/num_reachable) — demand sort
-//   W[4]: planned hub preference bonus       — hub score
+//   W[0]: demand urgency (λ·D)                                   — demand sort
+//   W[1]: exact deprivation norm depriv_min/depriv_ki           — hub score
+//          depriv_ki = D·expm1(min(λ·ω_ki, 20))  ← exact Z2 response surface
+//   W[2]: residual capacity (residual_k / κ_k)                  — hub score
+//   W[3]: demand isolation (1/num_reachable)                    — demand sort
+//   W[4]: planned hub preference bonus                           — hub score
 //   W[5]: Pass-1 window depth (fraction of |H|) — planned-hub conservatism
 //
 // 7-STEP DECODER:
@@ -197,14 +197,33 @@ void decode(Individual &ind, const DRNDInstance &inst,
       }
     }
 
+    // ── Pre-Step 3: exact deprivation precompute (needed for sort + scoring) ─
+    // depriv_min_demand[ii] = min over active hubs of D·expm1(min(λ·ω_ki, 20))
+    // This is the unavoidable Z2 contribution of demand ii — U_i in the minimax sense.
+    // c_upstream[ki] = cheapest origin→hub replenishment cost (α-scaled) for hub ki.
+    vector<double> depriv_min_demand(num_I, inst.big_M);
+    for (int ii = 0; ii < num_I; ii++) {
+      int i = inst.demand_idx[ii];
+      double D   = sc.demand[i];
+      double lam = inst.lambda[ii][si];
+      for (int ki = 0; ki < num_H; ki++) {
+        if (!active[ki] && !y[ki]) continue;
+        int k = inst.hub_idx[ki];
+        auto [bm, bt] = best_mode_time(i, k);
+        if (bm != -1) {
+          double omega_ki  = sc.hub_process_time[ki] + 2.0 * bt;
+          double depriv_ki = D * std::expm1(std::min(lam * omega_ki, 20.0));
+          umin(depriv_min_demand[ii], depriv_ki);
+        }
+      }
+    }
+
     // ── STEP 3: Demand priority scores (normalised + stochastic) ──────
-    // Raw components
     vector<double> raw_urgency(num_I), raw_isolation(num_I), raw_dist(num_I);
     for (int ii = 0; ii < num_I; ii++) {
       int i = inst.demand_idx[ii];
-      double D = sc.demand[i];
-      double lam = inst.lambda[ii][si];
-      raw_urgency[ii] = lam * D;
+      double D_s = sc.demand[i];
+      raw_urgency[ii] = inst.lambda[ii][si] * D_s;  // λ·D urgency (original)
 
       int n_reach = 0;
       double min_t = inst.big_M;
@@ -248,28 +267,11 @@ void decode(Individual &ind, const DRNDInstance &inst,
     vector<int> z_ik(num_I, -1);
     vector<double> hub_load(num_H, 0.0);
 
-    // Precompute per-demand minimum ω over all active hubs.
-    // ω_ki = τ_ki + 2×t_{ii,ki} is the full deprivation-time for demand ii at hub ki.
-    // omega_min_demand[ii] anchors omega_norm = ω_min/ω_ki ∈ (0,1], keeping W[1]
-    // on the same [0,1] scale as residual_norm and directly targeting Z2.
-    vector<double> omega_min_demand(num_I, inst.big_M);
-    for (int ii = 0; ii < num_I; ii++) {
-      int i = inst.demand_idx[ii];
-      for (int ki = 0; ki < num_H; ki++) {
-        if (!active[ki] && !y[ki]) continue;
-        int k = inst.hub_idx[ki];
-        auto [bm, bt] = best_mode_time(i, k);
-        if (bm != -1) {
-          double omega_ki = sc.hub_process_time[ki] + 2.0 * bt;
-          umin(omega_min_demand[ii], omega_ki);
-        }
-      }
-    }
-
     for (int ii : demand_order) {
       int i = inst.demand_idx[ii];
-      double D = sc.demand[i];
+      double D   = sc.demand[i];
       double D_kg = inst.gamma * D;
+      double lam  = inst.lambda[ii][si];  // hoisted — used in depriv_norm (Pass 1/2) and Z2
 
       // Trial order: hubs sorted by proximity to anchor hub A[ii].
       const int anchor = ind.A[ii] % num_H;
@@ -304,14 +306,16 @@ void decode(Individual &ind, const DRNDInstance &inst,
         if (residual <= 0.0 && !has_global_surplus)
           continue;
 
-        double omega_ki = sc.hub_process_time[ki] + 2.0 * best_t;
-        double omega_norm = (omega_min_demand[ii] < inst.big_M)
-                          ? omega_min_demand[ii] / (omega_ki + EPS) : 1.0;
+        // Exact deprivation norm: acts on the true Z2 response surface (Fix 1)
+        double omega_ki   = sc.hub_process_time[ki] + 2.0 * best_t;
+        double depriv_ki  = D * std::expm1(std::min(lam * omega_ki, 20.0));
+        double depriv_norm = (depriv_min_demand[ii] < inst.big_M)
+                           ? depriv_min_demand[ii] / (depriv_ki + EPS) : 1.0;
         double residual_norm = (inst.kappa[ki] > EPS)
                              ? std::max(0.0, residual) / inst.kappa[ki] : 0.0;
         double cong = (inst.kappa[ki] > EPS)
             ? std::exp(ind.W[6] * hub_load[ki] / inst.kappa[ki]) : 1.0;
-        double score = ind.W[1] * omega_norm
+        double score = ind.W[1] * depriv_norm
                      + ind.W[2] * cong * residual_norm
                      + ind.W[4] * (x[ki] ? 1.0 : 0.0);
         if (score > best_hub_score) {
@@ -334,14 +338,15 @@ void decode(Individual &ind, const DRNDInstance &inst,
           double residual = inventory[ki] - hub_load[ki];
           if (residual <= 0.0 && !has_global_surplus)
             continue;
-          double omega_ki = sc.hub_process_time[ki] + 2.0 * best_t;
-          double omega_norm = (omega_min_demand[ii] < inst.big_M)
-                            ? omega_min_demand[ii] / (omega_ki + EPS) : 1.0;
+          double omega_ki   = sc.hub_process_time[ki] + 2.0 * best_t;
+          double depriv_ki  = D * std::expm1(std::min(lam * omega_ki, 20.0));
+          double depriv_norm = (depriv_min_demand[ii] < inst.big_M)
+                             ? depriv_min_demand[ii] / (depriv_ki + EPS) : 1.0;
           double residual_norm = (inst.kappa[ki] > EPS)
                                ? std::max(0.0, residual) / inst.kappa[ki] : 0.0;
           double cong = (inst.kappa[ki] > EPS)
               ? std::exp(ind.W[6] * hub_load[ki] / inst.kappa[ki]) : 1.0;
-          double score = ind.W[1] * omega_norm
+          double score = ind.W[1] * depriv_norm
                        + ind.W[2] * cong * residual_norm
                        + ind.W[4] * (x[ki] ? 1.0 : 0.0);
           if (score > best_hub_score) {
@@ -416,9 +421,7 @@ void decode(Individual &ind, const DRNDInstance &inst,
             umin(min_t, inst.C_time[m][i][bk]);
         double omega = sc.hub_process_time[best_ki] +
                        2.0 * (min_t < inst.big_M ? min_t : 0.0);
-        double lam = inst.lambda[ii][si];
-        double exp_arg = std::min(lam * omega, 20.0);
-        double depriv = D * std::expm1(exp_arg);
+        double depriv = D * std::expm1(std::min(lam * omega, 20.0));  // lam hoisted above
         umax(Z2_s, depriv);
       }
     } // end demand loop
