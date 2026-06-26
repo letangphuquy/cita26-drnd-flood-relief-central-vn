@@ -303,8 +303,14 @@ void decode(Individual &ind, const DRNDInstance &inst,
                           ? t_min_demand[ii] / (best_t + EPS) : 1.0;
         double residual_norm = (inst.kappa[ki] > EPS)
                              ? std::max(0.0, residual) / inst.kappa[ki] : 0.0;
+        // W[6] = γ: state-dependent congestion multiplier on capacity weight.
+        // exp(γ × load/kappa) × (1 - load/kappa) is monotonically decreasing
+        // for γ ∈ [0,1], so fuller hubs remain less attractive than empty ones
+        // while the GA can tune how non-linearly the capacity score decays.
+        double cong = (inst.kappa[ki] > EPS)
+            ? std::exp(ind.W[6] * hub_load[ki] / inst.kappa[ki]) : 1.0;
         double score = ind.W[1] * speed_norm
-                     + ind.W[2] * residual_norm
+                     + ind.W[2] * cong * residual_norm
                      + ind.W[4] * (x[ki] ? 1.0 : 0.0);
         if (score > best_hub_score) {
           best_hub_score = score;
@@ -330,8 +336,10 @@ void decode(Individual &ind, const DRNDInstance &inst,
                             ? t_min_demand[ii] / (best_t + EPS) : 1.0;
           double residual_norm = (inst.kappa[ki] > EPS)
                                ? std::max(0.0, residual) / inst.kappa[ki] : 0.0;
+          double cong = (inst.kappa[ki] > EPS)
+              ? std::exp(ind.W[6] * hub_load[ki] / inst.kappa[ki]) : 1.0;
           double score = ind.W[1] * speed_norm
-                       + ind.W[2] * residual_norm
+                       + ind.W[2] * cong * residual_norm
                        + ind.W[4] * (x[ki] ? 1.0 : 0.0);
           if (score > best_hub_score) {
             best_hub_score = score;

@@ -47,6 +47,7 @@
 struct Args {
   string instance_path;
   string output_path = "";
+  string decoder_type = "heuristic"; // heuristic | pvector | math
   int pop_size = 200; // ↑ from 100
   int num_gen = 300;  // ↑ from 200
   int seed_iter = 0;
@@ -147,6 +148,8 @@ Args parse_args(int argc, char *argv[]) {
       a.aega_max = std::stoi(argv[++i]);
     else if (flag == "--aega-step" && i + 1 < argc)
       a.aega_step = std::stoi(argv[++i]);
+    else if (flag == "--decoder" && i + 1 < argc)
+      a.decoder_type = argv[++i];
     else
       cerr << "[Warn] Unknown/ignored option: " << flag << "\n";
   }
@@ -175,7 +178,10 @@ void write_output(const vector<Individual> &pop, std::ostream &out,
   j["meta"]["stag_threshold"] = args.stag_threshold;
   j["meta"]["tournament_size"] = args.tournament_sz;
   j["meta"]["legacy_seeding"] = args.legacy_seeding;
-  j["meta"]["solver"] = string(args.use_local_search ? "PB-NSMA" : "PB-NSGA");
+  j["meta"]["solver"] = args.use_local_search ? "PB-NSMA"
+                      : (args.decoder_type == "pvector" ? "PB-NSGA-PV"
+                      : (args.decoder_type == "math"    ? "PB-NSGA-MCF"
+                      : "PB-NSGA"));
 
   // De-duplicate the Pareto front
   vector<Individual> p_front;
@@ -289,6 +295,7 @@ int main(int argc, char *argv[]) {
   cfg.aega_pop_min = args.aega_min;
   cfg.aega_pop_max = args.aega_max;
   cfg.aega_pop_step = args.aega_step;
+  cfg.decoder_type = args.decoder_type;
 
   auto t_start = std::chrono::steady_clock::now();
   std::clock_t c_start = std::clock();
