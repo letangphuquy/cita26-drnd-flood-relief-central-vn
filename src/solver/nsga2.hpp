@@ -10,6 +10,8 @@
 #pragma once
 
 #include "decoder.hpp"
+#include "decoder_pvector.hpp"
+#include "decoder_matheuristic.hpp"
 #include "local_search_engine.hpp"
 #include <algorithm>
 #include <cmath>
@@ -45,6 +47,9 @@ struct NSGAConfig {
   // stagnation_threshold generations, switch to a 3-way tournament
   // (stronger pressure) and trigger a short W-hypermutation pulse to
   // escape the local basin.
+  // Decoder selection: "heuristic" (T13 + γ-fix), "pvector", "math"
+  string decoder_type = "heuristic";
+
   int stagnation_threshold = 20; // gens without new X-config in rank-1
   int tournament_size = 2;       // base tournament size (binary)
   int hyper_pulse_len = 3;       // number of generations in a hypermutation pulse
@@ -119,6 +124,46 @@ double poly_mutate(double x, double eta, double lo = 0.0, double hi = 1.0) {
   return std::clamp(x + delta * (hi - lo), lo, hi);
 }
 
+// ── Order Crossover (OX1) for permutation segment ────────────────────────────
+// Produces two children that are valid permutations of [0..n-1].
+// Called by crossover() when decoder_type == "pvector".
+static void ox1_crossover(const vector<int> &p1, const vector<int> &p2,
+                          vector<int> &c1, vector<int> &c2) {
+  int n = (int)p1.size();
+  if (n <= 1) { c1 = p1; c2 = p2; return; }
+  int pt1 = (int)rand_int(0, n - 1);
+  int pt2 = (int)rand_int(0, n - 1);
+  if (pt1 > pt2) std::swap(pt1, pt2);
+
+  auto fill_ox1 = [&](const vector<int> &parent_seg, const vector<int> &donor,
+                       vector<int> &child) {
+    child.assign(n, -1);
+    // Copy the segment [pt1..pt2] from parent_seg into child
+    for (int i = pt1; i <= pt2; i++) child[i] = parent_seg[i];
+    // Fill remaining positions in order from donor, starting after pt2
+    int pos = (pt2 + 1) % n;
+    int src = (pt2 + 1) % n;
+    int placed = 0;
+    int to_place = n - (pt2 - pt1 + 1);
+    // Build membership set from copied segment
+    vector<bool> in_child(n, false);
+    for (int i = pt1; i <= pt2; i++) in_child[parent_seg[i]] = true;
+    while (placed < to_place) {
+      int v = donor[src];
+      src = (src + 1) % n;
+      if (!in_child[v]) {
+        child[pos] = v;
+        in_child[v] = true;
+        pos = (pos + 1) % n;
+        placed++;
+      }
+    }
+  };
+
+  fill_ox1(p1, p2, c1);
+  fill_ox1(p2, p1, c2);
+}
+
 // ── Crossover ────────────────────────────────────────────────────────────────
 pair<Individual, Individual>
 crossover(const Individual &p1, const Individual &p2, const NSGAConfig &cfg,
@@ -140,24 +185,24 @@ crossover(const Individual &p1, const Individual &p2, const NSGAConfig &cfg,
     c1.R[k] = r1;
     c2.R[k] = r2;
   }
-  // A segment: uniform crossover (swap preferred hub index)
-  for (int i = 0; i < num_I; i++) {
-    if (rand01() < 0.5) {
-      c1.A[i] = p2.A[i];
-      c2.A[i] = p1.A[i];
+  // A segment: OX1 for permutation (pvector), uniform swap otherwise
+  if (cfg.decoder_type == "pvector") {
+    ox1_crossover(p1.A, p2.A, c1.A, c2.A);
+  } else {
+    for (int i = 0; i < num_I; i++) {
+      if (rand01() < 0.5) {
+        c1.A[i] = p2.A[i];
+        c2.A[i] = p1.A[i];
+      }
     }
   }
-  // W segment: SBX with low η (exploratory) [F2]
+  // W segment: SBX for all decoders (only W[0] matters for pvector/math)
   for (int w = 0; w < (int)p1.W.size(); w++) {
     auto [w1, w2] = sbx_gene(p1.W[w], p2.W[w], cfg.sbx_eta_rw);
     c1.W[w] = w1;
     c2.W[w] = w2;
   }
-  // Clamp W[1] (speed weight) — W1>0.4 consistently hurts Z2; good seeds converge
-  // to W1<=0.27; bad seeds get trapped at W1=0.55–1.0. Cap at 0.40 prevents the
-  // W1-trap while allowing the 0.27–0.40 range that mid-performing seeds benefit from.
-  c1.W[1] = std::min(c1.W[1], 0.40);
-  c2.W[1] = std::min(c2.W[1], 0.40);
+  // W[1] clamp removed — γ congestion (W[6]) provides natural sinkhole prevention
 
   // Repair: ensure at least one open hub
   auto repair = [&](Individual &ind) {
@@ -172,19 +217,20 @@ crossover(const Individual &p1, const Individual &p2, const NSGAConfig &cfg,
   };
   repair(c1);
   repair(c2);
-  // Idea 2: X-aligned A repair — redirect any A[i] that now points to a closed
-  // hub (because the child got a different X from the other parent).
-  auto repair_a = [&](Individual &ind) {
-    vector<int> open;
-    for (int k = 0; k < num_H; k++)
-      if (ind.X[k]) open.push_back(k);
-    if (open.empty()) return;
-    for (int i = 0; i < num_I; i++)
-      if (!ind.X[ind.A[i]])
-        ind.A[i] = open[(int)rand_int(0, (int)open.size() - 1)];
-  };
-  repair_a(c1);
-  repair_a(c2);
+  // X-aligned A repair for heuristic decoder only (pvector: permutation is already valid)
+  if (cfg.decoder_type == "heuristic") {
+    auto repair_a = [&](Individual &ind) {
+      vector<int> open;
+      for (int k = 0; k < num_H; k++)
+        if (ind.X[k]) open.push_back(k);
+      if (open.empty()) return;
+      for (int i = 0; i < num_I; i++)
+        if (!ind.X[ind.A[i]])
+          ind.A[i] = open[(int)rand_int(0, (int)open.size() - 1)];
+    };
+    repair_a(c1);
+    repair_a(c2);
+  }
   return {c1, c2};
 }
 
@@ -228,39 +274,46 @@ void mutate(Individual &ind, const NSGAConfig &cfg, const DRNDInstance &inst,
   for (int k = 0; k < num_H; k++)
     if (ind.X[k]) open_hubs.push_back(k);
 
-  // Idea 2 in mutation: after X bit-flip, any A[i] pointing to a now-closed
-  // hub is immediately redirected to a random open hub.
-  if (!open_hubs.empty())
-    for (int i = 0; i < num_I; i++)
-      if (!ind.X[ind.A[i]])
-        ind.A[i] = open_hubs[(int)rand_int(0, (int)open_hubs.size() - 1)];
+  // A-segment mutation: dispatch on decoder type
+  if (cfg.decoder_type == "pvector") {
+    // Swap mutation for permutation: swap two random positions
+    for (int i = 0; i < num_I; i++) {
+      if (rand01() < pm_a) {
+        int j = (int)rand_int(0, num_I - 1);
+        std::swap(ind.A[i], ind.A[j]);
+      }
+    }
+  } else if (cfg.decoder_type == "heuristic") {
+    // Heuristic decoder: Idea 2 repair (X-aligned) + Idea 1 (open-hub biased)
+    if (!open_hubs.empty())
+      for (int i = 0; i < num_I; i++)
+        if (!ind.X[ind.A[i]])
+          ind.A[i] = open_hubs[(int)rand_int(0, (int)open_hubs.size() - 1)];
 
-  // R: polynomial mutation with low η [F2]
+    for (int i = 0; i < num_I; i++) {
+      if (rand01() < pm_a) {
+        if (!open_hubs.empty() && rand01() < 0.85)
+          ind.A[i] = open_hubs[(int)rand_int(0, (int)open_hubs.size() - 1)];
+        else
+          ind.A[i] = (int)rand_int(0, num_H - 1);
+      }
+    }
+  }
+  // "math" decoder: A is unused, no A-mutation needed
+
+  // R: polynomial mutation
   for (int k = 0; k < num_H; k++) {
     if (rand01() < pm_r)
       ind.R[k] = poly_mutate(ind.R[k], cfg.pm_eta_rw);
   }
 
-  // Idea 1: open-hub-biased A mutation.
-  // With prob 0.85, replace A[i] with a random *open* hub; otherwise any hub.
-  for (int i = 0; i < num_I; i++) {
-    if (rand01() < pm_a) {
-      if (!open_hubs.empty() && rand01() < 0.85)
-        ind.A[i] = open_hubs[(int)rand_int(0, (int)open_hubs.size() - 1)];
-      else
-        ind.A[i] = (int)rand_int(0, num_H - 1);
-    }
-  }
-
-  // W: polynomial mutation with low η [F2] + optional hyper-scale (stagnation)
+  // W: polynomial mutation (all decoders)
+  // W[1] clamp removed — γ congestion (W[6]) replaces it for the heuristic decoder
   double pm_w = std::min(pm_w_base * w_scale, 1.0);
   for (int w = 0; w < num_W; w++) {
     if (rand01() < pm_w)
       ind.W[w] = poly_mutate(ind.W[w], cfg.pm_eta_rw);
   }
-  // Clamp W[1] (speed weight) — W1>0.4 consistently hurts Z2; good seeds converge
-  // naturally to W1<=0.27. Cap prevents W1-trap while allowing beneficial W1<=0.40.
-  ind.W[1] = std::min(ind.W[1], 0.40);
 }
 
 // ── Fast non-dominated sort
@@ -501,7 +554,14 @@ vector<Individual> run_nsga2(const DRNDInstance &inst, const NSGAConfig &cfg) {
     cur_pop_size = std::clamp(cfg.pop_size, cfg.aega_pop_min, cfg.aega_pop_max);
   }
   const char *algo_name = cfg.use_local_search ? "PB-NSMA" : "PB-NSGA";
-  auto decode_in_place = [&](Individual &ind) { decode(ind, inst); };
+  auto decode_in_place = [&](Individual &ind) {
+    if (cfg.decoder_type == "pvector")
+      decode_pvector(ind, inst);
+    else if (cfg.decoder_type == "math")
+      decode_matheuristic(ind, inst);
+    else
+      decode(ind, inst);
+  };
   int sample_tick = 0;
   auto sample_individual = [&]() {
     if (cfg.use_legacy_seeding)
@@ -554,41 +614,35 @@ vector<Individual> run_nsga2(const DRNDInstance &inst, const NSGAConfig &cfg) {
       open.push_back(k);
     }
 
-    for (int ii = 0; ii < inst.num_I; ii++) {
-      int chosen = open[0];
-      double best_d = 1e100;
-      int abs_i = inst.demand_idx[ii];
-      for (int k : open) {
-        int abs_h = inst.hub_idx[k];
-        double dx = inst.lat[abs_i] - inst.lat[abs_h];
-        double dy = inst.lon[abs_i] - inst.lon[abs_h];
-        double d2 = dx * dx + dy * dy;
-        if (d2 < best_d) {
-          best_d = d2;
-          chosen = k;
+    if (cfg.decoder_type == "pvector") {
+      // A = random permutation of [0..num_I-1]
+      std::iota(ind.A.begin(), ind.A.end(), 0);
+      std::shuffle(ind.A.begin(), ind.A.end(), rng);
+      // W[0] = λ uniform [0,1]; rest unused
+      for (auto &w : ind.W) w = rand01();
+    } else if (cfg.decoder_type == "math") {
+      // A unused; W[0] = β_raw uniform [0,1]; rest unused
+      for (auto &w : ind.W) w = rand01();
+    } else {
+      // Heuristic decoder: proximity-based A init (Idea 2 seeding)
+      for (int ii = 0; ii < inst.num_I; ii++) {
+        int chosen = open[0];
+        double best_d = 1e100;
+        int abs_i = inst.demand_idx[ii];
+        for (int k : open) {
+          int abs_h = inst.hub_idx[k];
+          double dx = inst.lat[abs_i] - inst.lat[abs_h];
+          double dy = inst.lon[abs_i] - inst.lon[abs_h];
+          double d2 = dx * dx + dy * dy;
+          if (d2 < best_d) { best_d = d2; chosen = k; }
         }
+        if (rand01() < 0.20)
+          chosen = open[(int)rand_int(0, (int)open.size() - 1)];
+        ind.A[ii] = chosen;
       }
-      if (rand01() < 0.20)
-        chosen = open[(int)rand_int(0, (int)open.size() - 1)];
-      ind.A[ii] = chosen;
-    }
-
-    // 4 capacity-dominant templates (Trial 13 — stable mean=0.384±0.030).
-    // W[1] capped at 0.20 to avoid the speed-bias trap; W[5] fixed at
-    // 0.40-0.55 → K=3 (empirically optimal). Trial 15 tested 8 templates
-    // including planned-dominant (W[4]≥0.90) and balanced groups — they
-    // caused catastrophic outliers (seeds 3,5: HV=0.231/0.181) and were
-    // reverted. Idea D (template diversity) is abandoned.
-    const vector<vector<double>> w_templates = {
-      {0.70, 0.00, 0.90, 0.60, 0.70, 0.45},
-      {0.55, 0.20, 0.85, 0.40, 0.65, 0.50},
-      {0.80, 0.10, 0.95, 0.75, 0.55, 0.55},
-      {0.45, 0.15, 0.80, 0.50, 0.75, 0.40},
-    };
-    const vector<double> &wt = w_templates[(size_t)(sample_tick % (int)w_templates.size())];
-    for (int t = 0; t < (int)ind.W.size(); t++) {
-      double noise = 0.10 * (rand01() - 0.5);
-      ind.W[t] = std::clamp(wt[t] + noise, 0.0, 1.0);
+      // W: uniform [0,1] — biased templates removed (W[1] clamp was unnatural).
+      // W[6] = γ congestion multiplier provides natural sinkhole prevention instead.
+      for (auto &w : ind.W) w = rand01();
     }
     return ind;
   };

@@ -60,7 +60,7 @@ struct Individual {
   // ── Constructor ────────────────────────────────────────────────────────
   Individual() = default;
   explicit Individual(int num_H, int num_I)
-      : X(num_H, 0), R(num_H, 0.0), A(num_I, 0), W(6, 0.5) {}
+      : X(num_H, 0), R(num_H, 0.0), A(num_I, 0), W(7, 0.5) {}
 
   // ── Dominance (standard Pareto, no CV) ────────────────────────────────
   bool dominates(const Individual &o) const {

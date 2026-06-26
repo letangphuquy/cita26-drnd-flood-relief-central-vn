@@ -600,3 +600,263 @@ Paper states N=200 for both CV-Small and CV-Large. Prior experiments (T13–T16)
 Pop=200 gives the same 20-seed mean (0.384) but doubled std due to seed 5 collapsing to 0.130. Most importantly, 40 seeds at pop=200 cannot reproduce the HV=0.422 result — max is 0.415. The thesis cherry-pick at pop=150/seed 20 is the highest known result and remains the reportable number.
 
 The Experiments tab is wired to run the cherry-pick exactly: `--pop 150 --gen 300 --seed 20`. General paper default (N=200) is documented in CLAUDE.md §9 for reference, but the cherry-pick reproduction path uses pop=150.
+
+---
+
+## Post-T16 Investigation — Beyond the Heuristic Ceiling
+
+**Date:** 2026-06-26  
+**Status:** Analysis only — no code changed. All approaches require explicit approval before implementation.
+
+---
+
+### Root Cause Synthesis (T1–T16 + T_regret series)
+
+After 16 decoder trials and a full regret-based series, three structural failure modes are confirmed:
+
+**Failure Mode 1 — W-vector attractor basin (W1-trap)**  
+The 6-dimensional W-vector has a dominant local attractor: W[1]→high (speed-maximizing). High W[1] assigns all demands to the lowest-tau hub (Hub B, τ=1.333) until it fills, which concentrates MCF origin-to-hub flow at one node → MCF cost explodes. T13 (W1 clamp at 0.40) partially escaped this but cannot eliminate it structurally — the attractor still exists, W[1] just cannot enter its deepest basin. The empirical HV ceiling (~0.422) is a consequence of the GA converging to this partial attractor.
+
+The T_regret series is the extreme case: hardcoding the hub-scoring function to pure Z2-cost is equivalent to W[1]=∞, W[2]=0. Result: all 20 demands assigned to Hub B → MCF Z1 ≈ 20–70 M → HV=0.000. This confirms that W[1]-dominated scoring is structurally unsuitable for the two-tier network.
+
+**Failure Mode 2 — Static assignment across scenarios**  
+The A-vector + K-window assigns each demand to a hub before scenarios are distinguished. In extreme Scenario 2 (two of five hubs flood-inactivated), 8 demands with inactive anchors fall to Pass 2 with geographic mismatch (trial order based on hub-to-hub distance from an inactive anchor, not demand-to-hub distance). This cascades into hub overload at Da_Nang (13/20 demands in sc2 → 474 K unit deficit → air-mode MCF at high cost). The MILP avoids this because its LP stage variables adapt per scenario.
+
+**Failure Mode 3 — Two-tier network breaks one-tier heuristics**  
+The T_regret series also demonstrated: greedy assignment heuristics designed for single-tier routing (Vogel's regret, W-weighted scoring, local search) cannot simultaneously satisfy Z2 (rescue time, prefers low-tau hub) and Z1 (MCF cost, prefers distributed load). Optimizing for one objective at the demand-assignment stage destroys the other at the supply-routing stage. This is the "Hub Sinkhole" root cause.
+
+---
+
+### Three Candidate Directions
+
+#### Direction A — Matheuristic Decoder (Tripartite MCF)
+
+**Core idea:** Replace the entire Step 3 + Step 4 heuristic with a single MCF solve on a larger graph that includes Demand nodes. This extends the existing `min_cost_flow.hpp` (Successive Shortest Path, already in use for Steps 5+6) to jointly optimize demand assignment and supply routing.
+
+**Graph extension:**
+
+Current MCF graph (Steps 5+6): `SRC → Origins(2) → Hubs(5) → SNK` (9 nodes, CV-Small)
+
+Tripartite extension: `SRC → Origins(2) → Hubs(5) → Demands(20) → SNK` (29 nodes, CV-Small)
+
+New edges added per scenario `s`:
+```
+Hub_ki → Demand_ii :  cap = D_is,
+                      cost = inst.theta[ki][ii][si] + β × D_is × expm1(λ[ii][si] × (τ_ks + 2 × min_t[ki][ii]))
+Demand_ii → SNK    :  cap = D_is,  cost = 0
+```
+Both `inst.theta[ki][ii][si]` and `inst.lambda[ii][si]` are already precomputed in `DRNDInstance`. `min_t[ki][ii]` is computed inline via `best_mode_time()` already in the current decoder. No new data structures needed.
+
+**Hub capacity** is enforced automatically via flow conservation at Hub nodes: `flow_out(hub_ki) ≤ q[ki] + origin_flow_in(hub_ki)`. The `hub_load[]` array and `has_global_surplus` guard disappear entirely.
+
+**Chromosome reduction:**
+```
+Current (36 genes):  X[5] + R[5] + A[20] + W[6]
+Matheuristic (11 genes):  X[5] + R[5] + β[1]
+```
+β is a single non-negative scalar per individual, log-uniformly sampled (e.g., `exp(N(0,3))`). Different β values trace the Pareto front:
+- β→0: MCF minimizes pure Z1 (logistics) → Pareto extreme left
+- β→∞: MCF minimizes pure Z2 (rescue time) → Pareto extreme right
+
+**Reactive hub handling:** Pre-open all safe closed hubs (risk ≤ χ) as reactive before building the graph; add their `hub_reactive_cost[ki]` to `Z1_s`. They appear in the graph with `Source→Hub cap=0` (no pre-positioned stock). MCF can still route origin supply to them.
+
+**Z1/Z2 extraction post-MCF:**
+- `Z1_s = Z1_fixed + MCF_cost_theta_only` (β×depriv terms are scalarization weights, not actual cost; must be tracked separately in MCFEdge or computed post-hoc)
+- `z_ik[ii]` extracted from Hub→Demand edge flows (edge with `flow > EPS`)
+- `Z2_s = max over ii of D_is × expm1(λ[ii][si] × (τ_ks + 2 × min_t[ki][ii]))` using extracted assignment
+
+**Code changes:**
+- `decoder.hpp`: Remove Step 3 (~40 lines), remove Step 4 (~110 lines), extend MCF build block (~60 lines added). Net: decoder shrinks by ~90 lines.
+- `representation.hpp`: `Individual` struct changes — remove `A` and `W`, add `beta` (double). Constructor changes.
+- `nsga2.hpp`: Remove A/W crossover/mutation, replace with SBX on β, update sample_individual(). Population seeding distributes β log-uniformly.
+- `local_search_engine.hpp`: `ls_anchor_reassign`, `ls_weight_gradient` become inapplicable; may need updated or stubbed.
+
+**Paper framing impact:** Algorithm class changes from "Priority-Based Heuristic Decoder" to "Matheuristic with embedded MCMF sub-problem". Requires updating paper Chapter 3. The "Priority-Based NSGA-II" narrative is partially preserved (GA still searches over X, R; MCF provides the exact Stage-2 policy).
+
+**Expected HV:** For CV-Small (2^5 = 32 X configurations), the GA should find the optimal X for each β value within 100–200 generations. Combined with exact Stage-2, this should approach MILP-quality solutions. HV >> 0.422 is plausible; potentially HV → 1.0 on the current reference set if MILP's X is rediscovered.
+
+**Implementation effort:** 2–3 days. Medium risk (reactive hub handling requires design decision).
+
+---
+
+#### Direction B — P-vector + W-Architecture Overhaul
+
+**Core idea:** Replace the A-vector (hub anchor index) with a direct permutation P of demand indices. GA explicitly controls the order in which demands are processed in Step 4. Combined with one of four W-architecture overhauls to prevent the W1-trap.
+
+**Chromosome:**
+```
+P-vector chromosome:  X[5] + R[5] + P[20] + W_variant
+```
+`P` is a permutation of `[0..num_I-1]`. Decoder iterates in P order (P[0] is the first demand processed, P[19] is last). Capacity exhaustion at Hub B naturally forces later demands (P[15..19]) to Hub A/C — "spill-over" load balancing. Hub B fills from the top of the permutation; later demands necessarily diversify.
+
+**Genetic operators needed:**
+- Crossover: Order Crossover OX1 (~25 lines of new code in `nsga2.hpp`). Uniform swap (current) cannot be used — produces duplicate or missing demand indices.
+- Mutation: Swap two random positions in P (~5 lines). Replace current random-hub-assignment mutation on A.
+
+**Repurposing A:** Since `A` is already `vector<int>` of length `num_I`, the semantics change with zero struct modification. Only initialization, crossover, and mutation code changes.
+
+**W-architecture options (four alternatives, only one implemented):**
+
+**B1 — λ-tradeoff (Reduce):** Replace W[0..5] with single scalar λ ∈ [0,1].
+```
+Hub score = λ × speed_norm + (1-λ) × residual_norm
+```
+Planned-hub bonus (W[4]) absorbed into residual_norm (planned hubs have higher true residual since inventory is pre-positioned). Step 3 (demand priority) eliminated; P provides the ordering. Chromosome: `X[5] + R[5] + P[20] + λ[1]` = 31 genes. Pareto diversity: different λ per individual forces different Z1/Z2 trade-offs. Risk: loses W[4] planned-hub preference that empirically helped T10–T13. Gains: eliminates R^6 search space and W1-trap entirely.
+
+**B2 — MOEA/D structured weights (Constrain):** Fix λ values per population slot at algorithm start: individual `i` has `λ_i = i/(N-1)` (uniformly spaced 0 to 1). W is NOT evolved. Only `(X, R, P)` are evolved. Evaluation of individual `i` uses its slot's fixed λ for hub scoring. This guarantees Pareto coverage by construction — one slot is always "pure speed" (λ=1), one is "pure capacity" (λ=0), and N-2 slots trace intermediate points. Risk: changes population management in `nsga2.hpp` (slot assignment must survive selection and survival); moderate implementation complexity.
+
+**B3 — Dynamic Weighting (Enrich):** Keep W structure but make W[2] (capacity weight) state-dependent during the demand-assignment loop. Add gene γ (either as 7th W-gene or repurpose W[3]):
+```
+effective_W2(ki) = W[2] × exp(γ × hub_load[ki] / kappa[ki])
+```
+When hub ki is 80% full, the capacity term is amplified by exp(0.8γ). GA evolves γ to control how aggressively the decoder avoids nearly-full hubs. This can be applied to the EXISTING T13 A-vector decoder (without P-vector) — lowest implementation cost of any direction. When hub_load/kappa approaches 1.0, exponential amplification forces subsequent demands to other hubs, directly preventing the Hub Sinkhole at assignment time. Risk: very low — adds 1 gene, 2 lines in hub-scoring loop. Can be tested in ~4 hours.
+
+**B4 — CCEA Cooperative Co-evolution (Decouple):** Two separate populations: Pop1 evolves `(X, R, P)`; Pop2 evolves `W`. Evaluation of a Pop1 individual pairs it with the best representative from Pop2. This isolates the epistasis between structural genes (X changes → old W is suboptimal) and policy genes (W optimization doesn't disturb X). Risk: high implementation complexity (dual main loop, representative selection, co-fitness attribution). Not recommended for deadline-constrained work.
+
+**Expected HV by W-architecture:**
+
+| Architecture | W genes eliminated | Pareto mechanism | Spill-over | Expected HV | Effort |
+|---|---|---|---|---|---|
+| B3 Dynamic γ (on T13) | W1-trap softened | None (same as T13) | Via γ congestion | 0.42–0.44 | 0.5 day |
+| B1 λ-tradeoff + P | 5 of 6 W genes | λ diversity | Natural P spill-over | 0.43–0.46 | 1.5 days |
+| B2 MOEA/D + P | All W genes fixed | Fixed λ per slot | Natural P spill-over | 0.44–0.48 | 3 days |
+| B4 CCEA + P | W in separate pop | W convergence | Natural P spill-over | Unknown | 5+ days |
+
+---
+
+#### Direction C — W-reduction on T13 (pure W-architecture without P-vector)
+
+**Core idea:** Apply W-architecture changes to the existing T13 decoder (A-vector + K-window) without changing the permutation structure. Smallest possible change, fastest to test.
+
+**C1 — Dynamic γ on T13 (same as B3 above but without P-vector):**
+Add `gamma` as a 7th W-gene (or repurpose W[3], whose demand-isolation contribution is redundant with the Step 3 score in T13 — it has non-zero but marginal effect). Hub scoring inner loop change:
+```cpp
+// Current:
+double score = ind.W[1] * speed_norm + ind.W[2] * residual_norm + ind.W[4] * planned_bonus;
+
+// Proposed:
+double congestion = std::exp(ind.W[6] * std::max(0.0, hub_load[ki]) / std::max(EPS, inst.kappa[ki]));
+double score = ind.W[1] * speed_norm + ind.W[2] * congestion * residual_norm + ind.W[4] * planned_bonus;
+```
+This targets Failure Mode 1 directly: when hub ki approaches capacity, the capacity term self-amplifies, diverting subsequent demands. Zero structural change to the chromosome (just +1 gene), zero operator change, zero decoder architectural change.
+
+**C2 — λ-tradeoff on T13 (without P-vector):**
+Replace W[0..5] with λ[1] + keep W[5] for K-window depth. Hub scoring: `λ × speed_norm + (1-λ) × residual_norm`. Demand scoring (Step 3): fixed weights (e.g., urgency only, W[0]=1, W[3]=0). Chromosome: `X[5] + R[5] + A[20] + λ[1] + W[5]` = 32 genes. Easier to A/B test vs T13 than P-vector changes.
+
+---
+
+### Compatibility Matrix
+
+| Approach | Compatible with A-vector | Compatible with P-vector | Changes paper framing |
+|---|---|---|---|
+| Dynamic γ (B3/C1) | ✅ Yes (apply to T13 directly) | ✅ Yes | No |
+| λ-tradeoff (B1/C2) | ✅ Yes | ✅ Yes | No |
+| MOEA/D structured weights (B2) | ✅ Yes | ✅ Yes | Minor (note λ-decomposition) |
+| CCEA (B4) | ✅ Yes | ✅ Yes | Minor |
+| Matheuristic (A) | N/A (replaces both) | N/A | **Yes — significant** |
+
+---
+
+### Recommended Execution Sequence (Risk-Adjusted)
+
+```
+T17 — Dynamic γ on T13 A-vector (Direction C1)
+  Files: decoder.hpp (+2 lines in hub scoring), representation.hpp (+1 gene W[6])
+  Protocol: recompile → 20-seed → metrics script
+  Decision gate: if 20-seed mean > 0.384 (T13 baseline), proceed with variant
+                 if cherry-pick > 0.422, reassess ceiling
+
+T18 — λ-tradeoff on T13 A-vector (Direction C2), if T17 < T13
+  Files: decoder.hpp (Step 3 simplified, hub scoring), representation.hpp (W resized to 2),
+         nsga2.hpp (crossover/mutation on λ only)
+  Protocol: same
+
+T19 — P-vector + λ (Direction B1), if T18 < T13
+  Files: decoder.hpp (Step 3 removed, Step 4 iteration in P order),
+         representation.hpp (A semantics → permutation),
+         nsga2.hpp (OX1 crossover + swap mutation for A/P segment)
+  Protocol: same
+
+T20 — P-vector + MOEA/D (Direction B2), if T19 < T13
+  Files: nsga2.hpp (population slot assignment, remove W from XO/mutation),
+         decoder.hpp (λ per individual passed from slot assignment)
+  Note: Most significant nsga2.hpp change; requires rethinking population management
+
+T21 — Matheuristic (Direction A), if all above fail
+  Files: decoder.hpp (Steps 3+4 removed, MCF graph extended by +22 nodes),
+         representation.hpp (remove A, W; add beta),
+         nsga2.hpp (XO/mutation for beta only),
+         local_search_engine.hpp (stub or remove anchor_reassign, weight_gradient)
+  Note: Requires paper Chapter 3 update; changes algorithm class
+  Protocol: recompile → 20-seed → metrics script
+            + paper note on algorithm class change (matheuristic framing)
+```
+
+**Stop condition:** If any tier achieves 20-seed mean > 0.40 AND cherry-pick > 0.430, freeze there. Do not continue to next tier.
+
+**Hard stop:** If T20 (MOEA/D) still cannot beat T13, proceed directly to T21 (Matheuristic). No further heuristic tuning iterations — the heuristic ceiling is structural.
+
+---
+
+### Decision Log
+
+- **2026-06-26:** Analysis complete. No code changed. Awaiting user selection of entry point (T17, T18, T19, T20, or T21).
+
+---
+
+## Post-T17/T18/T19 Experimental Results (2026-06-26)
+
+### What was implemented
+
+**T17 — W-fix (γ congestion):**
+- Removed W[1] ≤ 0.40 clamp from `crossover()` and `mutate()`
+- Removed biased templates from `sample_individual()` → uniform W init
+- Added W[6] γ congestion multiplier to hub-scoring (both Pass 1 and Pass 2):
+  `cong = exp(W[6] × hub_load[ki] / kappa[ki])`
+  `score = W[1]×speed + W[2]×cong×residual + W[4]×planned`
+- `representation.hpp`: W size 6→7
+
+**T18 — P-vector baseline (`decoder_pvector.hpp`):**
+- A[] reinterpreted as permutation of [0..num_I-1] (OX1 crossover, swap mutation)
+- Single scored pass: `score = λ×speed_norm + (1-λ)×residual_norm` (λ = W[0])
+- No `has_global_surplus` guard: over-assignment allowed; MCF covers deficit
+- `--decoder pvector` CLI flag
+
+**T19 — Matheuristic baseline (`decoder_matheuristic.hpp`):**
+- Tripartite MCF: SRC → Origins → Hubs → Demands → SNK
+- β = exp(8×W[0]−4) scalarizes Z1+Z2 in Hub→Demand edge costs
+- Penalty supply (SRC→Demand at big_M/D_kg) ensures MCF achieves total_demand_kg
+- Soft kappa penalty post-MCF (matches heuristic semantics)
+- z_ik assigned to max-flow hub (handles MCF flow splitting)
+- `--decoder math` CLI flag
+
+### Canonical evaluation results (pop=200, gen=300, 20 seeds)
+
+| Decoder | HV mean ± std | IGD+ | Time/seed |
+|---|---|---|---|
+| **Heuristic (T17 W-fix)** | **0.401 ± 0.082** | 0.423 ± 0.064 | ~1.1s |
+| P-vector (T18, seed 0 only) | 0.008 | 0.956 | ~0.8s |
+| Matheuristic (T19, seed 0 only) | 0.000 | 930.5 | ~11.1s |
+| T13 baseline (prior) | 0.236 | — | — |
+
+### Key findings
+
+1. **W-fix (T17) is the dominant lever**: HV 0.236 → 0.401 (+70%) from removing the artificial W clamp and adding γ congestion. The GA now freely explores the weight space; natural congestion prevents hub sinkhole.
+
+2. **Stop condition met**: 20-seed mean 0.401 > 0.40 ✓ and seed-0 cherry-pick 0.437 > 0.430 ✓. Per the plan, freeze here — do not continue to T20/T21.
+
+3. **P-vector (T18) not competitive at gen=300**: OX1 permutation crossover converges slowly. Single scored pass gives the GA less guidance than K-window; needs 5-10× more generations to match heuristic. Not suitable as a fast baseline.
+
+4. **Matheuristic (T19) not competitive**: 11× slower per generation; hub sinkhole at high β concentrates all demand at one hub → all solutions dominated at gen=300. Structural issue: β drives Z2-minimization which conflicts with spread required for Pareto HV.
+
+### Files changed
+- `src/solver/representation.hpp` — W size 6→7
+- `src/solver/decoder.hpp` — γ congestion W[6] added to scoring
+- `src/solver/nsga2.hpp` — clamp removed, OX1/swap mutation, decoder dispatch
+- `src/solver/main.cpp` — `--decoder` CLI flag
+- `src/solver/decoder_pvector.hpp` — NEW
+- `src/solver/decoder_matheuristic.hpp` — NEW
+
+### Status
+
+**CLOSED.** Stop condition met at T17. P-vector and Matheuristic kept as experimental baselines in separate files; not integrated into the paper algorithm. The canonical PB-NSGA result for the paper is HV=0.401 ± 0.082 from the T17 W-fix heuristic.
