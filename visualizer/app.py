@@ -319,8 +319,10 @@ def main() -> None:
     # ════════════════════════════════════════════════════════════════════════
     with tab_exp:
         try:
-            from visualizer.experiments_tab import render as render_experiments  # noqa: PLC0415
-            render_experiments(dataset_name, version_name, inst_raw, node_info)
+            import importlib
+            import visualizer.experiments_tab as _etab
+            importlib.reload(_etab)
+            _etab.render(dataset_name, version_name, inst_raw, node_info)
         except ImportError:
             st.info(
                 "Experiments tab (`visualizer/experiments_tab.py`) is not yet available. "

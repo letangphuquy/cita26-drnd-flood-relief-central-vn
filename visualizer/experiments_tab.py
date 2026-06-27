@@ -9,6 +9,7 @@ import json
 import subprocess
 import sys
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -29,11 +30,13 @@ from visualizer.config import PATHS, SOLVER_BIN, _find_best_result  # noqa: E402
 
 @dataclass
 class Exp:
-    id:     str
-    name:   str
-    desc:   str
-    cmd_fn: Callable[[str, str], List[str]]
-    out_fn: Callable[[str, str], Path]
+    id:      str
+    name:    str
+    desc:    str
+    cmd_fn:  Callable[[str, str], List[str]]
+    out_fn:  Callable[[str, str], Path]
+    # None = runs regardless of dataset; otherwise the pinned dataset used when running
+    target:  Optional[str] = None
 
 
 def _py(script: str) -> List[str]:
@@ -44,8 +47,12 @@ def _p(dataset: str, version: str) -> Dict[str, Any]:
     return PATHS[dataset][version]
 
 
+# ── Command functions ─────────────────────────────────────────────────────────
+# Each cmd_fn always targets its canonical dataset; dataset arg is ignored for
+# experiments that are pinned to one dataset.
+
 def _exp1_cmd(dataset: str, version: str) -> List[str]:
-    p = _p(dataset, version)
+    p = _p("CV Small", version)
     return [
         "bash", str(_ROOT / "run_exp1_baselines.sh"),
         "--instance",    str(p["instance"]),
@@ -54,9 +61,7 @@ def _exp1_cmd(dataset: str, version: str) -> List[str]:
 
 
 def _exp2_cmd(dataset: str, version: str) -> List[str]:
-    # Returns the solver invocation for the first missing seed.
-    # The ▶ Run button handler for EXP-2 uses _run_exp2() instead.
-    p = _p(dataset, version)
+    p = _p("CV Large", version)
     res = p["results"]
     missing = [k for k in range(20) if not (res / f"CV_large_seed{k}.json").exists()]
     seed = missing[0] if missing else 0
@@ -69,7 +74,7 @@ def _exp2_cmd(dataset: str, version: str) -> List[str]:
 
 
 def _exp3_cmd(dataset: str, version: str) -> List[str]:
-    p = _p("CV Large", version)  # always the 20-seed CV-Large pool
+    p = _p("CV Large", version)
     data_prep = _ROOT / "data" / "prep"
     return _py("exp_oos_multiseed.py") + [
         "--results-dir", str(p["results"]),
@@ -79,7 +84,7 @@ def _exp3_cmd(dataset: str, version: str) -> List[str]:
 
 
 def _exp4_cmd(dataset: str, version: str) -> List[str]:
-    p = _p("CV Large", version)  # always CV-Large results + instance dir
+    p = _p("CV Large", version)
     data_cv_dir = p["instance"].parent
     return _py("exp2_analyze_case_study.py") + [
         str(p["results"]), str(p["results"]), str(data_cv_dir),
@@ -98,7 +103,7 @@ def _exp5_cmd(dataset: str, version: str) -> List[str]:
 
 
 def _exp6_cmd(dataset: str, version: str) -> List[str]:
-    p = _p("CV Large", version)  # always CV-Large seed 0 + instance
+    p = _p("CV Large", version)
     seed0 = p["results"] / "CV_large_seed0.json"
     out   = _ROOT / "figures" / version / "cv_large_map_detailed.pdf"
     return _py("exp2_map_solution.py") + [
@@ -109,7 +114,7 @@ def _exp6_cmd(dataset: str, version: str) -> List[str]:
 
 
 def _exp7_cmd(dataset: str, version: str) -> List[str]:
-    p = _p("CV Large", version)  # always CV-Large results, flows, instance
+    p = _p("CV Large", version)
     out = _ROOT / "narrative_data.json"
     return [str(_VENV_PY), str(_ROOT / "visualizer" / "narrative_data.py"),
             "--results",  str(p["results"]),
@@ -118,12 +123,15 @@ def _exp7_cmd(dataset: str, version: str) -> List[str]:
             "--out",      str(out)]
 
 
+# ── Output path functions ─────────────────────────────────────────────────────
+# Each out_fn uses the pinned dataset for EXP-1/2 so status is always correct.
+
 def _exp1_out(dataset: str, version: str) -> Path:
-    return _p(dataset, version)["results"] / "cv_small_metrics.csv"
+    return _p("CV Small", version)["results"] / "cv_small_metrics.csv"
 
 
 def _exp2_out(dataset: str, version: str) -> Path:
-    return _p(dataset, version)["results"] / "CV_large_seed19.json"
+    return _p("CV Large", version)["results"] / "CV_large_seed19.json"
 
 
 def _exp3_out(dataset: str, version: str) -> Path:
@@ -146,36 +154,72 @@ def _exp7_out(dataset: str, version: str) -> Path:
     return _ROOT / "narrative_data.json"
 
 
-# Dataset constraint per experiment (None = runnable from either sidebar selection).
-# EXP-3/4/6/7 pin internally to CV-Large paths so no constraint is needed.
-_EXP_DATASET: Dict[str, str] = {
-    "EXP-1": "CV Small",
-    "EXP-2": "CV Large",
-}
-
 _EXPS: List[Exp] = [
     Exp("EXP-1", "CV-Small baseline comparison",
         "Greedy · VNS-TS · GWO-HD · MILP-AWS · PB-NSGA on CV-Small (seed 15); evaluate HV/IGD+",
-        _exp1_cmd, _exp1_out),
+        _exp1_cmd, _exp1_out, "CV Small"),
     Exp("EXP-2", "CV-Large 20-seed PB-NSGA",
         "Run solver seeds 0–19 on CV-Large instance (may take ~2 hrs)",
-        _exp2_cmd, _exp2_out),
+        _exp2_cmd, _exp2_out, "CV Large"),
     Exp("EXP-3", "OOS/SAA multi-seed evaluation",
         "Evaluate all 20 seeds on SAA-100 training + OOS-10 adversarial datasets",
-        _exp3_cmd, _exp3_out),
+        _exp3_cmd, _exp3_out, "CV Large"),
     Exp("EXP-4", "Aggregate analysis",
         "Hub stability · Pareto trade-off · scenario sensitivity (CV-Large)",
-        _exp4_cmd, _exp4_out),
+        _exp4_cmd, _exp4_out, "CV Large"),
     Exp("EXP-5", "SAA N-sensitivity",
         "Replication-based SAA convergence study on CV-Small",
         _exp5_cmd, _exp5_out),
     Exp("EXP-6", "Solution map (1×3 composite)",
         "High-fidelity Matplotlib network map across three scenarios",
-        _exp6_cmd, _exp6_out),
+        _exp6_cmd, _exp6_out, "CV Large"),
     Exp("EXP-7", "Extract narrative_data.json",
         "Compute all Block 1–10 narrative query keys from 20-seed pool",
-        _exp7_cmd, _exp7_out),
+        _exp7_cmd, _exp7_out, "CV Large"),
 ]
+
+
+# ── Path helpers ──────────────────────────────────────────────────────────────
+
+def _first_existing(*candidates: Path) -> Optional[Path]:
+    """Return the first candidate path that exists on disk, or None."""
+    return next((p for p in candidates if p.exists()), None)
+
+
+def _mtime_str(path: Path) -> str:
+    return datetime.fromtimestamp(path.stat().st_mtime).strftime("%Y-%m-%d %H:%M")
+
+
+# ── Status check ──────────────────────────────────────────────────────────────
+
+def _status_icon(exp: Exp, dataset: str, version: str) -> Tuple[str, str]:
+    """Return (icon, note) for an experiment's completion state.
+
+    Checks the versioned path first; falls back to the other version so that
+    v1 results are still shown as complete when viewing v2 (and vice versa).
+    """
+    primary = exp.out_fn(dataset, version)
+    if primary.exists():
+        rel = primary.relative_to(_ROOT) if primary.is_relative_to(_ROOT) else primary
+        return "✅", f"`{rel.name}` — {_mtime_str(primary)}"
+
+    other_v = "v1" if version == "v2" else "v2"
+    fallback = exp.out_fn(dataset, other_v)
+    if fallback.exists():
+        rel = fallback.relative_to(_ROOT) if fallback.is_relative_to(_ROOT) else fallback
+        return "⚠️", f"({other_v} only) `{rel.name}` — {_mtime_str(fallback)}"
+
+    # For EXP-5/6 check the unversioned legacy path too
+    legacy: Dict[str, Path] = {
+        "EXP-5": _ROOT / "results" / "saa_convergence" / "convergence_summary.csv",
+        "EXP-6": _ROOT / "figures" / "cv_large_map_detailed.pdf",
+    }
+    if exp.id in legacy and legacy[exp.id].exists():
+        p = legacy[exp.id]
+        rel = p.relative_to(_ROOT)
+        return "⚠️", f"(legacy) `{rel}` — {_mtime_str(p)}"
+
+    return "⏳", "not yet run"
 
 
 # ── Streaming runner ──────────────────────────────────────────────────────────
@@ -233,20 +277,27 @@ def _postprocess_flows(dataset: str, version: str) -> None:
         st.success(f"Flows written to `{p['flows'].relative_to(_ROOT)}`")
 
 
-# ── EXP-1 special handler — baseline run + flow preprocessing ────────────────
+# ── EXP-1 special handler ─────────────────────────────────────────────────────
 
-def _run_exp1(dataset: str, version: str) -> None:
-    """Run all baselines via run_exp1_baselines.sh, then preprocess flows for PB-NSGA result."""
-    ok = _stream_run(_exp1_cmd(dataset, version), "CV-Small baseline comparison")
+def _run_exp1(version: str) -> None:
+    """Run all baselines on CV-Small (always), then preprocess flows."""
+    if version == "v1":
+        st.error(
+            "EXP-1 v1 results are canonical and immutable. "
+            "Switch to **v2** in the sidebar to run.",
+            icon="🔒",
+        )
+        return
+    ok = _stream_run(_exp1_cmd("CV Small", version), "CV-Small baseline comparison")
     if ok:
-        _postprocess_flows(dataset, version)
+        _postprocess_flows("CV Small", version)
 
 
 # ── EXP-2 multi-seed special handler ─────────────────────────────────────────
 
-def _run_exp2(dataset: str, version: str, max_seed: int) -> None:
-    """Run solver for each missing seed up to *max_seed* with live streaming."""
-    p = _p(dataset, version)
+def _run_exp2(version: str, max_seed: int) -> None:
+    """Run solver for each missing seed up to *max_seed* on CV-Large (always)."""
+    p = _p("CV Large", version)
     res = p["results"]
     missing = [k for k in range(max_seed + 1)
                if not (res / f"CV_large_seed{k}.json").exists()]
@@ -269,23 +320,13 @@ def _run_exp2(dataset: str, version: str, max_seed: int) -> None:
             st.error(f"Seed {seed} failed — stopping multi-seed run.")
             return
 
-    _postprocess_flows(dataset, version)
-
-
-# ── Status check ─────────────────────────────────────────────────────────────
-
-def _status_icon(exp: Exp, dataset: str, version: str) -> Tuple[str, str]:
-    out = exp.out_fn(dataset, version)
-    if out.exists():
-        rel = out.relative_to(_ROOT) if out.is_relative_to(_ROOT) else out
-        return "✅", f"`{rel.name}`"
-    return "⏳", "not yet run"
+    _postprocess_flows("CV Large", version)
 
 
 # ── PDF / figure rendering ────────────────────────────────────────────────────
 
-def _render_pdf_or_download(path: Path, caption: str) -> None:
-    if not path.exists():
+def _render_pdf_or_download(path: Optional[Path], caption: str) -> None:
+    if path is None or not path.exists():
         st.caption(f"_{caption}: not generated yet_")
         return
     try:
@@ -298,7 +339,7 @@ def _render_pdf_or_download(path: Path, caption: str) -> None:
             data=path.read_bytes(),
             file_name=path.name,
             mime="application/pdf",
-            key=f"dl_{path.stem}",
+            key=f"dl_{path.stem}_{hash(str(path)) & 0xFFFF:04x}",
         )
 
 
@@ -338,9 +379,8 @@ def _risk_heatmap_fig(inst_raw: Dict[str, Any], node_info: NodeInfo):
                       ticktext=["0", f"χ={chi}", "1"]),
         hovertemplate="Hub: %{y}<br>Scenario: %{x}<br>Risk: %{z:.3f}<extra></extra>",
     ))
-    # Horizontal line at chi threshold
     fig.add_hline(
-        y=chi * (len(hub_names) - 1),  # approximate y position
+        y=chi * (len(hub_names) - 1),
         line=dict(color="rgba(200,0,0,0.4)", width=1, dash="dash"),
     )
     fig.update_layout(
@@ -353,18 +393,51 @@ def _risk_heatmap_fig(inst_raw: Dict[str, Any], node_info: NodeInfo):
     return fig
 
 
-# ── Figure paths helper ───────────────────────────────────────────────────────
+# ── Figure paths — version-aware with legacy fallback ────────────────────────
 
-def _fig_paths(dataset: str, version: str) -> Dict[str, Path]:
-    p = _p(dataset, version)
-    res = p["results"]
-    fig_v = _ROOT / "figures" / version
+def _fig_paths(version: str) -> Dict[str, Optional[Path]]:
+    """Collect all relevant figure/result paths, falling back to legacy locations."""
+    res_large = _p("CV Large", version)["results"]
+    res_small  = _p("CV Small", version)["results"]
+    fig_v    = _ROOT / "figures" / version
+    fig_root = _ROOT / "figures"
+
+    # Legacy (v1-era) unversioned locations
+    res_large_v1 = _p("CV Large", "v1")["results"]
+
     return {
-        "pareto":   res / "exp2_pareto_tradeoff.pdf",
-        "sol_map":  fig_v / "cv_large_map_detailed.pdf",
-        "saa_conv": _ROOT / "results" / "saa_convergence" / version / "saa_convergence.pdf",
-        "hub_freq": res / "CV_large_hub_freq.pdf",
-        "metrics":  _p("CV Small", version)["results"] / "cv_small_metrics.csv",
+        # Algorithm comparison CSV (EXP-1 output — always CV Small)
+        "metrics_small": _first_existing(
+            res_small / "cv_small_metrics.csv",
+        ),
+        # Pareto trade-off PDF (EXP-4 output)
+        "pareto": _first_existing(
+            res_large / "exp2_pareto_tradeoff.pdf",
+            res_large_v1 / "exp2_pareto_tradeoff.pdf",
+            fig_root / "exp2_pareto_tradeoff.pdf",
+        ),
+        # Solution map PDF (EXP-6 output)
+        "sol_map": _first_existing(
+            fig_v / "cv_large_map_detailed.pdf",
+            fig_root / "cv_large_map_detailed.pdf",
+        ),
+        # SAA convergence PDF (EXP-5 output)
+        "saa_conv": _first_existing(
+            fig_v / "saa_convergence.pdf",
+            fig_root / "saa_convergence.pdf",
+        ),
+        # Hub selection frequency — Large (EXP-4 output)
+        "hub_freq_large": _first_existing(
+            res_large / "figures" / "CV_large_hub_freq.pdf",
+            res_large_v1 / "figures" / "CV_large_hub_freq.pdf",
+            res_large / "CV_large_hub_freq.pdf",
+        ),
+        # Hub selection frequency — Small (EXP-4 output, when it exists)
+        "hub_freq_small": _first_existing(
+            res_large / "figures" / "CV_small_hub_freq.pdf",
+            res_large_v1 / "figures" / "CV_small_hub_freq.pdf",
+            res_large / "CV_small_hub_freq.pdf",
+        ),
     }
 
 
@@ -380,8 +453,8 @@ def render(
 
     st.subheader("🔬 Experiment Pipeline")
     st.caption(
-        f"Dataset: **{dataset_name}** · Version: **{version_name}**  "
-        "— buttons stream live output below each row."
+        f"Version: **{version_name}** — experiments always target their canonical dataset "
+        "regardless of sidebar selection; buttons stream live output below each row."
     )
 
     # ── Pipeline table ────────────────────────────────────────────────────────
@@ -392,53 +465,44 @@ def render(
         icon, note = _status_icon(exp, dataset_name, version_name)
 
         with st.container():
-            c0, c1, c2, c3 = st.columns([1, 6, 2, 1])
+            c0, c1, c2, c3 = st.columns([1, 6, 3, 1])
             c0.markdown(f"**{exp.id}**")
+
+            # Show target hint for pinned experiments
+            target_note = f"  \n_targets **{exp.target}**_" if exp.target else ""
+
+            if exp.id == "EXP-2":
+                c1.markdown(f"**{exp.name}**  \n_{exp.desc}_{target_note}")
+                ss["exp2_max_seed"] = int(c1.number_input(
+                    "Run seeds 0 –", min_value=0, max_value=19,
+                    value=int(ss["exp2_max_seed"]),
+                    key="exp2_max_seed_input",
+                ))
+            else:
+                c1.markdown(f"**{exp.name}**  \n_{exp.desc}_{target_note}")
+
             c2.markdown(f"{icon} {note}")
 
-            required = _EXP_DATASET.get(exp.id)
-            if required and dataset_name != required:
-                c1.markdown(f"**{exp.name}**  \n_{exp.desc}_")
-                c3.markdown(f"_{required} only_")
-            else:
-                if exp.id == "EXP-2":
-                    c1.markdown(f"**{exp.name}**  \n_{exp.desc}_")
-                    ss["exp2_max_seed"] = int(c1.number_input(
-                        "Run seeds 0 –", min_value=0, max_value=19,
-                        value=int(ss["exp2_max_seed"]),
-                        key="exp2_max_seed_input",
-                    ))
+            if c3.button("▶ Run", key=f"run_{exp.id}"):
+                if exp.id == "EXP-1":
+                    _run_exp1(version_name)
+                elif exp.id == "EXP-2":
+                    _run_exp2(version_name, int(ss["exp2_max_seed"]))
                 else:
-                    c1.markdown(f"**{exp.name}**  \n_{exp.desc}_")
-
-                if c3.button("▶ Run", key=f"run_{exp.id}"):
-                    if exp.id == "EXP-1":
-                        if version_name == "v1":
-                            st.error(
-                                "EXP-1 v1 results are canonical and immutable. "
-                                "Switch to **v2** in the sidebar to run.",
-                                icon="🔒",
-                            )
-                        else:
-                            _run_exp1(dataset_name, version_name)
-                    elif exp.id == "EXP-2":
-                        _run_exp2(dataset_name, version_name, int(ss["exp2_max_seed"]))
-                    else:
-                        _stream_run(exp.cmd_fn(dataset_name, version_name), exp.name)
-                    st.rerun()
+                    _stream_run(exp.cmd_fn(dataset_name, version_name), exp.name)
+                st.rerun()
 
     # ── Figure gallery ────────────────────────────────────────────────────────
     st.divider()
     st.subheader("📊 Results & Figures")
 
-    paths = _fig_paths(dataset_name, version_name)
+    paths = _fig_paths(version_name)
 
-    # Table 4-1: CV-Small algorithm comparison
-    metrics_path = paths["metrics"]
-    if metrics_path.exists():
+    # Table 4-1: CV-Small algorithm comparison (EXP-1)
+    if paths["metrics_small"] is not None:
         try:
             import pandas as pd  # noqa: PLC0415
-            df = pd.read_csv(metrics_path)
+            df = pd.read_csv(paths["metrics_small"])
             styled = df.style
             if "hv_mean" in df.columns:
                 styled = styled.highlight_max(subset=["hv_mean"], color="#c8e6c9")
@@ -453,23 +517,41 @@ def render(
     else:
         st.caption("_Table 4-1: run EXP-1 to generate `cv_small_metrics.csv`_")
 
-    # Risk heatmap (Fig 4-6) — always renderable
-    st.markdown("**Fig 4-6 — Hub flood risk heatmap**")
+    # Risk heatmap (Fig 4-6) — always renderable from inst_raw
+    st.markdown("**Fig 4-6 — Hub flood risk heatmap** _(current sidebar instance)_")
     fig = _risk_heatmap_fig(inst_raw, node_info)
     if fig is not None:
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.caption("_plotly not available_")
 
-    # PDF figures in 2-column layout
+    # Pareto + solution map
     st.markdown("**Figures**")
     col_a, col_b = st.columns(2)
     with col_a:
-        _render_pdf_or_download(paths["pareto"],   "Fig 1 — Pareto fronts")
-        _render_pdf_or_download(paths["saa_conv"], "Fig 3 — SAA convergence")
+        _render_pdf_or_download(paths["pareto"],   "Fig — Pareto fronts (CV-Large)")
+        _render_pdf_or_download(paths["saa_conv"], "Fig — SAA convergence")
     with col_b:
-        _render_pdf_or_download(paths["sol_map"],  "Fig 2 — Solution map (1×3)")
-        _render_pdf_or_download(paths["hub_freq"], "Fig 4-5 — Hub selection frequency")
+        _render_pdf_or_download(paths["sol_map"],  "Fig — Solution map 1×3 (CV-Large)")
+
+    # Hub frequency — show both Large and Small when they exist
+    st.markdown("**Hub selection frequency**")
+    has_large = paths["hub_freq_large"] is not None
+    has_small = paths["hub_freq_small"] is not None
+
+    if has_large or has_small:
+        if has_large and has_small:
+            hf_cols = st.columns(2)
+            with hf_cols[0]:
+                _render_pdf_or_download(paths["hub_freq_large"], "Hub freq — CV-Large")
+            with hf_cols[1]:
+                _render_pdf_or_download(paths["hub_freq_small"], "Hub freq — CV-Small")
+        elif has_large:
+            _render_pdf_or_download(paths["hub_freq_large"], "Hub freq — CV-Large")
+        else:
+            _render_pdf_or_download(paths["hub_freq_small"], "Hub freq — CV-Small")
+    else:
+        st.caption("_Hub frequency figures: run EXP-4 to generate_")
 
     # Narrative data viewer
     st.divider()
