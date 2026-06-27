@@ -428,7 +428,7 @@ def _discover_exp1_cv_small_runs(exp1_dir):
     return out
 
 
-def run(results_dir, out_dir, cv_data_dir=None, paper_dir=None, max_seed=None):
+def run(results_dir, out_dir, cv_data_dir=None, paper_dir=None, max_seed=None, exp1_dir_override=None):
     fig_dir  = os.path.join(out_dir, "figures")
     maps_dir = os.path.join(out_dir, "maps")
     os.makedirs(fig_dir,  exist_ok=True)
@@ -462,7 +462,7 @@ def run(results_dir, out_dir, cv_data_dir=None, paper_dir=None, max_seed=None):
 
     _script_dir = os.path.dirname(os.path.abspath(__file__))
     _project_dir = os.path.dirname(os.path.dirname(_script_dir))
-    exp1_dir = os.path.join(_project_dir, "results", "exp1")
+    exp1_dir = exp1_dir_override or os.path.join(_project_dir, "results", "exp1")
 
     metrics_rows   = []
     stability_rows_all = {}
@@ -712,6 +712,8 @@ if __name__ == "__main__":
     _ap_parser.add_argument("paper_dir", nargs="?", default=None)
     _ap_parser.add_argument("--max-seed", type=int, default=None,
                             help="Only include seeds 0..max_seed (inclusive) for matched-budget comparison")
+    _ap_parser.add_argument("--exp1-dir", default=None,
+                            help="Override directory for CV-Small results (default: {project}/results/exp1)")
     _ap_args, _ = _ap_parser.parse_known_args()
     _script_dir  = os.path.dirname(os.path.abspath(__file__))
     _project_dir = os.path.dirname(os.path.dirname(_script_dir))
@@ -719,4 +721,5 @@ if __name__ == "__main__":
     _out_dir     = _ap_args.out_dir or _results_dir
     _cv_data_dir = _ap_args.cv_data_dir
     _paper_dir   = _ap_args.paper_dir
-    run(_results_dir, _out_dir, _cv_data_dir, _paper_dir, max_seed=_ap_args.max_seed)
+    run(_results_dir, _out_dir, _cv_data_dir, _paper_dir,
+        max_seed=_ap_args.max_seed, exp1_dir_override=_ap_args.exp1_dir)

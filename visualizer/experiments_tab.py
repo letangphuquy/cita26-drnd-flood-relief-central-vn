@@ -86,9 +86,13 @@ def _exp3_cmd(dataset: str, version: str) -> List[str]:
 def _exp4_cmd(dataset: str, version: str) -> List[str]:
     p = _p("CV Large", version)
     data_cv_dir = p["instance"].parent
-    return _py("exp2_analyze_case_study.py") + [
+    cmd = _py("exp2_analyze_case_study.py") + [
         str(p["results"]), str(p["results"]), str(data_cv_dir),
     ]
+    # For v2, point to v2 CV-Small results so cross-instance figures are generated
+    if version != "v1":
+        cmd += ["--exp1-dir", str(_p("CV Small", version)["results"])]
+    return cmd
 
 
 def _exp5_cmd(dataset: str, version: str) -> List[str]:
@@ -313,6 +317,35 @@ def _run_exp2(version: str, max_seed: int) -> None:
     _postprocess_flows("CV Large", version)
 
 
+# ── EXP-4 special handler ─────────────────────────────────────────────────────
+
+def _run_exp4(version: str) -> None:
+    """Run aggregate analysis (exp2_analyze_case_study) then exp2_pareto_tradeoff."""
+    p_large = _p("CV Large", version)
+    p_small = _p("CV Small", version)
+
+    # Step 1: per-group metrics + hub freq/heatmap/pareto figures
+    analyze_cmd = _py("exp2_analyze_case_study.py") + [
+        str(p_large["results"]), str(p_large["results"]),
+        str(p_large["instance"].parent),
+    ]
+    if version != "v1":
+        analyze_cmd += ["--exp1-dir", str(p_small["results"])]
+
+    ok = _stream_run(analyze_cmd, "EXP-4 analysis")
+    if not ok:
+        return
+
+    # Step 2: aggregate two-panel Pareto trade-off figure
+    tradeoff_cmd = _py("exp2_pareto_tradeoff.py") + [
+        "--results-exp2",       str(p_large["results"]),
+        "--results-exp1",       str(p_small["results"]),
+        "--out-dir",            str(p_large["results"]),
+        "--allow-missing-vns",
+    ]
+    _stream_run(tradeoff_cmd, "EXP-4 Pareto trade-off plot")
+
+
 # ── PDF / figure rendering ────────────────────────────────────────────────────
 
 # Homebrew poppler location (pdf2image needs this on macOS when poppler isn't in PATH)
@@ -510,6 +543,8 @@ def render(
                     _run_exp1(version_name)
                 elif exp.id == "EXP-2":
                     _run_exp2(version_name, int(ss["exp2_max_seed"]))
+                elif exp.id == "EXP-4":
+                    _run_exp4(version_name)
                 else:
                     _stream_run(exp.cmd_fn(dataset_name, version_name), exp.name)
                 st.rerun()
