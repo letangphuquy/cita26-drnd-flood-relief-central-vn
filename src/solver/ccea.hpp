@@ -1,23 +1,22 @@
-// ccea.hpp — Asymmetric Co-evolutionary Algorithm with UCB1 W-bandit
+// ccea.hpp — Co-evolutionary Algorithm with UCB1 W-bandit (ARCHIVED dead-end)
 //
 // Architecture:
-//   Structure population (X, R, A): evolved via NSGA-II operators
-//   W-pool (12 arms):  UCB1 bandit — decouples W from structural evolution
+//   Structure population (X, R, A): evolved via standard NSGA-II operators
+//   W-pool (12 arms): UCB1 bandit selects one arm per offspring evaluation
 //
-// Each offspring is evaluated against two arms:
-//   arm1 = UCB1 selection (exploration/exploitation)
-//   arm2 = Hall-of-Fame arm (highest mean reward seen so far)
-// Both arms receive credit for their own decode results.
-// The offspring keeps whichever decode gave the better constrained result.
+// Each offspring receives a SINGLE W from the UCB1-selected arm, decoded once,
+// and the arm's reward is updated from that result. No dual-eval, no archive,
+// no final re-evaluation pass — each individual carries the Z1/Z2/CV from its
+// last eval_with_ucb1 call. The final population is returned directly.
 //
-// Every 30 generations the worst UCB arm is replaced by a polynomial mutation
-// of the HoF arm — directed exploration around the best-known policy.
+// Every 30 generations the arm with the lowest UCB score (excluding HoF) is
+// replaced by a poly_mutate of the Hall-of-Fame arm's W — directed exploration.
 //
-// Final step: all N individuals in the final population are re-evaluated with
-// the HoF arm's W, then re-sorted. This ensures the reported Pareto front is
-// consistent — all solutions evaluated under the same (best-discovered) policy.
-// (Mixing different W-arm evaluations in the output produces incomparable Z1/Z2
-// values and inflated solution counts — avoided by this final re-eval pass.)
+// RESULT: HV = 0.049 ± 0.090 (20-seed, pop=200, gen=300) vs T19 baseline
+// 0.403 ± 0.079. Root cause: W simultaneously drives Z1 (hub routing) and Z2
+// (depriv scoring), so a global bandit cannot find a W coherent for both
+// objectives across heterogeneous (X,R,A) structures. See audit/plan_improve_pbnsga.md
+// §Post-T19 Structural Experiment for full post-mortem.
 //
 // Returns: final population (same format as run_nsga2).
 #pragma once
@@ -137,17 +136,6 @@ static double ccea_reward(const Individual &ind) {
     if (ind.Z1 < 14000000.0) r += 0.5;
     if (ind.Z1 < 11000000.0) r += 0.5;
     return r;
-}
-
-// ---------------------------------------------------------------------------
-// Multi-objective arm-pair selection: constrained Pareto dominance with
-// random 50/50 tie-break when neither arm dominates.
-// Random tie-breaking prevents Z2-only bias (capacity-first arms inflate Z1).
-// ---------------------------------------------------------------------------
-static bool ccea_arm_a_wins(const Individual &a, const Individual &b) {
-    if (a.constrained_dominates(b)) return true;
-    if (b.constrained_dominates(a)) return false;
-    return rand01() < 0.5; // random 50/50 when neither dominates
 }
 
 // ---------------------------------------------------------------------------
