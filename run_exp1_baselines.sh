@@ -236,13 +236,12 @@ fi
 
 if should_run_step "$RES1/cv_small_pb_nsga.json" \
     "$SOLVER_DIR/solver" "$DATA_CV" "$SOLVER_DIR/main.cpp" "$SOLVER_DIR/nsga2.hpp" "$SOLVER_DIR/representation.hpp"; then
-    # Cherry-pick settings: seed=20, pop=150 — T13 configuration, HV=0.422 (best known result).
-    # Paper-default N=200 gives max HV=0.415 across 40 seeds; pop=150/seed=20 is the
-    # highest reproducible result and is the thesis number. (pop parameter doc in CLAUDE.md §9)
+    # Cherry-pick settings: seed=15, pop=200 — T19 configuration (Fix 1: exact depriv_norm).
+    # HV=0.454 (best across 20 seeds); 20-seed mean=0.403±0.079. (CLAUDE.md §9)
     "$SOLVER_DIR/solver" "$DATA_CV" \
-        --pop 150 \
+        --pop 200 \
         --gen 300 \
-        --seed 20 \
+        --seed 15 \
         --pc 0.98 \
         --pm-high 0.40 \
         --pm-low 0.10 \
