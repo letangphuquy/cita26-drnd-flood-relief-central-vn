@@ -274,7 +274,7 @@ void decode(Individual &ind, const DRNDInstance &inst,
       double lam  = inst.lambda[ii][si];  // hoisted — used in depriv_norm (Pass 1/2) and Z2
 
       // Anchor hub selects the geographic trial order (T19).
-      int anchor = (int)std::round(ind.A[ii]) % num_H;
+      int anchor = ind.A[ii] % num_H;
       if (anchor < 0) anchor += num_H;
       const int K = std::max(1, (int)std::ceil(ind.W[5] * num_H));
       const auto& trial_order = hub_anchor_order[anchor];

@@ -10,8 +10,8 @@
 #pragma once
 
 #include "decoder.hpp"
-#include "decoder_pvector.hpp"
-#include "decoder_matheuristic.hpp"
+#include "decoder_pvector.hpp"    // archived dead-end (T18 P-vector experiment)
+#include "decoder_matheuristic.hpp" // archived dead-end (T19 matheuristic experiment)
 #include "local_search_engine.hpp"
 #include <algorithm>
 #include <cmath>
