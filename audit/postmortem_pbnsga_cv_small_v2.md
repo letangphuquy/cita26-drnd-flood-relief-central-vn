@@ -426,3 +426,107 @@ The final algorithm is not a general priority-based evolutionary decoder. It is 
 ---
 
 *Source data: `audit/plan_improve_pbnsga.md` (Trial log, Trials 1–16 + pop=200 evaluation), `audit/audit_algorithm_design.md` (implementation reference), `data/cv/v2/cv_small_drnd.json` (instance structure), `results/exp1/v2/cv_small_metrics.csv` (canonical HV numbers), `audit/plan_improve_pbnsga.md §2` (decode_trace Z1 verification).*
+
+---
+
+## Section 5 — Regret-Based Decoder Series (T_regret, 2026-06-26)
+
+**Scope:** All variants of the regret-based demand-allocation decoder attempted on top of the T13 cherry-pick baseline (HV=0.422). Branch: `feat/planar-dataset`. The series replaces T13's A-vector + K-window loop with a Vogel's-approximation regret loop and adds post-assignment local search.
+
+**Baseline entering this series:** T13 cherry-pick, HV=0.422, Z1=9.45–13.8M, Z2=9.43e4–1.17e5. Reference nadir: Z1=13.5M, Z2=1.17e5.
+
+---
+
+### T_r1 — W-weighted regret decoder (Gemini rewrite + bug fixes) ❌
+
+**Rationale:** Replace A-vector + K-window greedy with a Vogel's-approximation loop: at each step, compute `regret[ii] = score(best hub) − score(2nd-best hub)` using a W-weighted score (`W[1]×speed_norm + W[2]×residual_norm + W[4]×planned_bonus`). Serve the demand with the highest regret first. This preserves W-dependence (NSGA-II can evolve W to diversify assignments) while changing the ordering principle from A-vector preference to regret urgency.
+
+**Bugs introduced by Gemini's rewrite and corrected:**
+1. *Reactive hub starvation*: `residual <= 0.0 && !has_global_surplus` check was missing `!y[ki]` guard. Reactive hubs (inventory=0 by design; MCF brings supply in Step 5) were permanently skipped → infinite fallback → BigM penalty → CV>0 → HV=0. Fix: `if (!y[ki] && residual <= 0.0 && !has_global_surplus) continue;`
+2. *W-independence*: Gemini replaced W-weighted hub scoring with raw C_time → identical solutions across all 5 seeds → zero evolutionary diversity from W.
+3. *Step 3 gutted*: Demand priority scoring (W[0]×urgency + W[3]×isolation) was removed, eliminating the chromosome's influence over demand ordering.
+
+**Result after fixes:** HV=0.000. 5-seed Z1=13.4M–59.1M, all dominated by MILP (Z1=7.8–13.5M). Z2=6.8e4–2.7e5. All solutions above the reference nadir Z1=13.5M.
+
+**Exact point of failure:** Z1 minimum was 13.4M (above the nadir ceiling of 13.5M by 6%). Even the best W-weighted regret solution barely misses the reference front. The regret loop does not balance hub loads well — without the K-window's geographic partitioning, high-priority demands concentrate at one hub, triggering reactive openings and higher MCF costs.
+
+---
+
+### T_r2 — Z2-cost Vogel regret decoder ❌
+
+**Rationale:** Replace W-weighted hub score with the actual Z2 deprivation contribution as the hub cost:
+
+```
+z2_cost[ii][ki] = D_i × expm1(λ_i × (τ_k + 2 × min_travel_time[ii][ki]))
+regret[ii]      = z2_cost[ii][2nd-best] − z2_cost[ii][best]
+```
+
+This directly targets Z2 (the exact deprivation term from the solver objective) rather than a surrogate W-weighted score. Z2 quality confirmed excellent: 5-seed Z2 range = 6.79e4–1.24e5, identical to MILP's range. The Vogel ordering correctly prioritises demands where hub choice matters most.
+
+**Result:** HV=0.000. 5-seed Z1 minimum = 22M, all solutions dominated. The Z2 component is fully solved; Z1 is 2–5× above the nadir.
+
+**Exact point of failure:** Post-analysis (decomposition of Z1 into components) revealed:
+- Z1_fixed (hub setup + holding) = 490K — negligible.
+- Per-demand theta (Daganzo last-mile) ≤ 1.16M total — small.
+- MCF supply-chain routing = **~20M** — dominant.
+
+The Z2-cost regret decoder concentrates 8 of 20 demands at the hub with lowest process time (hub B, ki=4). Hub B receives ~40% of total demand volume (roughly 45,000 kg). The MCF must route this supply from distant origins at high per-unit cost (up to 7,300 per kg-km). The expected MCF cost for this concentration is ~20M. By contrast, T13's A-vector + K-window spreads demand geographically, keeping each hub's MCF flow manageable and achieving Z1=9–13M.
+
+The root cause is architectural: Z2 minimisation (choose the hub with fastest rescue time) and supply-chain cost minimisation (spread demand to minimise MCF flows) are in direct conflict for this instance. The regret decoder resolves this conflict by optimising Z2 only, producing excellent Z2 at catastrophic Z1 cost.
+
+---
+
+### T_r3 — Z2-preserving 1-opt local search (Step 4.5) ❌
+
+**Rationale:** After the regret loop, attempt to reduce Z1 by relocating individual demands to different already-open hubs. Accept a move if: (a) the new hub has remaining capacity, (b) the new deprivation ≤ current Z2_s ceiling, (c) delta_theta < 0. The intuition: Z2 is already optimal; we can improve Z1 by swapping demands to cheaper-theta hubs within the Z2 budget.
+
+**Result:** Zero moves accepted across all 5 seeds. Z1 unchanged.
+
+**Exact point of failure:** Two simultaneous blockers:
+1. *Capacity exhaustion*: With only 2 planned hubs and all 20 demands assigned, both hubs are at full capacity. No relocation is possible without first freeing space at the destination hub.
+2. *Z2-theta co-optimality*: For every demand, the hub that minimises Z2 (minimum process time + travel time) is ALSO the hub with minimum theta. The Z2-cost regret decoder has already placed each demand at its joint (Z2, theta)-optimal hub. No swap can reduce theta without moving a demand away from its Z2-minimum hub, violating the Z2-preservation constraint.
+
+Confirmed by numerical check: Pearson r(theta, C_time) = 0.58 globally, but for all 20 demands in this instance, the hub assignment that minimises Z2 coincides exactly with the assignment that minimises theta. The 1-opt LS correctly finds nothing — it is not a bug.
+
+---
+
+### T_r4 — Z2-preserving 2-opt swap-LS (Step 4.6) ❌
+
+**Rationale:** 1-opt fails because hubs are at capacity. A 2-opt interchange swaps the hub assignments of two demands (ii ↔ jj) simultaneously, conserving capacity at both hubs exactly. This avoids the capacity blocker. Accept a swap if: (a) demands are at different hubs, (b) both can reach the other's hub (mode feasibility), (c) both new deprivations ≤ Z2_s, (d) combined delta_theta < 0.
+
+**Static analysis (pre-implementation check):** Assuming demand assignments under the oracle assignment (ii at hub A, jj at hub B), found 120 pairs with delta_theta < 0 AND Z2_ok=True, with the best swap saving delta_theta = −43,000 per scenario.
+
+**Result:** Zero swaps accepted. Z1 unchanged.
+
+**Exact point of failure:** The static analysis used incorrect hub assignments. When the correct z_ik assignments are used (from the Z2-cost regret decoder), every demand is already at its minimum-theta hub. For any pair (ii at ki_A, jj at ki_B):
+- Moving ii to ki_B increases theta for ii (it was at its best-theta hub)
+- Moving jj to ki_A increases theta for jj (it was at its best-theta hub)
+- Combined delta_theta > 0 for all pairs → no improving swap exists
+
+The swap-LS also cannot fix the MCF cost concentration (which is the actual Z1 source), because:
+1. MCF costs are computed in Step 5, after demand-to-hub assignment is frozen.
+2. The swap-LS modifies only `theta[ki][ii][si]` in Z1_s; it has no mechanism to rebalance the MCF supply flows.
+3. Fixing MCF concentration would require moving demands FROM hub B (reducing its supply flow) TO hub A — but this increases Z2 for those demands (hub B has lower process time), violating the Z2 constraint.
+
+The Z2-preservation constraint makes MCF rebalancing structurally impossible: the demands causing high MCF cost are at hub B precisely because hub B is the Z2-optimal hub, and no Z2-preserving move can reduce hub B's load.
+
+---
+
+### Section 5 — Root Cause Summary
+
+**The regret-decoder series fails for a single structural reason: Z2 optimisation and MCF supply-chain cost minimisation are in direct conflict for this instance.**
+
+The Z2-cost regret decoder resolves every demand's hub assignment to jointly minimise both Z2 (rescue time) and theta (last-mile supply cost), since both correlate with the same travel time metric. This is "correct" locally — but globally, it concentrates ~40% of total demand volume at the hub with the fastest rescue time (lowest process time), forcing the MCF to route large supply flows from distant origins at high cost (up to 7,300/kg-km × ~45,000 kg × α = ~20M MCF contribution per scenario).
+
+T13 avoids this concentration through the A-vector + K-window mechanism, which imposes geographic diversity of assignments — some demands go to suboptimal Z2 hubs because their A-vector anchor is elsewhere. This suboptimality in Z2 creates slack for the MCF to distribute supply flows efficiently, achieving Z1=9–13M at the cost of HV=0.422 (vs. MILP's HV=1.000).
+
+No post-assignment local search can resolve this, because:
+- The LS operates on `theta` (small) while the Z1 excess is in MCF costs (large).
+- Reducing MCF concentration requires moving demands away from their Z2-optimal hubs.
+- The Z2-preservation constraint blocks exactly those moves.
+
+**The regret-decoder concept is sound for Z2 quality but requires a load-balancing term in the hub cost to avoid MCF concentration. Pure Z2 Vogel regret cannot work here.**
+
+---
+
+*T_regret source: `src/solver/decoder.hpp` (Steps 4–4.6), branch `feat/planar-dataset`, 2026-06-26. Numerical data from 5-seed runs at pop=150, gen=300.*

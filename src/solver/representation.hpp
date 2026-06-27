@@ -38,13 +38,14 @@ struct Individual {
          //   Decoder uses A_i as first candidate; if infeasible, falls
          //   back to remaining hubs ordered by increasing distance to i.
   vector<double>
-      W; // [6]   heuristic weights w0..w5 ∈ [0,1]
+      W; // [7]   heuristic weights w0..w6 ∈ [0,1]
          // W[0]: demand urgency weight (λ·D) in priority score
-         // W[1]: hub speed weight (1/τ) in hub selection score
-         // W[2]: residual capacity weight in hub selection score
+         // W[1]: exact deprivation norm (depriv_min/depriv_ki) in hub score
+         // W[2]: residual capacity weight (residual/κ) in hub score
          // W[3]: demand isolation weight (1/num_reachable) in priority score
-         // W[4]: planned hub preference bonus in hub selection score
+         // W[4]: planned hub preference bonus in hub score
          // W[5]: Pass-1 window depth fraction (0=reactive-first, 1=conservative)
+         // W[6]: γ congestion exponent — amplifies W[2] as hub_load/κ → 1
 
   // ── Phenotype (computed by decoder) ──────────────────────────────────
   double Z1 = 0, Z2 = 0; // objective values (minimise both)
@@ -60,7 +61,7 @@ struct Individual {
   // ── Constructor ────────────────────────────────────────────────────────
   Individual() = default;
   explicit Individual(int num_H, int num_I)
-      : X(num_H, 0), R(num_H, 0.0), A(num_I, 0), W(6, 0.5) {}
+      : X(num_H, 0), R(num_H, 0.0), A(num_I, 0), W(7, 0.5) {}
 
   // ── Dominance (standard Pareto, no CV) ────────────────────────────────
   bool dominates(const Individual &o) const {
