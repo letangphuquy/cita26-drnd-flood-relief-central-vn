@@ -155,8 +155,7 @@ _EXP_DATASET: Dict[str, str] = {
 
 _EXPS: List[Exp] = [
     Exp("EXP-1", "CV-Small baseline comparison",
-        "Greedy · VNS-TS · GWO-HD · MILP-AWS · PB-NSGA on CV-Small "
-        "(cherry-pick: pop=150, seed=20, HV=0.422 — T13 final); then evaluate HV/IGD+",
+        "Greedy · VNS-TS · GWO-HD · MILP-AWS · PB-NSGA on CV-Small (seed 15); evaluate HV/IGD+",
         _exp1_cmd, _exp1_out),
     Exp("EXP-2", "CV-Large 20-seed PB-NSGA",
         "Run solver seeds 0–19 on CV-Large instance (may take ~2 hrs)",
