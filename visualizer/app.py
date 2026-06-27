@@ -25,7 +25,8 @@ from visualizer.config import (  # noqa: E402
     get_explorer_config,
 )
 from visualizer.loaders import (  # noqa: E402
-    cached_load_result, cached_load_instance, cached_load_instance_raw,
+    cached_load_result, cached_load_merged_result,
+    cached_load_instance, cached_load_instance_raw,
     get_solutions,
 )
 from visualizer.solver_runner import run_preprocess_flows  # noqa: E402
@@ -118,10 +119,22 @@ def main() -> None:
     # ── Load data ─────────────────────────────────────────────────────────────
     try:
         _inst_mtime = Path(paths["instance"]).stat().st_mtime
-        result    = (cached_load_result(paths["result"], Path(paths["result"]).stat().st_mtime)
-                     if paths.get("result") else None)
         node_info = cached_load_instance(paths["instance"], _inst_mtime)
         inst_raw  = cached_load_instance_raw(paths["instance"], _inst_mtime)
+
+        result: Optional[SolverResult] = None
+        if paths.get("result"):
+            _res_dir = Path(paths["result"]).parent
+            if dataset_name == "CV Large":
+                _seed_glob = [f for f in _res_dir.glob("CV_large_seed[0-9]*.json")
+                              if "_eval" not in f.name]
+            else:
+                _seed_glob = (list(_res_dir.glob("cv_small_pb_nsga_seed[0-9]*.json"))
+                              + [_res_dir / "cv_small_pb_nsga.json"])
+                _seed_glob = [f for f in _seed_glob if f.exists()]
+            _max_mtime = max((f.stat().st_mtime for f in _seed_glob),
+                             default=Path(paths["result"]).stat().st_mtime)
+            result = cached_load_merged_result(str(_res_dir), dataset_name, _max_mtime)
     except Exception as e:
         st.error(f"Failed to load data: {e}")
         st.stop()
@@ -131,7 +144,7 @@ def main() -> None:
     solution: Optional[Solution] = None
     no_feasible_msg: Optional[str] = None
     if result is not None:
-        solutions = get_solutions(result, pf_only=True)
+        solutions = sorted(get_solutions(result, pf_only=True), key=lambda s: s.Z1)
         if solutions:
             sel_idx  = min(ss["selected_idx"], len(solutions) - 1)
             solution = solutions[sel_idx]

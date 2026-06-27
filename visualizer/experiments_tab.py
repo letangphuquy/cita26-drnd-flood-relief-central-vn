@@ -143,10 +143,16 @@ def _exp4_out(dataset: str, version: str) -> Path:
 
 
 def _exp5_out(dataset: str, version: str) -> Path:
+    # v1 runs wrote to the unversioned dir; v2 onwards are versioned
+    if version == "v1":
+        return _ROOT / "results" / "saa_convergence" / "convergence_summary.csv"
     return _ROOT / "results" / "saa_convergence" / version / "convergence_summary.csv"
 
 
 def _exp6_out(dataset: str, version: str) -> Path:
+    # v1 runs wrote to the unversioned figures/ dir; v2 onwards are versioned
+    if version == "v1":
+        return _ROOT / "figures" / "cv_large_map_detailed.pdf"
     return _ROOT / "figures" / version / "cv_large_map_detailed.pdf"
 
 
@@ -195,30 +201,14 @@ def _mtime_str(path: Path) -> str:
 def _status_icon(exp: Exp, dataset: str, version: str) -> Tuple[str, str]:
     """Return (icon, note) for an experiment's completion state.
 
-    Checks the versioned path first; falls back to the other version so that
-    v1 results are still shown as complete when viewing v2 (and vice versa).
+    Strictly version-scoped: v1 and v2 results are independent and never
+    substituted for each other.  Cross-instance (Large/Small) is handled
+    at the gallery level, not here.
     """
     primary = exp.out_fn(dataset, version)
     if primary.exists():
         rel = primary.relative_to(_ROOT) if primary.is_relative_to(_ROOT) else primary
         return "✅", f"`{rel.name}` — {_mtime_str(primary)}"
-
-    other_v = "v1" if version == "v2" else "v2"
-    fallback = exp.out_fn(dataset, other_v)
-    if fallback.exists():
-        rel = fallback.relative_to(_ROOT) if fallback.is_relative_to(_ROOT) else fallback
-        return "⚠️", f"({other_v} only) `{rel.name}` — {_mtime_str(fallback)}"
-
-    # For EXP-5/6 check the unversioned legacy path too
-    legacy: Dict[str, Path] = {
-        "EXP-5": _ROOT / "results" / "saa_convergence" / "convergence_summary.csv",
-        "EXP-6": _ROOT / "figures" / "cv_large_map_detailed.pdf",
-    }
-    if exp.id in legacy and legacy[exp.id].exists():
-        p = legacy[exp.id]
-        rel = p.relative_to(_ROOT)
-        return "⚠️", f"(legacy) `{rel}` — {_mtime_str(p)}"
-
     return "⏳", "not yet run"
 
 
@@ -325,21 +315,42 @@ def _run_exp2(version: str, max_seed: int) -> None:
 
 # ── PDF / figure rendering ────────────────────────────────────────────────────
 
-def _render_pdf_or_download(path: Optional[Path], caption: str) -> None:
+# Homebrew poppler location (pdf2image needs this on macOS when poppler isn't in PATH)
+_POPPLER_PATH: Optional[str] = None
+for _candidate in ("/opt/homebrew/bin", "/usr/local/bin"):
+    if Path(_candidate).joinpath("pdftoppm").exists():
+        _POPPLER_PATH = _candidate
+        break
+
+
+def _pdf_to_image(path: Path):
+    """Convert first page of a PDF to a PIL image. Returns None on failure."""
+    try:
+        from pdf2image import convert_from_path  # noqa: PLC0415
+        kwargs: Dict[str, Any] = dict(dpi=150, first_page=1, last_page=1)
+        if _POPPLER_PATH:
+            kwargs["poppler_path"] = _POPPLER_PATH
+        imgs = convert_from_path(str(path), **kwargs)
+        return imgs[0] if imgs else None
+    except Exception:
+        return None
+
+
+def _render_pdf(path: Optional[Path], caption: str, key_suffix: str = "") -> None:
+    """Render a PDF as an inline image with a download fallback."""
     if path is None or not path.exists():
         st.caption(f"_{caption}: not generated yet_")
         return
-    try:
-        from pdf2image import convert_from_path  # noqa: PLC0415
-        imgs = convert_from_path(str(path), dpi=150, first_page=1, last_page=1)
-        st.image(imgs[0], caption=caption, use_container_width=True)
-    except Exception:
+    img = _pdf_to_image(path)
+    if img is not None:
+        st.image(img, caption=caption, use_container_width=True)
+    else:
         st.download_button(
             f"⬇ Download {caption}",
             data=path.read_bytes(),
             file_name=path.name,
             mime="application/pdf",
-            key=f"dl_{path.stem}_{hash(str(path)) & 0xFFFF:04x}",
+            key=f"dl_{path.stem}_{hash(str(path)) & 0xFFFF:04x}{key_suffix}",
         )
 
 
@@ -396,48 +407,59 @@ def _risk_heatmap_fig(inst_raw: Dict[str, Any], node_info: NodeInfo):
 # ── Figure paths — version-aware with legacy fallback ────────────────────────
 
 def _fig_paths(version: str) -> Dict[str, Optional[Path]]:
-    """Collect all relevant figure/result paths, falling back to legacy locations."""
+    """Collect all relevant figure/result paths, strictly scoped to *version*.
+
+    Cross-version fallbacks are NOT permitted — v1 and v2 use different
+    datasets and are non-comparable.  The only exception is that v1-era
+    runs wrote figures to unversioned directories (figures/, results/saa_convergence/)
+    instead of versioned subdirs, so for v1 we check both locations.
+    Cross-instance (Large ↔ Small) display is always permitted.
+    """
     res_large = _p("CV Large", version)["results"]
     res_small  = _p("CV Small", version)["results"]
-    fig_v    = _ROOT / "figures" / version
-    fig_root = _ROOT / "figures"
+    fig_v    = _ROOT / "figures" / version   # versioned: figures/v2/
+    fig_root = _ROOT / "figures"             # v1-era legacy: figures/
 
-    # Legacy (v1-era) unversioned locations
-    res_large_v1 = _p("CV Large", "v1")["results"]
+    def _fig(name: str) -> Optional[Path]:
+        """Find a figure inside results/{version}/figures/ (no cross-version)."""
+        return _first_existing(res_large / "figures" / name, res_large / name)
+
+    def _fig_dir(name: str) -> Optional[Path]:
+        """Find a figure inside figures/{version}/.
+        For v1, also accept the legacy unversioned figures/ location."""
+        if version == "v1":
+            return _first_existing(fig_v / name, fig_root / name)
+        return _first_existing(fig_v / name)
+
+    def _saa_csv() -> Optional[Path]:
+        """SAA convergence CSV — v1 is at unversioned path, v2+ versioned."""
+        if version == "v1":
+            return _first_existing(
+                _ROOT / "results" / "saa_convergence" / version / "convergence_summary.csv",
+                _ROOT / "results" / "saa_convergence" / "convergence_summary.csv",
+            )
+        return _first_existing(
+            _ROOT / "results" / "saa_convergence" / version / "convergence_summary.csv",
+        )
 
     return {
         # Algorithm comparison CSV (EXP-1 output — always CV Small)
-        "metrics_small": _first_existing(
-            res_small / "cv_small_metrics.csv",
-        ),
-        # Pareto trade-off PDF (EXP-4 output)
-        "pareto": _first_existing(
-            res_large / "exp2_pareto_tradeoff.pdf",
-            res_large_v1 / "exp2_pareto_tradeoff.pdf",
-            fig_root / "exp2_pareto_tradeoff.pdf",
-        ),
-        # Solution map PDF (EXP-6 output)
-        "sol_map": _first_existing(
-            fig_v / "cv_large_map_detailed.pdf",
-            fig_root / "cv_large_map_detailed.pdf",
-        ),
-        # SAA convergence PDF (EXP-5 output)
-        "saa_conv": _first_existing(
-            fig_v / "saa_convergence.pdf",
-            fig_root / "saa_convergence.pdf",
-        ),
-        # Hub selection frequency — Large (EXP-4 output)
-        "hub_freq_large": _first_existing(
-            res_large / "figures" / "CV_large_hub_freq.pdf",
-            res_large_v1 / "figures" / "CV_large_hub_freq.pdf",
-            res_large / "CV_large_hub_freq.pdf",
-        ),
-        # Hub selection frequency — Small (EXP-4 output, when it exists)
-        "hub_freq_small": _first_existing(
-            res_large / "figures" / "CV_small_hub_freq.pdf",
-            res_large_v1 / "figures" / "CV_small_hub_freq.pdf",
-            res_large / "CV_small_hub_freq.pdf",
-        ),
+        "metrics_small": _first_existing(res_small / "cv_small_metrics.csv"),
+        # Pareto trade-off — aggregate (EXP-4 output, lives in results dir)
+        "pareto":        _first_existing(res_large / "exp2_pareto_tradeoff.pdf"),
+        # Per-instance Pareto plots (EXP-4 output)
+        "pareto_large":  _fig("CV_large_pareto.pdf"),
+        "pareto_small":  _fig("CV_small_pareto.pdf"),
+        # Solution map PDF (EXP-6 output — lives in figures/ dir)
+        "sol_map":       _fig_dir("cv_large_map_detailed.pdf"),
+        # SAA convergence PDF (EXP-5 output — lives in figures/ dir)
+        "saa_conv":      _fig_dir("saa_convergence.pdf"),
+        # Hub selection frequency (EXP-4 output)
+        "hub_freq_large": _fig("CV_large_hub_freq.pdf"),
+        "hub_freq_small": _fig("CV_small_hub_freq.pdf"),
+        # Hub flood-risk heatmap (EXP-4 output)
+        "hub_heat_large": _fig("CV_large_hub_heatmap.pdf"),
+        "hub_heat_small": _fig("CV_small_hub_heatmap.pdf"),
     }
 
 
@@ -525,33 +547,55 @@ def render(
     else:
         st.caption("_plotly not available_")
 
-    # Pareto + solution map
-    st.markdown("**Figures**")
-    col_a, col_b = st.columns(2)
-    with col_a:
-        _render_pdf_or_download(paths["pareto"],   "Fig — Pareto fronts (CV-Large)")
-        _render_pdf_or_download(paths["saa_conv"], "Fig — SAA convergence")
-    with col_b:
-        _render_pdf_or_download(paths["sol_map"],  "Fig — Solution map 1×3 (CV-Large)")
+    # ── Solution map (full-width — wide figure) ───────────────────────────────
+    st.markdown("**Solution map — 1×3 composite (CV-Large, EXP-6)**")
+    _render_pdf(paths["sol_map"], "Solution map 1×3 (CV-Large)")
 
-    # Hub frequency — show both Large and Small when they exist
-    st.markdown("**Hub selection frequency**")
-    has_large = paths["hub_freq_large"] is not None
-    has_small = paths["hub_freq_small"] is not None
+    # ── Pareto fronts — static figures (EXP-4) ───────────────────────────────
+    st.markdown("**Pareto fronts**")
 
-    if has_large or has_small:
-        if has_large and has_small:
-            hf_cols = st.columns(2)
-            with hf_cols[0]:
-                _render_pdf_or_download(paths["hub_freq_large"], "Hub freq — CV-Large")
-            with hf_cols[1]:
-                _render_pdf_or_download(paths["hub_freq_small"], "Hub freq — CV-Small")
-        elif has_large:
-            _render_pdf_or_download(paths["hub_freq_large"], "Hub freq — CV-Large")
+    pc1, pc2 = st.columns(2)
+    with pc1:
+        _render_pdf(paths["pareto_large"], "Pareto — CV-Large", "L")
+    with pc2:
+        _render_pdf(paths["pareto_small"], "Pareto — CV-Small", "S")
+
+    if paths["pareto"]:
+        _render_pdf(paths["pareto"], "Pareto trade-off aggregate (EXP-4)")
+
+    # ── SAA convergence ───────────────────────────────────────────────────────
+    st.markdown("**SAA N-sensitivity (EXP-5)**")
+    _render_pdf(paths["saa_conv"], "SAA convergence")
+
+    # ── Hub selection frequency ───────────────────────────────────────────────
+    st.markdown("**Hub selection frequency (EXP-4)**")
+    hf_l, hf_s = paths["hub_freq_large"], paths["hub_freq_small"]
+    if hf_l or hf_s:
+        if hf_l and hf_s:
+            hc1, hc2 = st.columns(2)
+            with hc1:
+                _render_pdf(hf_l, "Hub frequency — CV-Large", "L")
+            with hc2:
+                _render_pdf(hf_s, "Hub frequency — CV-Small", "S")
         else:
-            _render_pdf_or_download(paths["hub_freq_small"], "Hub freq — CV-Small")
+            _render_pdf(hf_l or hf_s, f"Hub frequency — {'CV-Large' if hf_l else 'CV-Small'}")
     else:
         st.caption("_Hub frequency figures: run EXP-4 to generate_")
+
+    # ── Hub flood-risk heatmap ────────────────────────────────────────────────
+    st.markdown("**Hub flood-risk heatmap (EXP-4)**")
+    hh_l, hh_s = paths["hub_heat_large"], paths["hub_heat_small"]
+    if hh_l or hh_s:
+        if hh_l and hh_s:
+            hh1, hh2 = st.columns(2)
+            with hh1:
+                _render_pdf(hh_l, "Hub heatmap — CV-Large", "L")
+            with hh2:
+                _render_pdf(hh_s, "Hub heatmap — CV-Small", "S")
+        else:
+            _render_pdf(hh_l or hh_s, f"Hub heatmap — {'CV-Large' if hh_l else 'CV-Small'}")
+    else:
+        st.caption("_Hub heatmap figures: run EXP-4 to generate_")
 
     # Narrative data viewer
     st.divider()

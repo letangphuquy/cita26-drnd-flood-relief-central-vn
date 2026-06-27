@@ -90,6 +90,7 @@ def main():
 
     project = pathlib.Path(__file__).resolve().parents[2]
     solver_dir = project / "src" / "solver"
+    evaluator  = solver_dir / "evaluate_oos"
     res2     = pathlib.Path(args.results_dir)
     saa_data = pathlib.Path(args.saa_data)
     oos_data = pathlib.Path(args.oos_data)
@@ -110,7 +111,7 @@ def main():
 
     pbnsga_seeds = parse_seed_range(args.seeds)
     for seed in pbnsga_seeds:
-        front = res2 / f"cv_large_seed{seed}.json"
+        front = res2 / f"CV_large_seed{seed}.json"
         tasks.append((front, f"CV_large_seed{seed}"))
 
     if args.also_baselines:

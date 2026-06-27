@@ -19,6 +19,7 @@ if str(_ROOT) not in sys.path:
 from solution_loader import (  # noqa: E402
     NodeInfo, Solution, SolverResult,
     load_instance, load_result, deduplicate_solutions,
+    merged_pareto_front,
 )
 from visualizer.flow_loader import (  # noqa: E402
     load_solution_flow, load_fallback_flow, SolutionFlow,
@@ -28,6 +29,53 @@ from visualizer.flow_loader import (  # noqa: E402
 @st.cache_data(show_spinner="Loading solver results…")
 def cached_load_result(path: str, mtime: float) -> SolverResult:
     return load_result(path)
+
+
+@st.cache_data(show_spinner="Loading solver results…")
+def cached_load_merged_result(results_dir: str, dataset_name: str, max_mtime: float) -> SolverResult:
+    """Load all seed JSONs from results_dir and return a single merged SolverResult.
+
+    pareto_front = non-dominated set across all seeds.
+    all_feasible = all CV=0 solutions from all seeds (for Solution tab navigation).
+    filepath     = first seed file (used by flow preprocessing).
+    """
+    folder = Path(results_dir)
+    if dataset_name == "CV Large":
+        seed_files = sorted(
+            f for f in folder.glob("CV_large_seed[0-9]*.json")
+            if "_eval" not in f.name
+        )
+    else:
+        seed_files = sorted(
+            list(folder.glob("cv_small_pb_nsga_seed[0-9]*.json"))
+            + ([folder / "cv_small_pb_nsga.json"]
+               if (folder / "cv_small_pb_nsga.json").exists() else [])
+        )
+
+    if not seed_files:
+        raise FileNotFoundError(f"No seed files in {results_dir}")
+
+    results = []
+    for sf in seed_files:
+        try:
+            results.append(load_result(str(sf)))
+        except Exception as exc:
+            print(f"[loader] Skipped {sf.name}: {exc}")
+
+    if not results:
+        raise ValueError(f"Could not load any seed files from {results_dir}")
+
+    combined_pf = merged_pareto_front(results)
+    all_cv0 = [s for r in results for s in r.all_feasible if s.CV == 0.0]
+
+    return SolverResult(
+        filepath=str(seed_files[0]),
+        solver=results[0].solver,
+        elapsed_s=sum(r.elapsed_s for r in results),
+        seed=-1,
+        pareto_front=combined_pf,
+        all_feasible=all_cv0,
+    )
 
 
 @st.cache_data(show_spinner="Loading instance…")
