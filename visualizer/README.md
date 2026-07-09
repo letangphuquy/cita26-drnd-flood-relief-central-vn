@@ -8,6 +8,12 @@ applied to flood-relief logistics in Central Vietnam.
 streamlit run visualizer/app.py
 ```
 
+Windows (venv):
+
+```powershell
+.\.venv\Scripts\streamlit.exe run visualizer\app.py
+```
+
 ---
 
 ## Architecture at a glance
@@ -125,6 +131,14 @@ Instance JSON                   Solver result JSON
 
 # 3. Validate flow integrity
 ./.venv/bin/python3 visualizer/verify_flows.py
+```
+
+Windows equivalent:
+
+```powershell
+.\src\solver\solver.exe data\cv\v1\cv_large_drnd.json --pop 200 --gen 500 --seed 0 --out results\exp2\CV_large_seed0.json
+.\.venv\Scripts\python.exe visualizer\preprocess_flows.py --result results\exp2\CV_large_seed0.json --instance data\cv\v1\cv_large_drnd.json --out-dir results\exp2\flows --force
+.\.venv\Scripts\python.exe visualizer\verify_flows.py
 ```
 
 Or use the **Run Solver** expander in the sidebar — it runs all three steps automatically.

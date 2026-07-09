@@ -39,10 +39,10 @@ IF "%1"=="analyze" (
     echo Running analysis on existing results/
     echo.
     echo ^>^>^> Running Analysis for Experiment 1...
-    call "%PROJECT%run_exp1_baselines.bat" --analyze-only
+    call "%PROJECT%run_exp1_baselines.bat" --instance "%PROJECT%data\cv\cv_small_drnd.json" --results-dir "%PROJECT%results\exp1" --analyze-only
     echo.
     echo ^>^>^> Running Analysis for Experiment 2...
-    call "%PROJECT%run_exp2_case_study.bat" --analyze-only
+    call "%PROJECT%run_exp2_case_study.bat" --instance "%PROJECT%data\cv\cv_large_drnd.json" --results-dir "%PROJECT%results\exp2" --analyze-only
     echo.
     echo ============================================================
     echo  Analysis complete.
@@ -51,14 +51,26 @@ IF "%1"=="analyze" (
 )
 
 REM ── EXPERIMENT 1: Baseline Comparison (CV-Small) ──────────────────────────
+if not "%1"=="" if /I not "%1"=="--skip-unchanged" (
+    echo [Error] Unknown argument: %1
+    echo Run with --help for usage.
+    exit /b 1
+)
+
 echo.
 echo ^>^>^> Running Experiment 1 (Baselines)...
-call "%PROJECT%run_exp1_baselines.bat" %1
+if /I "%1"=="--skip-unchanged" (
+    call "%PROJECT%run_exp1_baselines.bat" --instance "%PROJECT%data\cv\cv_small_drnd.json" --results-dir "%PROJECT%results\exp1" --skip-unchanged
+) else (
+    call "%PROJECT%run_exp1_baselines.bat" --instance "%PROJECT%data\cv\cv_small_drnd.json" --results-dir "%PROJECT%results\exp1"
+)
+if errorlevel 1 exit /b 1
 
 REM ── EXPERIMENT 2: Case Study (CV-Large) ───────────────────────────────────
 echo.
 echo ^>^>^> Running Experiment 2 (Case Study)...
-call "%PROJECT%run_exp2_case_study.bat" %1
+call "%PROJECT%run_exp2_case_study.bat" --instance "%PROJECT%data\cv\cv_large_drnd.json" --results-dir "%PROJECT%results\exp2"
+if errorlevel 1 exit /b 1
 
 REM ── ARCHIVED BENCHMARKS (The data is used for a future study) ─────────────
 REM Note: Outdated AP and TR81 benchmark runs are preserved here for archival.

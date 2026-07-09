@@ -15,22 +15,65 @@ REM Evaluation Metrics: HV, IGD+, CPU Time
 REM ============================================================
 
 SET "PROJECT=%~dp0"
-SET "DATA_CV=%PROJECT%data\cv\cv_small_drnd.json"
-SET "RES1=%PROJECT%results\exp1"
 SET "SOLVER_DIR=%PROJECT%src\solver"
+SET "DATA_CV="
+SET "RES1="
 
 SET "SKIP_UNCHANGED=0"
 SET "ANALYZE_ONLY=0"
-FOR %%A IN (%*) DO (
-    IF /I "%%~A"=="--skip-unchanged" SET "SKIP_UNCHANGED=1"
-    IF /I "%%~A"=="--analyze-only" SET "ANALYZE_ONLY=1"
-    IF /I "%%~A"=="--help" GOTO :show_help
-    IF /I "%%~A"=="-h" GOTO :show_help
+if "%~1"=="" goto :after_args
+:parse_args
+if "%~1"=="" goto :after_args
+if /I "%~1"=="--instance" (
+    if "%~2"=="" goto :missing_value
+    set "DATA_CV=%~2"
+    shift
+    shift
+    goto :parse_args
+)
+if /I "%~1"=="--results-dir" (
+    if "%~2"=="" goto :missing_value
+    set "RES1=%~2"
+    shift
+    shift
+    goto :parse_args
+)
+if /I "%~1"=="--skip-unchanged" (
+    set "SKIP_UNCHANGED=1"
+    shift
+    goto :parse_args
+)
+if /I "%~1"=="--analyze-only" (
+    set "ANALYZE_ONLY=1"
+    shift
+    goto :parse_args
+)
+if /I "%~1"=="--help" goto :show_help
+if /I "%~1"=="-h" goto :show_help
+echo [Error] Unknown argument: %~1
+echo Run with --help for usage.
+exit /b 1
+
+:missing_value
+echo [Error] Missing value for %~1
+echo Run with --help for usage.
+exit /b 1
+
+:after_args
+if "%DATA_CV%"=="" (
+    echo [Error] --instance and --results-dir are required.
+    echo Run with --help for usage.
+    exit /b 1
+)
+if "%RES1%"=="" (
+    echo [Error] --instance and --results-dir are required.
+    echo Run with --help for usage.
+    exit /b 1
 )
 
 REM Toggle temporary AEGA population adaptation in PB-NSGA step.
 REM 1 = on, 0 = off
-SET "AEGA_ON=1"
+SET "AEGA_ON=0"
 
 REM Toggle post-run solution audit (structure + consistency checks).
 REM 1 = on, 0 = off
@@ -155,7 +198,7 @@ IF "%AEGA_ON%"=="1" (
 
 CALL :ShouldRun "%RES1%\cv_small_pb_nsga.json" "%SOLVER_DIR%\solver.exe" "%DATA_CV%" "%SOLVER_DIR%\main.cpp" "%SOLVER_DIR%\nsga2.hpp" "%SOLVER_DIR%\representation.hpp"
 IF %ERRORLEVEL% EQU 0 (
-    "%SOLVER_DIR%\solver.exe" "%DATA_CV%" --pop 200 --gen 300 --seed 0 --pc 0.98 --pm-high 0.40 --pm-low 0.10 --sbx-eta-rw 1.5 --pm-eta-rw 8 %AEGA_ARGS% --out "%RES1%\cv_small_pb_nsga.json"
+    "%SOLVER_DIR%\solver.exe" "%DATA_CV%" --pop 200 --gen 300 --seed 15 --pc 0.98 --pm-high 0.40 --pm-low 0.10 --sbx-eta-rw 1.5 --pm-eta-rw 8 %AEGA_ARGS% --out "%RES1%\cv_small_pb_nsga.json"
 ) ELSE (
     echo [Skip] PB-NSGA run unchanged.
 )
@@ -184,7 +227,11 @@ echo Results saved to: %RES1%\cv_small_metrics.csv
 exit /b 0
 
 :show_help
-echo Usage: run_exp1_baselines.bat [--skip-unchanged] [--analyze-only]
+echo Usage: run_exp1_baselines.bat --instance ^<cv_small.json^> --results-dir ^<dir^> [--skip-unchanged] [--analyze-only]
+echo.
+echo Required:
+echo   --instance ^<path^>     CV-Small instance JSON
+echo   --results-dir ^<path^>  Output directory for result files and metrics CSV
 echo.
 echo Flags:
 echo   --skip-unchanged  Skip compile/run steps whose outputs are newer than inputs

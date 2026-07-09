@@ -17,18 +17,57 @@ REM   6. End-to-end SAA/OOS robustness evaluation (seed-0 Pareto)
 REM ============================================================
 
 SET "PROJECT=%~dp0"
-SET "DATA_CV=%PROJECT%data\cv\cv_large_drnd.json"
 SET "DATA_PREP=%PROJECT%data\prep"
 SET "SAA_DATA=%DATA_PREP%\cv_large_saa100.json"
 SET "OOS_DATA=%DATA_PREP%\cv_large_oos10.json"
-SET "RES2=%PROJECT%results\exp2"
 SET "SOLVER_DIR=%PROJECT%src\solver"
+SET "DATA_CV="
+SET "RES2="
 
 SET "ANALYZE_ONLY=0"
-FOR %%A IN (%*) DO (
-    IF /I "%%~A"=="--analyze-only" SET "ANALYZE_ONLY=1"
-    IF /I "%%~A"=="--help" GOTO :show_help
-    IF /I "%%~A"=="-h" GOTO :show_help
+if "%~1"=="" goto :after_args
+:parse_args
+if "%~1"=="" goto :after_args
+if /I "%~1"=="--instance" (
+    if "%~2"=="" goto :missing_value
+    set "DATA_CV=%~2"
+    shift
+    shift
+    goto :parse_args
+)
+if /I "%~1"=="--results-dir" (
+    if "%~2"=="" goto :missing_value
+    set "RES2=%~2"
+    shift
+    shift
+    goto :parse_args
+)
+if /I "%~1"=="--analyze-only" (
+    set "ANALYZE_ONLY=1"
+    shift
+    goto :parse_args
+)
+if /I "%~1"=="--help" goto :show_help
+if /I "%~1"=="-h" goto :show_help
+echo [Error] Unknown argument: %~1
+echo Run with --help for usage.
+exit /b 1
+
+:missing_value
+echo [Error] Missing value for %~1
+echo Run with --help for usage.
+exit /b 1
+
+:after_args
+if "%DATA_CV%"=="" (
+    echo [Error] --instance and --results-dir are required.
+    echo Run with --help for usage.
+    exit /b 1
+)
+if "%RES2%"=="" (
+    echo [Error] --instance and --results-dir are required.
+    echo Run with --help for usage.
+    exit /b 1
 )
 
 IF "%ANALYZE_ONLY%"=="1" (
@@ -66,24 +105,24 @@ FOR /L %%s IN (0,1,19) DO (
 
 REM ── Step 2: Run VNS-TS baseline (literature comparator) ─────────────────
 echo.
-echo [Step 2] Running VNS-TS baseline (5 seeds) on CV-Large...
+echo [Step 2] Running VNS-TS baseline (20 seeds) on CV-Large...
 IF NOT EXIST "%SOLVER_DIR%\vns_ts_baseline.exe" (
     g++ -std=c++17 -O2 -I"%SOLVER_DIR%" "%SOLVER_DIR%\vns_ts_baseline.cpp" -o "%SOLVER_DIR%\vns_ts_baseline.exe"
 )
 
-FOR /L %%s IN (0,1,4) DO (
+FOR /L %%s IN (0,1,19) DO (
     echo   [VNS Seed %%s] Running...
     "%SOLVER_DIR%\vns_ts_baseline.exe" "%DATA_CV%" --seed %%s --iter 180 --time-limit 180 --tabu-tenure 7 --kmax 4 --starts 12 --enable-option3 --out "%RES2%\cv_large_vns_ts_seed%%s.json"
 )
 
 REM ── Step 2b: Run GWO-HD baseline (literature comparator) ───────────────
 echo.
-echo [Step 2b] Running GWO-HD baseline (5 seeds) on CV-Large...
+echo [Step 2b] Running GWO-HD baseline (20 seeds) on CV-Large...
 IF NOT EXIST "%SOLVER_DIR%\gwo_hd_baseline.exe" (
     g++ -O3 -std=c++17 -I"%SOLVER_DIR%" "%SOLVER_DIR%\gwo_hd_baseline.cpp" -o "%SOLVER_DIR%\gwo_hd_baseline.exe"
 )
 
-FOR /L %%s IN (0,1,4) DO (
+FOR /L %%s IN (0,1,19) DO (
     echo   [GWO Seed %%s] Running...
     "%SOLVER_DIR%\gwo_hd_baseline.exe" "%DATA_CV%" --out "%RES2%\cv_large_gwo_hd_seed%%s.json" --seed %%s --wolves 30 --iter 560 --time-limit 180 --fracA-start 0.45 --fracA-end 0.06 --fracX-start 0.35 --fracX-end 0.04 --accept-worse 0.03 --stagnation-limit 20 --keep-ratio 0.45 --ps-op-prob 0.35
 )
@@ -140,7 +179,11 @@ echo SAA/OOS summary saved to: %RES2%\exp2_saa_oos_summary.json
 exit /b 0
 
 :show_help
-echo Usage: run_exp2_case_study.bat [--analyze-only]
+echo Usage: run_exp2_case_study.bat --instance ^<cv_large.json^> --results-dir ^<dir^> [--analyze-only]
+echo.
+echo Required:
+echo   --instance ^<path^>     CV-Large instance JSON
+echo   --results-dir ^<path^>  Output directory for result files
 echo.
 echo Flags:
 echo   --analyze-only  Skip solver runs; only perform analysis on existing results/

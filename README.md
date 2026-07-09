@@ -66,8 +66,8 @@ To run the entire pipeline (Datasets → Exp 1 → Exp 2):
 | Experiment | Mac / Linux | Windows |
 | :--- | :--- | :--- |
 | **All (Datasets + Exp1 + Exp2)** | `./run_experiments.sh` | `.\run_experiments.bat` |
-| **Experiment 1 (Baselines)** | `./run_exp1_baselines.sh` | `.\run_exp1_baselines.bat` |
-| **Experiment 2 (Case Study)** | `./run_exp2_case_study.sh` | `.\run_exp2_case_study.bat` |
+| **Experiment 1 (Baselines)** | `./run_exp1_baselines.sh --instance data/cv/cv_small_drnd.json --results-dir results/exp1` | `.\run_exp1_baselines.bat --instance data\cv\cv_small_drnd.json --results-dir results\exp1` |
+| **Experiment 2 (Case Study)** | `./run_exp2_case_study.sh --instance data/cv/cv_large_drnd.json --results-dir results/exp2` | `.\run_exp2_case_study.bat --instance data\cv\cv_large_drnd.json --results-dir results\exp2` |
 | **Analysis Only** (re-run analysis on existing `results/`) | `./run_experiments.sh analyze` | `.\run_experiments.bat analyze` |
 | **Regenerate Datasets Only** | `./run_experiments.sh data` | `.\run_experiments.bat data` |
 
