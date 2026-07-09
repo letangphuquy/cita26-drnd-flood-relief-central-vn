@@ -15,7 +15,8 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 import streamlit as st
 
 _ROOT = Path(__file__).resolve().parent.parent
-_VENV_PY = _ROOT / ".venv" / "bin" / "python3"
+_IS_WIN = sys.platform.startswith("win")
+_VENV_PY = _ROOT / ".venv" / ("Scripts/python.exe" if _IS_WIN else "bin/python3")
 _SCRIPTS  = _ROOT / "src" / "scripts"
 
 sys.path.insert(0, str(_ROOT))
@@ -37,7 +38,15 @@ class Exp:
 
 
 def _py(script: str) -> List[str]:
-    return [str(_VENV_PY), str(_SCRIPTS / script)]
+    py = _VENV_PY if _VENV_PY.exists() else Path(sys.executable)
+    return [str(py), str(_SCRIPTS / script)]
+
+
+def _exp_script(name: str) -> List[str]:
+    path = _ROOT / (f"{name}.bat" if _IS_WIN else f"{name}.sh")
+    if _IS_WIN:
+        return ["cmd", "/c", str(path)]
+    return ["bash", str(path)]
 
 
 def _p(dataset: str, version: str) -> Dict[str, Any]:
@@ -46,8 +55,7 @@ def _p(dataset: str, version: str) -> Dict[str, Any]:
 
 def _exp1_cmd(dataset: str, version: str) -> List[str]:
     p = _p(dataset, version)
-    return [
-        "bash", str(_ROOT / "run_exp1_baselines.sh"),
+    return _exp_script("run_exp1_baselines") + [
         "--instance",    str(p["instance"]),
         "--results-dir", str(p["results"]),
     ]
@@ -111,7 +119,8 @@ def _exp6_cmd(dataset: str, version: str) -> List[str]:
 def _exp7_cmd(dataset: str, version: str) -> List[str]:
     p = _p("CV Large", version)  # always CV-Large results, flows, instance
     out = _ROOT / "narrative_data.json"
-    return [str(_VENV_PY), str(_ROOT / "visualizer" / "narrative_data.py"),
+    py = _VENV_PY if _VENV_PY.exists() else Path(sys.executable)
+    return [str(py), str(_ROOT / "visualizer" / "narrative_data.py"),
             "--results",  str(p["results"]),
             "--flows",    str(p["flows"]),
             "--instance", str(p["instance"]),
